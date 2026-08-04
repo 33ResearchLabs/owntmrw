@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Delta, Logo, StatusBadge } from "./ui";
 import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
@@ -18,6 +18,65 @@ export interface ScreenerRowDTO {
 }
 
 type SortKey = keyof ScreenerRowDTO;
+
+/** The subset `/api/live` refreshes; everything else is archival. */
+type LivePatch = Pick<
+  ScreenerRowDTO,
+  | "price_usd" | "mcap" | "fdv" | "liquidity_usd" | "vol24h" | "change_24h"
+  | "roi_since_raise" | "ath_return" | "from_ath"
+> & { slug: string };
+
+const POLL_MS = 30_000;
+
+/**
+ * Re-quote the table in place. The server already rendered live prices, so this
+ * only keeps a terminal left open from going stale — a failed poll holds the
+ * last good quotes rather than blanking the table.
+ */
+function useLiveRows(initial: ScreenerRowDTO[]): { rows: ScreenerRowDTO[]; stale: boolean } {
+  const [patches, setPatches] = useState<Map<string, LivePatch> | null>(null);
+  const [stale, setStale] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/live", { cache: "no-store" });
+        if (!res.ok) throw new Error(String(res.status));
+        const data = (await res.json()) as { rows: LivePatch[] };
+        if (cancelled) return;
+        setPatches(new Map(data.rows.map((r) => [r.slug, r])));
+        setStale(false);
+      } catch {
+        if (!cancelled) setStale(true);
+      }
+    };
+    const id = setInterval(poll, POLL_MS);
+    // A backgrounded tab throttles timers, so re-quote the moment it returns.
+    const onFocus = () => poll();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
+  const rows = useMemo(
+    () => (patches ? initial.map((r) => ({ ...r, ...(patches.get(r.slug) ?? {}) })) : initial),
+    [initial, patches]
+  );
+  return { rows, stale };
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="card px-4 py-3">
+      <div className="text-[10.5px] uppercase tracking-[0.09em] text-faint">{label}</div>
+      <div className="num mt-1 text-[18px] font-extrabold tracking-tight">{value}</div>
+    </div>
+  );
+}
 
 const COLS: { key: SortKey; label: string; align?: "right" }[] = [
   { key: "name", label: "Project" },
@@ -39,7 +98,8 @@ const COLS: { key: SortKey; label: string; align?: "right" }[] = [
   { key: "gh_last_push", label: "Last Commit", align: "right" },
 ];
 
-export function ScreenerTable({ rows }: { rows: ScreenerRowDTO[] }) {
+export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] }) {
+  const { rows, stale } = useLiveRows(initialRows);
   const [sort, setSort] = useState<SortKey>("mcap");
   const [dir, setDir] = useState<1 | -1>(-1);
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -75,7 +135,21 @@ export function ScreenerTable({ rows }: { rows: ScreenerRowDTO[] }) {
     </th>
   );
 
+  const totals = useMemo(() => ({
+    mcap: rows.reduce((s, r) => s + (r.mcap ?? 0), 0),
+    liq: rows.reduce((s, r) => s + (r.liquidity_usd ?? 0), 0),
+    vol: rows.reduce((s, r) => s + (r.vol24h ?? 0), 0),
+  }), [rows]);
+
   return (
+    <>
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <Stat label="Projects" value={String(rows.length)} />
+      <Stat label="Combined Mkt Cap" value={fmtUsd(totals.mcap)} />
+      <Stat label="Total Liquidity" value={fmtUsd(totals.liq)} />
+      <Stat label="24h Volume" value={fmtUsd(totals.vol)} />
+    </div>
+
     <div className="card">
       <div className="flex flex-wrap items-center gap-2 border-b border-grid px-4 py-3">
         {statuses.map((s) => (
@@ -83,7 +157,14 @@ export function ScreenerTable({ rows }: { rows: ScreenerRowDTO[] }) {
             {s === "all" ? "All projects" : s}
           </button>
         ))}
-        <span className="num ml-auto text-[12px] text-faint">{sorted.length} listed</span>
+        <span
+          className="ml-auto flex items-center gap-1.5 text-[11.5px] text-faint"
+          title={stale ? "Last quote could not be refreshed" : `Re-quoted every ${POLL_MS / 1000}s`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${stale ? "bg-warn" : "bg-good"}`} />
+          {stale ? "Reconnecting" : "Live"}
+        </span>
+        <span className="num text-[12px] text-faint">{sorted.length} listed</span>
       </div>
       <div className="scroll-x">
         <table className="itable text-[13px]">
@@ -128,5 +209,6 @@ export function ScreenerTable({ rows }: { rows: ScreenerRowDTO[] }) {
         </table>
       </div>
     </div>
+    </>
   );
 }

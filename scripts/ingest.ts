@@ -23,6 +23,7 @@ import { raiseFor, refundRate } from "../src/lib/sources/raises";
 import { sleep } from "../src/lib/sources/http";
 import { discoverFeed, fetchFeed, githubFeeds } from "../src/lib/sources/feeds";
 import { KNOWN_WALLETS } from "../src/lib/sources/wallets";
+import { capFromSupply, isUndistributed } from "../src/lib/quote";
 
 const FAST = process.argv.includes("--fast");
 const now = () => Math.floor(Date.now() / 1000);
@@ -126,16 +127,8 @@ async function main() {
         launch_ts: p.launch_ts ?? (pair.pairCreatedAt ? Math.floor(pair.pairCreatedAt / 1000) : undefined),
       });
       const price = Number(pair.priceUsd) || null;
-      // Prefer MetaDAO's circulating supply — DexScreener reports FDV as marketCap
-      // for most of these tokens (team packages are still locked). A reported
-      // circulating supply of 0 means "not yet distributed", not a $0 market cap,
-      // so fall back rather than publishing a misleading figure.
-      const mcap = price != null && p.circulating_supply
-        ? price * p.circulating_supply
-        : pair.marketCap ?? null;
-      const fdv = price != null && p.total_supply
-        ? price * p.total_supply
-        : pair.fdv ?? null;
+      const mcap = capFromSupply(price, p.circulating_supply, pair.marketCap);
+      const fdv = capFromSupply(price, p.total_supply, pair.fdv);
       d.prepare(`
         INSERT OR REPLACE INTO price_snapshots
         (project_id, ts, price_usd, mcap, fdv, liquidity_usd, vol24h, change_1h, change_24h)
@@ -153,16 +146,12 @@ async function main() {
       const tok = toks.find((t) => t.id === p.mint);
       const price = prices[p.mint] ?? null;
       if (price != null || tok) {
-        // A near-zero circulating supply means the token hasn't distributed yet.
-        // Both our computation and Jupiter's mcap are meaningless there, so
-        // report no market cap instead of a figure like "$768".
-        const undistributed = (p.circulating_supply ?? 0) < 1;
-        const mcap = undistributed
+        // Jupiter's own mcap is as meaningless as ours for a token that has not
+        // distributed yet, so report none instead of a figure like "$768".
+        const mcap = isUndistributed(p.circulating_supply)
           ? null
-          : price != null && p.circulating_supply
-            ? price * p.circulating_supply
-            : tok?.mcap ?? null;
-        const fdv = price != null && p.total_supply ? price * p.total_supply : tok?.fdv ?? null;
+          : capFromSupply(price, p.circulating_supply, tok?.mcap);
+        const fdv = capFromSupply(price, p.total_supply, tok?.fdv);
         d.prepare(`
           INSERT OR REPLACE INTO price_snapshots
           (project_id, ts, price_usd, mcap, fdv, liquidity_usd, vol24h, change_1h, change_24h)

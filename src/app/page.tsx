@@ -7,8 +7,8 @@ import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-export default function Home() {
-  const rows = screenerRows();
+export default async function Home() {
+  const rows = await screenerRows();
   const totalMcap = rows.reduce((s, r) => s + (r.mcap ?? 0), 0);
   const totalRaised = rows.reduce((s, r) => s + (r.raise_amount_usd ?? 0), 0);
   const totalVol = rows.reduce((s, r) => s + (r.vol24h ?? 0), 0);

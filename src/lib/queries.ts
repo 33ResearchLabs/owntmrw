@@ -1,4 +1,5 @@
 import { db, Project } from "./db";
+import { applyQuote, liveQuotes } from "./live";
 
 export interface ScreenerRow extends Project {
   price_usd: number | null; mcap: number | null; fdv: number | null;
@@ -35,7 +36,12 @@ export function priceIsReliable(liquidityUsd: number | null | undefined): boolea
   return liquidityUsd != null && liquidityUsd >= MIN_LIQUIDITY_USD;
 }
 
-export function screenerRows(): ScreenerRow[] {
+/**
+ * Rows straight from the archive. Prices here are as of the last ingest run,
+ * so every caller goes through `screenerRows`, which overlays live quotes
+ * before the return metrics are computed from them.
+ */
+function screenerSnapshot(): (ScreenerRow & { ath: number | null; holders_7d_ago: number | null })[] {
   const d = db();
   const rows = d.prepare(`
     SELECT p.*,
@@ -58,18 +64,35 @@ export function screenerRows(): ScreenerRow[] {
       AND gh.ts = (SELECT MAX(ts) FROM github_snapshots WHERE project_id = p.id)
     ORDER BY ps.mcap DESC NULLS LAST, p.name
   `).all() as (ScreenerRow & { ath: number | null; holders_7d_ago: number | null })[];
+  return rows;
+}
 
-  return rows.map((r) => {
-    const rp = raisePrice(r);
-    // Returns are only meaningful against a price the market can actually
-    // support; a few thousand dollars of liquidity is not a real quote.
-    const tradable = priceIsReliable(r.liquidity_usd);
-    const roi = rp && r.price_usd && tradable ? ((r.price_usd - rp) / rp) * 100 : null;
-    const athRet = rp && r.ath && tradable ? ((r.ath - rp) / rp) * 100 : null;
-    const fromAth = r.ath && r.price_usd && tradable ? ((r.price_usd - r.ath) / r.ath) * 100 : null;
-    const hchg = r.holder_count != null && r.holders_7d_ago
-      ? ((r.holder_count - r.holders_7d_ago) / r.holders_7d_ago) * 100 : null;
-    return { ...r, roi_since_raise: roi, ath_return: athRet, from_ath: fromAth, holder_change_7d: hchg };
+/** Derived return metrics, computed from whichever price the row now carries. */
+function withReturns(
+  r: ScreenerRow & { ath: number | null; holders_7d_ago: number | null }
+): ScreenerRow {
+  const rp = raisePrice(r);
+  // Returns are only meaningful against a price the market can actually
+  // support; a few thousand dollars of liquidity is not a real quote.
+  const tradable = priceIsReliable(r.liquidity_usd);
+  const roi = rp && r.price_usd && tradable ? ((r.price_usd - rp) / rp) * 100 : null;
+  const athRet = rp && r.ath && tradable ? ((r.ath - rp) / rp) * 100 : null;
+  const fromAth = r.ath && r.price_usd && tradable ? ((r.price_usd - r.ath) / r.ath) * 100 : null;
+  const hchg = r.holder_count != null && r.holders_7d_ago
+    ? ((r.holder_count - r.holders_7d_ago) / r.holders_7d_ago) * 100 : null;
+  return { ...r, roi_since_raise: roi, ath_return: athRet, from_ath: fromAth, holder_change_7d: hchg };
+}
+
+export async function screenerRows(): Promise<ScreenerRow[]> {
+  const quotes = await liveQuotes();
+  return screenerSnapshot().map((r) => {
+    const live = applyQuote(r, r.mint ? quotes.get(r.mint) : undefined);
+    // ATH is a running peak, so a live price above the last stored candle is
+    // the new high — otherwise a token at a fresh high reads as "-0.0% from ATH"
+    // only after the next ingest.
+    const ath = live.price_usd != null && (live.ath == null || live.price_usd > live.ath)
+      ? live.price_usd : live.ath;
+    return withReturns({ ...live, ath });
   });
 }
 
@@ -90,14 +113,24 @@ export interface ProjectDetail {
   athTs: number | null;
 }
 
-export function projectDetail(slug: string): ProjectDetail | null {
+export async function projectDetail(slug: string): Promise<ProjectDetail | null> {
   const d = db();
   const project = d.prepare("SELECT * FROM projects WHERE slug = ?").get(slug) as Project | undefined;
   if (!project) return null;
   const id = project.id;
-  const latest = d.prepare(
+  const stored = d.prepare(
     "SELECT price_usd, mcap, fdv, liquidity_usd, vol24h, change_24h FROM price_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1"
   ).get(id) as ProjectDetail["latest"];
+  // Everything below is archival and reads from the store; the quote is not.
+  const quote = project.mint ? (await liveQuotes()).get(project.mint) : undefined;
+  const latest = stored
+    ? applyQuote(stored, quote)
+    : quote
+      ? {
+          price_usd: quote.price_usd, mcap: quote.mcap, fdv: quote.fdv,
+          liquidity_usd: quote.liquidity_usd, vol24h: quote.vol24h, change_24h: quote.change_24h,
+        }
+      : null;
   const candles = d.prepare("SELECT ts,o,h,l,c,v FROM candles WHERE project_id = ? ORDER BY ts").all(id) as ProjectDetail["candles"];
   const events = d.prepare("SELECT ts,type,title,detail,url FROM events WHERE project_id = ? ORDER BY ts DESC LIMIT 100").all(id) as ProjectDetail["events"];
   const topHolders = d.prepare("SELECT rank,address,owner,amount,pct,label FROM top_holders WHERE project_id = ? ORDER BY rank LIMIT 20").all(id) as ProjectDetail["topHolders"];
@@ -120,6 +153,12 @@ export function projectDetail(slug: string): ProjectDetail | null {
   for (const c of candles) {
     if (ath == null || c.h > ath) { ath = c.h; athTs = c.ts; }
     if (atl == null || c.l < atl) atl = c.l;
+  }
+  // Candles are daily, so a live price above the stored peak is the new high.
+  // Without this a token at a fresh high reports a positive drawdown.
+  if (latest?.price_usd != null && (ath == null || latest.price_usd > ath)) {
+    ath = latest.price_usd;
+    athTs = Math.floor(Date.now() / 1000);
   }
   return {
     project, latest, candles, events, topHolders, holderHistory, proposals, github, observations,

@@ -20,15 +20,58 @@ export interface DexPair {
   };
 }
 
+/**
+ * One mint per request, several requests in flight.
+ *
+ * The comma-separated form of this endpoint looks like the obvious batch, but
+ * its cap is 30 *pairs* rather than 30 tokens — 19 mints came back covering
+ * only 11 of them, and the uncovered ones fail silently as "no market". The
+ * `tokens/v1` batch does return one row per token, but that row is not
+ * necessarily the deepest pool (it quoted META's $342K pair over its $2.67M
+ * one), which would understate depth and trip the thin-liquidity gate.
+ */
+const CONCURRENCY = 8;
+
+/**
+ * Free, no key. Deepest-liquidity Solana pair per mint, keyed by mint.
+ *
+ * A response carries every pair the mint appears in — including ones where it
+ * is the *quote* side (anything trading against META comes back on a META
+ * query). Those quote a different asset entirely, so matching on
+ * `baseToken.address` is what keeps a thin XYZ/META pool from being read as
+ * the price of META.
+ */
+export async function pairsForMints(
+  mints: string[],
+  opts: { retries?: number; timeoutMs?: number } = {}
+): Promise<Map<string, DexPair>> {
+  const best = new Map<string, DexPair>();
+  const queue = [...mints];
+
+  const worker = async () => {
+    for (let mint = queue.pop(); mint != null; mint = queue.pop()) {
+      const data = await getJSON<{ pairs: DexPair[] | null }>(
+        `https://api.dexscreener.com/latest/dex/tokens/${mint}`,
+        opts
+      );
+      let top: DexPair | undefined;
+      for (const p of data?.pairs ?? []) {
+        if (p.chainId !== "solana" || p.baseToken?.address !== mint) continue;
+        if (!top || (p.liquidity?.usd ?? 0) > (top.liquidity?.usd ?? 0)) top = p;
+      }
+      if (top) best.set(mint, top);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker)
+  );
+  return best;
+}
+
 /** Free, no key. Best pair (deepest liquidity) for a mint on Solana. */
 export async function bestPairForMint(mint: string): Promise<DexPair | null> {
-  const data = await getJSON<{ pairs: DexPair[] | null }>(
-    `https://api.dexscreener.com/latest/dex/tokens/${mint}`
-  );
-  const pairs = (data?.pairs ?? []).filter((p) => p.chainId === "solana");
-  if (!pairs.length) return null;
-  pairs.sort((a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0));
-  return pairs[0];
+  return (await pairsForMints([mint])).get(mint) ?? null;
 }
 
 export function socialsFromPair(pair: DexPair): {

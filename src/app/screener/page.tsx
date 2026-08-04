@@ -9,19 +9,9 @@ export const metadata = {
   description: "Every MetaDAO and Futard project ranked by market cap, ROI since raise, liquidity, treasury, holders and development activity.",
 };
 
-export default function ScreenerPage() {
-  const rows = screenerRows();
-  const totalMcap = rows.reduce((s, r) => s + (r.mcap ?? 0), 0);
-  const totalVol = rows.reduce((s, r) => s + (r.vol24h ?? 0), 0);
-  const totalLiq = rows.reduce((s, r) => s + (r.liquidity_usd ?? 0), 0);
+export default async function ScreenerPage() {
+  const rows = await screenerRows();
   const totalRaised = rows.reduce((s, r) => s + (r.raise_amount_usd ?? 0), 0);
-
-  const Stat = ({ label, value }: { label: string; value: string }) => (
-    <div className="card px-4 py-3">
-      <div className="text-[10.5px] uppercase tracking-[0.09em] text-faint">{label}</div>
-      <div className="num mt-1 text-[18px] font-extrabold tracking-tight">{value}</div>
-    </div>
-  );
 
   return (
     <div className="space-y-5">
@@ -34,13 +24,6 @@ export default function ScreenerPage() {
             not FDV.
           </p>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat label="Projects" value={String(rows.length)} />
-        <Stat label="Combined Mkt Cap" value={fmtUsd(totalMcap)} />
-        <Stat label="Total Liquidity" value={fmtUsd(totalLiq)} />
-        <Stat label="24h Volume" value={fmtUsd(totalVol)} />
       </div>
 
       {rows.length === 0 ? (
@@ -66,8 +49,9 @@ export default function ScreenerPage() {
       )}
 
       <p className="text-[11.5px] text-faint">
-        Raised totals {fmtUsd(totalRaised)} across all indexed raises. Figures are indexed from
-        public sources and may lag live markets.
+        Raised totals {fmtUsd(totalRaised)} across all indexed raises. Prices, caps, depth and
+        volume are quoted live; holders, treasury, governance and development are indexed from
+        public sources at the last ingest.
       </p>
     </div>
   );
