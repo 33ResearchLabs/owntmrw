@@ -30,7 +30,16 @@ export interface DexPair {
  * necessarily the deepest pool (it quoted META's $342K pair over its $2.67M
  * one), which would understate depth and trip the thin-liquidity gate.
  */
-const CONCURRENCY = 8;
+const CONCURRENCY = 4;
+
+/**
+ * The default agent string gets nothing back from Render's datacenter IPs even
+ * though the same call succeeds from a laptop — every mint fell through to the
+ * price-only Jupiter fallback in production. MetaDAO's own market API needed
+ * the same treatment (see marketdata.ts).
+ */
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
 /**
  * Free, no key. Deepest-liquidity Solana pair per mint, keyed by mint.
@@ -43,7 +52,7 @@ const CONCURRENCY = 8;
  */
 export async function pairsForMints(
   mints: string[],
-  opts: { retries?: number; timeoutMs?: number } = {}
+  opts: { retries?: number; timeoutMs?: number; headers?: Record<string, string> } = {}
 ): Promise<Map<string, DexPair>> {
   const best = new Map<string, DexPair>();
   const queue = [...mints];
@@ -52,7 +61,7 @@ export async function pairsForMints(
     for (let mint = queue.pop(); mint != null; mint = queue.pop()) {
       const data = await getJSON<{ pairs: DexPair[] | null }>(
         `https://api.dexscreener.com/latest/dex/tokens/${mint}`,
-        opts
+        { ...opts, headers: { "user-agent": BROWSER_UA, ...opts.headers } }
       );
       let top: DexPair | undefined;
       for (const p of data?.pairs ?? []) {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { screenerRows } from "@/lib/queries";
-import { liveQuotesAsOf } from "@/lib/live";
+import { liveQuotesAsOf, liveQuoteSources } from "@/lib/live";
 
 /**
  * Current quotes for every indexed project, so an open terminal keeps ticking
@@ -16,6 +16,7 @@ export async function GET() {
   return NextResponse.json(
     {
       asOf: liveQuotesAsOf() ?? Date.now(),
+      sources: liveQuoteSources(),
       rows: rows.map((r) => ({
         slug: r.slug,
         price_usd: r.price_usd, mcap: r.mcap, fdv: r.fdv,

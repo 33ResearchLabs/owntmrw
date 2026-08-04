@@ -54,9 +54,9 @@ async function refresh(): Promise<Map<string, LiveQuote>> {
   const out = new Map<string, LiveQuote>();
   if (!mints.length) return out;
 
-  // Keep the request path snappy: one retry, short timeout. A miss falls back
-  // to the stored snapshot rather than holding the render open.
-  const pairs = await pairsForMints(mints, { retries: 1, timeoutMs: 6000 });
+  // Keep the request path snappy, but leave enough headroom that a slow venue
+  // does not silently demote every token to the price-only fallback.
+  const pairs = await pairsForMints(mints, { retries: 2, timeoutMs: 9000 });
 
   for (const [mint, pair] of pairs) {
     const price = Number(pair.priceUsd);
@@ -129,6 +129,18 @@ export function liveQuotesAsOf(): number | null {
   return cached?.at ?? null;
 }
 
+/**
+ * Which venue answered, by count. A production box can reach a venue the
+ * development machine cannot (and did not, for DexScreener on Render), and
+ * that failure is otherwise invisible — the page still renders, just with
+ * quietly degraded numbers.
+ */
+export function liveQuoteSources(): Record<string, number> {
+  const counts: Record<string, number> = { dexscreener: 0, jupiter: 0 };
+  for (const q of cached?.map.values() ?? []) counts[q.source]++;
+  return counts;
+}
+
 /** Snapshot fields a live quote replaces, with the venue's coverage respected. */
 export interface QuotedFields {
   price_usd: number | null;
@@ -143,10 +155,14 @@ export interface QuotedFields {
  * Overlay a live quote on stored snapshot fields.
  *
  * Price, cap and FDV always come from the quote when there is one, so they are
- * all read from the same instant. Depth, volume and 24h change come from it only
- * when DexScreener served it — Jupiter has no such fields, and pairing a live
- * price with a days-old 24h change would read as a single coherent quote when
- * it is not.
+ * all read from the same instant.
+ *
+ * Jupiter carries no depth, volume or change. Rather than pair its live price
+ * with the stored ones — which is how a $6.81 price came to sit beside a 24h
+ * volume of $4.98M when the real figure was $790K — the point-in-time fields
+ * are withheld and render as "—". Depth is the exception: it moves slowly and
+ * gates whether returns are shown at all, so a slightly stale pool size beats
+ * withholding every return metric on the page.
  */
 export function applyQuote<T extends QuotedFields>(row: T, q: LiveQuote | undefined): T {
   if (!q) return row;
@@ -157,7 +173,7 @@ export function applyQuote<T extends QuotedFields>(row: T, q: LiveQuote | undefi
     mcap: q.mcap,
     fdv: q.fdv,
     liquidity_usd: venue ? q.liquidity_usd : row.liquidity_usd,
-    vol24h: venue ? q.vol24h : row.vol24h,
-    change_24h: venue ? q.change_24h : row.change_24h,
+    vol24h: venue ? q.vol24h : null,
+    change_24h: venue ? q.change_24h : null,
   };
 }

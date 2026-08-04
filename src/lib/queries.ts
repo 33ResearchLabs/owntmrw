@@ -149,6 +149,33 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
     ORDER BY ts DESC LIMIT 50
   `).all(id) as ProjectDetail["news"];
 
+  // Candles are written by ingest, so on a deployment that re-ingests
+  // occasionally the series stops days short of today and the chart contradicts
+  // the price above it — $5.26 on the last candle against a $6.81 headline.
+  // Carrying the quote onto the current day reconciles the two. The gap between
+  // the last stored candle and today stays visible rather than being filled in:
+  // we know the price now, not the path it took.
+  if (latest?.price_usd != null) {
+    const DAY = 86400;
+    const today = Math.floor(Date.now() / 1000 / DAY) * DAY;
+    const last = candles[candles.length - 1];
+    if (last && last.ts === today) {
+      last.c = latest.price_usd;
+      last.h = Math.max(last.h, latest.price_usd);
+      last.l = Math.min(last.l, latest.price_usd);
+    } else if (!last || last.ts < today) {
+      const open = last ? last.c : latest.price_usd;
+      candles.push({
+        ts: today,
+        o: open,
+        h: Math.max(open, latest.price_usd),
+        l: Math.min(open, latest.price_usd),
+        c: latest.price_usd,
+        v: 0,
+      });
+    }
+  }
+
   let ath: number | null = null, atl: number | null = null, athTs: number | null = null;
   for (const c of candles) {
     if (ath == null || c.h > ath) { ath = c.h; athTs = c.ts; }
