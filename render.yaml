@@ -3,7 +3,15 @@ services:
     name: owntmrw
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
+    # better-sqlite3's shipped linux-x64 prebuild segfaults inside Render's
+    # runtime on the very first Database() call. Compile it from source instead:
+    # build-release forces a build past binding.gyp's prebuild check, and the
+    # prebuilds are then removed so the loader falls through to build/Release.
+    buildCommand: >-
+      npm install &&
+      npm run build-release --prefix node_modules/better-sqlite3 &&
+      rm -rf node_modules/better-sqlite3/prebuilds &&
+      npm run build
     startCommand: npm run start
     envVars:
       - key: NODE_VERSION

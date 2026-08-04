@@ -1,17 +1,6 @@
+import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
-import type BetterSqlite3 from "better-sqlite3";
-
-// better-sqlite3 picks a musl vs. glibc prebuild by checking
-// process.report().header.glibcVersionRuntime. That field comes back empty
-// inside Render's sandboxed runtime even though the host is glibc, so the
-// default entrypoint silently loads the musl binary there and segfaults on
-// the first query. Importing the platform-specific entrypoint bypasses that
-// autodetection and always loads the correct (glibc) prebuild.
-const DatabaseCtor: typeof BetterSqlite3 =
-  process.platform === "linux"
-    ? require(`better-sqlite3/linux-${process.arch}`)
-    : require("better-sqlite3");
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const BUNDLED_DB_PATH = path.join(DATA_DIR, "metaintel.db");
@@ -23,9 +12,9 @@ const BUNDLED_DB_PATH = path.join(DATA_DIR, "metaintel.db");
 const IS_READONLY_FS = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
 const DB_PATH = IS_READONLY_FS ? path.join("/tmp", "metaintel.db") : BUNDLED_DB_PATH;
 
-let _db: BetterSqlite3.Database | null = null;
+let _db: Database.Database | null = null;
 
-export function db(): BetterSqlite3.Database {
+export function db(): Database.Database {
   if (_db) return _db;
   if (IS_READONLY_FS) {
     if (!fs.existsSync(DB_PATH) && fs.existsSync(BUNDLED_DB_PATH)) {
@@ -34,13 +23,13 @@ export function db(): BetterSqlite3.Database {
   } else {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
-  _db = new DatabaseCtor(DB_PATH);
+  _db = new Database(DB_PATH);
   _db.pragma("journal_mode = WAL");
   migrate(_db);
   return _db;
 }
 
-function migrate(d: BetterSqlite3.Database) {
+function migrate(d: Database.Database) {
   d.exec(`
   CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY,

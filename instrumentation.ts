@@ -15,10 +15,7 @@ export async function register() {
   }
 
   try {
-    const DatabaseCtor =
-      process.platform === "linux"
-        ? require(`better-sqlite3/linux-${process.arch}`)
-        : require("better-sqlite3");
+    const DatabaseCtor = require("better-sqlite3");
     log("ctorLoaded");
     const d = new DatabaseCtor(":memory:");
     log("memoryOpened");
@@ -36,10 +33,7 @@ export async function register() {
     const DATA_DIR = path.join(process.cwd(), "data");
     const BUNDLED_DB_PATH = path.join(DATA_DIR, "metaintel.db");
     log("bundledExists", fs.existsSync(BUNDLED_DB_PATH));
-    const DatabaseCtor =
-      process.platform === "linux"
-        ? require(`better-sqlite3/linux-${process.arch}`)
-        : require("better-sqlite3");
+    const DatabaseCtor = require("better-sqlite3");
     const d = new DatabaseCtor(BUNDLED_DB_PATH, { readonly: true });
     log("fileOpened");
     const row = d.prepare("SELECT count(*) as c FROM sqlite_master").get();
