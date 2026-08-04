@@ -5,13 +5,37 @@ const HEADERS: Record<string, string> = process.env.GITHUB_TOKEN
   ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` }
   : {};
 
+/**
+ * How many repos get the per-repo treatment (contributors, languages).
+ * Every extra repo is another round trip, and unauthenticated callers only get
+ * 60/hr — so the org-wide numbers come from search, and only the busiest repos
+ * are walked individually.
+ */
+const DEEP_REPOS = 6;
+const DAY = 86400;
+
 interface Repo {
   name: string; full_name: string; stargazers_count: number; forks_count: number;
-  pushed_at: string; html_url: string; fork: boolean;
+  pushed_at: string; html_url: string; fork: boolean; archived: boolean;
+  language: string | null; open_issues_count: number;
 }
 
 export interface OrgStats {
   stars: number; forks: number; repos: number; lastPushTs: number;
+  /** Repos pushed to within 90 days — "43 repos" flatters an org with 3 alive. */
+  activeRepos: number;
+  commits90d: number | null;
+  contributors: number | null;
+  openIssues: number | null;
+  closedIssues: number | null;
+  openPRs: number | null;
+  mergedPRs: number | null;
+  releasesCount: number;
+  lastCommitTs: number | null;
+  /** Bytes per language across the walked repos, largest first. */
+  languages: { name: string; bytes: number }[];
+  /** Weekly [additions, deletions] for the busiest repo, oldest first. */
+  codeFrequency: { week: number; additions: number; deletions: number }[];
   topRepos: { name: string; url: string; stars: number }[];
   releases: { tag: string; name: string; ts: number; url: string; repo: string }[];
 }
@@ -22,6 +46,49 @@ export function githubOwner(url: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * Count via the search API. Search is rate-limited far more tightly than the
+ * core API (10/min unauthenticated) so each of these is one call and no more.
+ */
+async function searchCount(q: string): Promise<number | null> {
+  const res = await getJSON<{ total_count?: number }>(
+    `https://api.github.com/search/issues?q=${encodeURIComponent(q)}&per_page=1`,
+    { headers: HEADERS, retries: 1 }
+  );
+  await sleep(2100); // stay inside the search limit
+  return res?.total_count ?? null;
+}
+
+/**
+ * Weekly additions/deletions for one repo.
+ *
+ * GitHub computes these statistics asynchronously: the first request for a cold
+ * repo returns 202 with an empty body and *starts* the job, and only a later
+ * request gets the data. Giving up on the 202 means the very first ingest of a
+ * repo always stores nothing, so this waits the job out.
+ */
+async function codeFreq(fullName: string): Promise<OrgStats["codeFrequency"]> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${fullName}/stats/code_frequency`, {
+        headers: { accept: "application/json", ...HEADERS },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (res.status === 202) { await sleep(3000); continue; }
+      if (!res.ok) return [];
+      const raw = (await res.json()) as [number, number, number][];
+      if (!Array.isArray(raw)) return [];
+      return raw
+        .slice(-52)
+        .filter((w) => Array.isArray(w) && w.length === 3)
+        .map(([week, additions, deletions]) => ({ week, additions, deletions }));
+    } catch {
+      await sleep(1500);
+    }
+  }
+  return [];
+}
+
 export async function orgStats(owner: string): Promise<OrgStats | null> {
   const repos = await getJSON<Repo[]>(
     `https://api.github.com/users/${owner}/repos?per_page=100&sort=pushed`,
@@ -29,18 +96,83 @@ export async function orgStats(owner: string): Promise<OrgStats | null> {
   );
   await sleep(500);
   if (!repos || !Array.isArray(repos)) return null;
+
+  // Forks are someone else's work; archived repos are not current output.
   const own = repos.filter((r) => !r.fork);
+  const live = own.filter((r) => !r.archived);
   const stars = own.reduce((s, r) => s + r.stargazers_count, 0);
   const forks = own.reduce((s, r) => s + r.forks_count, 0);
   const lastPushTs = Math.max(0, ...own.map((r) => Date.parse(r.pushed_at) / 1000 || 0));
-  const topRepos = own
+  const now = Date.now() / 1000;
+  const activeRepos = live.filter((r) => now - Date.parse(r.pushed_at) / 1000 < 90 * DAY).length;
+
+  const ranked = [...live].sort((a, b) => Date.parse(b.pushed_at) - Date.parse(a.pushed_at));
+  const topRepos = [...own]
     .sort((a, b) => b.stargazers_count - a.stargazers_count)
     .slice(0, 5)
     .map((r) => ({ name: r.name, url: r.html_url, stars: r.stargazers_count }));
 
-  // latest releases from the two most recently pushed repos
+  // --- org-wide counts, one search call each.
+  const since = new Date((now - 90 * DAY) * 1000).toISOString().slice(0, 10);
+  // GitHub's open_issues_count includes pull requests, so counting it would
+  // double-count every open PR. Search with type:issue is the honest number.
+  const openIssues = await searchCount(`org:${owner} type:issue state:open`);
+  const closedIssues = await searchCount(`org:${owner} type:issue state:closed`);
+  const openPRs = await searchCount(`org:${owner} type:pr state:open`);
+  const mergedPRs = await searchCount(`org:${owner} type:pr is:merged`);
+
+  const commitsRes = await getJSON<{ total_count?: number }>(
+    `https://api.github.com/search/commits?q=${encodeURIComponent(`org:${owner} author-date:>=${since}`)}&per_page=1`,
+    { headers: HEADERS, retries: 1 }
+  );
+  await sleep(2100);
+  const commits90d = commitsRes?.total_count ?? null;
+
+  // --- per-repo walks, capped at the busiest handful.
+  const deep = ranked.slice(0, DEEP_REPOS);
+  const contributorLogins = new Set<string>();
+  const langBytes = new Map<string, number>();
+  let sawContributors = false;
+  let lastCommitTs: number | null = null;
+
+  for (const r of deep) {
+    const contribs = await getJSON<{ login: string }[]>(
+      `https://api.github.com/repos/${r.full_name}/contributors?per_page=100&anon=0`,
+      { headers: HEADERS, retries: 1 }
+    );
+    await sleep(400);
+    if (Array.isArray(contribs)) {
+      sawContributors = true;
+      for (const c of contribs) if (c.login) contributorLogins.add(c.login);
+    }
+
+    const langs = await getJSON<Record<string, number>>(
+      `https://api.github.com/repos/${r.full_name}/languages`,
+      { headers: HEADERS, retries: 1 }
+    );
+    await sleep(400);
+    for (const [name, bytes] of Object.entries(langs ?? {})) {
+      langBytes.set(name, (langBytes.get(name) ?? 0) + bytes);
+    }
+  }
+
+  // Last commit on the most recently pushed repo. pushed_at moves on any ref
+  // update (tags, branches), so the commit list is the accurate answer.
+  if (ranked[0]) {
+    const commits = await getJSON<{ commit: { author: { date: string } } }[]>(
+      `https://api.github.com/repos/${ranked[0].full_name}/commits?per_page=1`,
+      { headers: HEADERS, retries: 1 }
+    );
+    await sleep(400);
+    const iso = commits?.[0]?.commit?.author?.date;
+    if (iso) lastCommitTs = Math.floor(Date.parse(iso) / 1000);
+  }
+
+  const codeFrequency = ranked[0] ? await codeFreq(ranked[0].full_name) : [];
+
+  // --- releases from the two most recently pushed repos.
   const releases: OrgStats["releases"] = [];
-  for (const r of own.slice(0, 2)) {
+  for (const r of ranked.slice(0, 2)) {
     const rel = await getJSON<{ tag_name: string; name: string; published_at: string; html_url: string }[]>(
       `https://api.github.com/repos/${r.full_name}/releases?per_page=5`,
       { headers: HEADERS }
@@ -55,5 +187,18 @@ export async function orgStats(owner: string): Promise<OrgStats | null> {
         });
     }
   }
-  return { stars, forks, repos: own.length, lastPushTs, topRepos, releases };
+
+  return {
+    stars, forks, repos: own.length, lastPushTs, activeRepos,
+    commits90d,
+    contributors: sawContributors ? contributorLogins.size : null,
+    openIssues, closedIssues, openPRs, mergedPRs,
+    releasesCount: releases.length,
+    lastCommitTs,
+    languages: [...langBytes.entries()]
+      .map(([name, bytes]) => ({ name, bytes }))
+      .sort((a, b) => b.bytes - a.bytes),
+    codeFrequency,
+    topRepos, releases,
+  };
 }

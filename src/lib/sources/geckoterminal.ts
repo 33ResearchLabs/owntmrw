@@ -17,6 +17,30 @@ export async function dailyOHLCV(poolAddress: string, limit = 1000): Promise<Can
     .sort((a, b) => a.ts - b.ts);
 }
 
+/**
+ * Sub-daily OHLCV for a pool. Unlike the daily history this is never stored —
+ * it is fetched on the request path — so it deliberately skips the rate-limit
+ * sleep the ingest loop needs; the route's cache is what keeps calls sparse.
+ */
+export async function intradayOHLCV(
+  poolAddress: string,
+  unit: "minute" | "hour",
+  aggregate: number,
+  limit = 1000
+): Promise<Candle[] | null> {
+  const data = await getJSON<{ data?: { attributes?: { ohlcv_list?: number[][] } } }>(
+    `${BASE}/networks/solana/pools/${poolAddress}/ohlcv/${unit}?aggregate=${aggregate}&limit=${limit}`,
+    { retries: 2, timeoutMs: 9000 }
+  );
+  // null, not [] — clicking through the timeframes bursts past the public rate
+  // limit, and a throttled response must not read as "this pool has no bars".
+  if (!data) return null;
+  const list = data?.data?.attributes?.ohlcv_list ?? [];
+  return list
+    .map(([ts, o, h, l, c, v]) => ({ ts, o, h, l, c, v }))
+    .sort((a, b) => a.ts - b.ts);
+}
+
 /** Top pool address for a token, per GeckoTerminal. */
 export async function topPoolForToken(mint: string): Promise<string | null> {
   const data = await getJSON<{
@@ -51,6 +75,70 @@ export async function poolsForToken(mint: string): Promise<PoolRef[]> {
     });
   }
   return out.sort((x, y) => y.liquidity - x.liquidity);
+}
+
+export interface PoolListing {
+  exchange: string;
+  pair: string;
+  volumeUsd: number | null;
+  liquidityUsd: number | null;
+  url: string | null;
+}
+
+/** "meteora-damm-v2" → "Meteora DAMM V2" — GeckoTerminal only exposes the slug. */
+function dexName(id: string): string {
+  return id
+    .split("-")
+    .map((w) => (/^v\d+$/i.test(w) ? w.toLowerCase() : w.length <= 4 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)))
+    .join(" ");
+}
+
+/**
+ * Trading venues for a token, from its pools.
+ *
+ * CoinGecko's ticker list is richer — it is the only source of centralised
+ * venues — but a token has to be *listed* on CoinGecko to appear there, which
+ * excludes most of this book. GeckoTerminal indexes every pool on the chain
+ * with no listing step, so it covers the tokens CoinGecko has never heard of.
+ * On-chain only, by definition: nothing here can report a CEX.
+ */
+export async function poolListings(mint: string): Promise<PoolListing[] | null> {
+  const data = await getJSON<{
+    data?: {
+      attributes?: { name?: string; volume_usd?: { h24?: string }; reserve_in_usd?: string; address?: string };
+      relationships?: { dex?: { data?: { id?: string } } };
+    }[];
+  }>(`${BASE}/networks/solana/tokens/${mint}/pools?page=1`, { retries: 1, timeoutMs: 15000 });
+  await sleep(2100);
+  if (!data) return null;
+
+  const merged = new Map<string, PoolListing>();
+  for (const p of data.data ?? []) {
+    const a = p.attributes;
+    const dex = p.relationships?.dex?.data?.id;
+    if (!a?.name || !dex) continue;
+    const exchange = dexName(dex);
+    // "AVICI / USDC" → "AVICI/USDC"
+    const pair = a.name.replace(/\s*\/\s*/, "/").trim();
+    const key = `${exchange}|${pair}`;
+    const vol = Number(a.volume_usd?.h24);
+    const liq = Number(a.reserve_in_usd);
+    const existing = merged.get(key);
+    if (existing) {
+      // The same venue runs several pools for one pair; report it once.
+      existing.volumeUsd = (existing.volumeUsd ?? 0) + (Number.isFinite(vol) ? vol : 0);
+      existing.liquidityUsd = (existing.liquidityUsd ?? 0) + (Number.isFinite(liq) ? liq : 0);
+      continue;
+    }
+    merged.set(key, {
+      exchange,
+      pair,
+      volumeUsd: Number.isFinite(vol) ? vol : null,
+      liquidityUsd: Number.isFinite(liq) ? liq : null,
+      url: a.address ? `https://www.geckoterminal.com/solana/pools/${a.address}` : null,
+    });
+  }
+  return [...merged.values()].sort((a, b) => (b.volumeUsd ?? 0) - (a.volumeUsd ?? 0));
 }
 
 /** Token info (may include holder count and metadata). */

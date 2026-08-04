@@ -1,13 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createChart, ColorType, CandlestickSeries, AreaSeries, HistogramSeries,
   createSeriesMarkers, LineStyle,
   type IChartApi, type ISeriesApi, type SeriesMarker, type Time, type UTCTimestamp,
 } from "lightweight-charts";
 
-export interface Candle { ts: number; o: number; h: number; l: number; c: number; v: number }
+import {
+  TIMEFRAMES, TF_SECONDS, fromDaily, isIntraday, normalize,
+  type Candle, type Timeframe,
+} from "@/lib/candles";
+
+export type { Candle };
 export interface ChartEvent {
   time: number; label: string; title: string; type?: string; detail?: string | null;
 }
@@ -29,10 +34,18 @@ export const EVENT_GROUPS: { key: string; label: string; types: string[]; color:
 const GROUP_OF = new Map<string, (typeof EVENT_GROUPS)[number]>();
 for (const g of EVENT_GROUPS) for (const t of g.types) GROUP_OF.set(t, g);
 
-type Range = "7D" | "30D" | "90D" | "1Y" | "ALL";
 type Mode = "candles" | "area";
 
-const RANGE_DAYS: Record<Range, number> = { "7D": 7, "30D": 30, "90D": 90, "1Y": 365, ALL: Infinity };
+/**
+ * There is no range picker: the timeframe alone decides what is on screen, and
+ * the window is whatever fits. These two numbers define "fits" — a target bar
+ * pitch in CSS pixels, and a floor so a narrow phone still gets a readable
+ * chart rather than three fat candles.
+ */
+const BAR_PX = 8;
+const MIN_BARS = 24;
+/** A little air on the right, the way desk charts leave room ahead of price. */
+const RIGHT_PAD_BARS = 2;
 
 /** Theme tokens, matching globals.css (the original grey/blue terminal). */
 const T = {
@@ -46,19 +59,130 @@ const T = {
   surface: "#1a1a19",
 };
 
+/** Compact span for the header, e.g. 5400s → "1h", 950400s → "11d". */
+function spanLabel(seconds: number): string {
+  const units: [number, string][] = [
+    [31536000, "y"], [2592000, "mo"], [86400, "d"], [3600, "h"], [60, "m"],
+  ];
+  for (const [size, suffix] of units) {
+    if (seconds >= size) return `${Math.round(seconds / size)}${suffix}`;
+  }
+  return `${Math.max(1, Math.round(seconds))}s`;
+}
+
+/** Flat toolbar button shared by the interval and series-type groups. */
+function SegButton({
+  active, onClick, children, className = "",
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`shrink-0 rounded px-2 py-1.5 text-[11px] leading-none transition-colors sm:px-2.5 ${
+        active ? "bg-white/10 font-medium text-ink" : "text-muted hover:bg-white/5 hover:text-ink2"
+      } ${className}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function PriceChart({
-  candles, events = [], height = 470,
-}: { candles: Candle[]; events?: ChartEvent[]; height?: number }) {
+  candles, events = [], height = 470, slug,
+}: { candles: Candle[]; events?: ChartEvent[]; height?: number; slug?: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const priceRef = useRef<ISeriesApi<"Candlestick"> | ISeriesApi<"Area"> | null>(null);
   const volRef = useRef<ISeriesApi<"Histogram"> | null>(null);
 
-  const [range, setRange] = useState<Range>("ALL");
+  const [timeframe, setTimeframe] = useState<Timeframe>("1D");
   const [mode, setMode] = useState<Mode>("candles");
   const [hover, setHover] = useState<Candle | null>(null);
   const [hoverEvents, setHoverEvents] = useState<ChartEvent[]>([]);
   const [off, setOff] = useState<Set<string>>(new Set());
+  /** Logical index range currently on screen, for the header's change readout. */
+  const [vis, setVis] = useState<{ from: number; to: number } | null>(null);
+  /** Last intraday response, tagged with the timeframe that asked for it. */
+  const [feed, setFeed] = useState<{ tf: Timeframe; candles: Candle[]; error: string | null } | null>(null);
+
+  const intra = isIntraday(timeframe);
+  const fetchable = intra && !!slug;
+  // Derived rather than stored: a stale tag *is* the pending state, so no
+  // effect has to write loading flags back into render.
+  const ready = feed?.tf === timeframe;
+  const loading = fetchable && !ready;
+
+  // Sub-daily bars have no archive — fetch them per timeframe. 1D/1W/1M fold
+  // out of the daily candles the page already sent, so they never round-trip.
+  useEffect(() => {
+    if (!fetchable) return;
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/candles?slug=${encodeURIComponent(slug)}&tf=${encodeURIComponent(timeframe)}`,
+          { signal: ac.signal }
+        );
+        const body = await res.json();
+        if (ac.signal.aborted) return;
+        if (!res.ok) throw new Error(body?.error ?? `Request failed (${res.status}).`);
+        const got: Candle[] = body.candles ?? [];
+        setFeed({
+          tf: timeframe,
+          candles: got,
+          error: got.length ? null : `No ${timeframe} candles are published for this pool.`,
+        });
+      } catch (err) {
+        if (ac.signal.aborted) return;
+        setFeed({
+          tf: timeframe,
+          candles: [],
+          error: err instanceof Error ? err.message : "Could not load candles.",
+        });
+      }
+    })();
+    return () => ac.abort();
+  }, [fetchable, timeframe, slug]);
+
+  /**
+   * Everything the timeframe has. The whole series is loaded so panning back
+   * stays possible; only the *viewport* is sized to the width.
+   */
+  const data = useMemo(() => {
+    // normalize() again on the client: the series is asserted on by the chart
+    // library, and a duplicate timestamp from any source takes the page down.
+    if (intra) return ready ? normalize(feed!.candles) : [];
+    return fromDaily(candles, timeframe);
+  }, [candles, timeframe, intra, ready, feed]);
+
+  // The resize observer and range subscription outlive any one render, so they
+  // read the series through a ref rather than a stale closure.
+  const dataRef = useRef<Candle[]>(data);
+  useEffect(() => { dataRef.current = data; }, [data]);
+
+  /**
+   * Show the last N bars, where N is however many fit at the target pitch.
+   * Called on every data change and every resize, so the window follows the
+   * chart's width instead of a user-picked range.
+   */
+  const fitToWidth = useCallback(() => {
+    const chart = chartRef.current;
+    const n = dataRef.current.length;
+    if (!chart || n === 0) return;
+    const ts = chart.timeScale();
+    const plot = ts.width() || wrapRef.current?.clientWidth || 0;
+    if (plot <= 0) return;
+    const capacity = Math.max(MIN_BARS, Math.floor(plot / BAR_PX));
+    // Fewer bars than the width holds: spread them out rather than leave a gap.
+    if (n <= capacity) { ts.fitContent(); return; }
+    ts.setVisibleLogicalRange({ from: n - capacity, to: n - 1 + RIGHT_PAD_BARS });
+  }, []);
 
   /** Event families actually present in this project's data. */
   const presentGroups = useMemo(() => {
@@ -78,20 +202,22 @@ export function PriceChart({
     [events, off]
   );
 
-  const data = useMemo(() => {
-    const sorted = [...candles].sort((a, b) => a.ts - b.ts);
-    const days = RANGE_DAYS[range];
-    if (!Number.isFinite(days)) return sorted;
-    const cutoff = sorted.length ? sorted[sorted.length - 1].ts - days * 86400 : 0;
-    const win = sorted.filter((c) => c.ts >= cutoff);
-    return win.length >= 2 ? win : sorted;
-  }, [candles, range]);
-
   const last = data.length ? data[data.length - 1] : null;
-  const first = data.length ? data[0] : null;
   const shown = hover ?? last;
-  const periodChange =
-    first && last && first.o > 0 ? ((last.c - first.o) / first.o) * 100 : null;
+
+  /**
+   * With the range picker gone, the only period a reader can see is the one on
+   * screen — so the change is quoted over exactly that, and labelled with the
+   * span it covers rather than a range name that no longer exists.
+   */
+  const period = useMemo(() => {
+    if (data.length < 2) return null;
+    const from = Math.min(Math.max(0, vis?.from ?? 0), data.length - 1);
+    const to = Math.min(Math.max(from, vis?.to ?? data.length - 1), data.length - 1);
+    const a = data[from], b = data[to];
+    if (a.o <= 0 || b.ts <= a.ts) return null;
+    return { change: ((b.c - a.o) / a.o) * 100, seconds: b.ts - a.ts };
+  }, [data, vis]);
 
   // price precision: these tokens range from $5 to $0.001
   const precision = useMemo(() => {
@@ -150,18 +276,34 @@ export function PriceChart({
     });
     chartRef.current = chart;
 
-    const ro = new ResizeObserver(() => chart.applyOptions({ width: el.clientWidth }));
+    // Re-fitting on resize is what makes the window follow the width: a phone
+    // in portrait gets fewer bars than the same chart rotated, with no input.
+    const ro = new ResizeObserver(() => {
+      chart.applyOptions({ width: el.clientWidth });
+      fitToWidth();
+    });
     ro.observe(el);
     chart.applyOptions({ width: el.clientWidth });
 
+    const onRange = (r: { from: number; to: number } | null) => {
+      if (!r) return;
+      const n = dataRef.current.length;
+      if (!n) return;
+      const from = Math.max(0, Math.floor(r.from));
+      const to = Math.min(n - 1, Math.ceil(r.to));
+      setVis((prev) => (prev && prev.from === from && prev.to === to ? prev : { from, to }));
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
+
     return () => {
       ro.disconnect();
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       chart.remove();
       chartRef.current = null;
       priceRef.current = null;
       volRef.current = null;
     };
-  }, [height]);
+  }, [height, fitToWidth]);
 
   // (re)build series when the display mode changes
   useEffect(() => {
@@ -211,12 +353,25 @@ export function PriceChart({
     if (panes[1]) panes[1].setHeight(86);
   }, [mode, precision]);
 
+  // Daily and above are labelled by date; sub-daily needs the clock.
+  useEffect(() => {
+    chartRef.current?.applyOptions({ timeScale: { timeVisible: intra, secondsVisible: false } });
+  }, [intra]);
+
   // push data + markers
   useEffect(() => {
     const chart = chartRef.current;
     const price = priceRef.current;
     const vol = volRef.current;
-    if (!chart || !price || !vol || data.length === 0) return;
+    if (!chart || !price || !vol) return;
+
+    // An empty series must be pushed, not skipped — otherwise a timeframe with
+    // no candles keeps drawing the previous one's bars.
+    if (data.length === 0) {
+      price.setData([]);
+      vol.setData([]);
+      return;
+    }
 
     if (mode === "candles") {
       (price as ISeriesApi<"Candlestick">).setData(
@@ -252,8 +407,8 @@ export function PriceChart({
       }));
     createSeriesMarkers(price, markers);
 
-    chart.timeScale().fitContent();
-  }, [data, visibleEvents, mode]);
+    fitToWidth();
+  }, [data, visibleEvents, mode, fitToWidth]);
 
   // crosshair → OHLC readout
   useEffect(() => {
@@ -261,7 +416,8 @@ export function PriceChart({
     if (!chart) return;
     const byTime = new Map(data.map((c) => [c.ts, c]));
     // Events land on a day; match them to the nearest candle so hovering the
-    // marker's bar surfaces what happened there.
+    // marker's bar surfaces what happened there. The tolerance follows the bar
+    // length, so a day-stamped event cannot smear onto an arbitrary 1m bar.
     const evByDay = new Map<number, ChartEvent[]>();
     for (const e of visibleEvents) {
       let best: number | null = null, bestGap = Infinity;
@@ -269,7 +425,7 @@ export function PriceChart({
         const gap = Math.abs(c.ts - e.time);
         if (gap < bestGap) { bestGap = gap; best = c.ts; }
       }
-      if (best != null && bestGap <= 86400) {
+      if (best != null && bestGap <= TF_SECONDS[timeframe]) {
         evByDay.set(best, [...(evByDay.get(best) ?? []), e]);
       }
     }
@@ -280,7 +436,7 @@ export function PriceChart({
     };
     chart.subscribeCrosshairMove(handler);
     return () => chart.unsubscribeCrosshairMove(handler);
-  }, [data, visibleEvents]);
+  }, [data, visibleEvents, timeframe]);
 
   if (candles.length === 0) {
     return (
@@ -295,13 +451,14 @@ export function PriceChart({
 
   return (
     <div>
-      {/* toolbar */}
-      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+      {/* readout */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex items-baseline gap-2">
           <span className="num text-[20px] font-semibold">{fmtP(shown?.c)}</span>
-          {periodChange != null && !hover && (
-            <span className={`num text-[13px] ${periodChange >= 0 ? "text-good" : "text-bad"}`}>
-              {periodChange >= 0 ? "▲" : "▼"} {Math.abs(periodChange).toFixed(1)}% <span className="text-muted">{range}</span>
+          {period && !hover && (
+            <span className={`num text-[13px] ${period.change >= 0 ? "text-good" : "text-bad"}`}>
+              {period.change >= 0 ? "▲" : "▼"} {Math.abs(period.change).toFixed(1)}%{" "}
+              <span className="text-muted">{spanLabel(period.seconds)}</span>
             </span>
           )}
         </div>
@@ -318,43 +475,55 @@ export function PriceChart({
               </span>
             </span>
             <span className="text-muted">
-              {new Date(shown.ts * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              {new Date(shown.ts * 1000).toLocaleString("en-US", {
+                month: "short", day: "numeric",
+                ...(intra
+                  ? { hour: "2-digit", minute: "2-digit", hour12: false }
+                  : { year: "numeric" }),
+              })}
             </span>
           </div>
         )}
+      </div>
 
-        <div className="ml-auto flex items-center gap-1">
-          <div className="flex overflow-hidden rounded border border-line">
-            {(["candles", "area"] as Mode[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`px-2 py-1 text-[11px] capitalize transition-colors ${
-                  mode === m ? "bg-white/10 text-ink" : "text-muted hover:text-ink2"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-          <div className="flex overflow-hidden rounded border border-line">
-            {(["7D", "30D", "90D", "1Y", "ALL"] as Range[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`px-2 py-1 text-[11px] transition-colors ${
-                  range === r ? "bg-white/10 text-ink" : "text-muted hover:text-ink2"
-                }`}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
+      {/* interval bar — sits directly on top of the chart, TradingView-style */}
+      <div className="flex items-stretch gap-1 border-y border-grid py-1">
+        <div
+          className="scroll-x flex min-w-0 flex-1 items-center gap-0.5"
+          role="group"
+          aria-label="Candle interval"
+        >
+          {TIMEFRAMES.map((tf) => (
+            <SegButton key={tf} active={timeframe === tf} onClick={() => setTimeframe(tf)}>
+              {tf}
+            </SegButton>
+          ))}
+        </div>
+        <span aria-hidden className="my-1 w-px shrink-0 bg-grid" />
+        <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Series type">
+          {(["candles", "area"] as Mode[]).map((m) => (
+            <SegButton key={m} active={mode === m} onClick={() => setMode(m)} className="capitalize">
+              {m}
+            </SegButton>
+          ))}
         </div>
       </div>
 
       <div className="relative">
         <div ref={wrapRef} className="w-full" />
+
+        {(loading || (intra && data.length === 0)) && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="rounded-md border border-line bg-surface/95 px-3 py-1.5 text-[12px] text-muted backdrop-blur">
+              {loading
+                ? `Loading ${timeframe} candles…`
+                : !slug
+                  ? "Intraday candles are unavailable here."
+                  : (ready && feed!.error) || `No ${timeframe} candles available.`}
+            </span>
+          </div>
+        )}
+
         {hoverEvents.length > 0 && (
           <div className="pointer-events-none absolute left-2 top-2 max-w-sm rounded-md border border-line bg-surface/95 p-2.5 shadow-xl backdrop-blur">
             {hoverEvents.map((e, i) => {

@@ -1,6 +1,8 @@
+import { Fragment } from "react";
 import Link from "next/link";
-import type { ProjectDetail } from "@/lib/queries";
-import type { Insight } from "@/lib/analytics";
+import type { ProjectDetail, RiskFlag } from "@/lib/queries";
+import type { Insight, CoverageRow } from "@/lib/analytics";
+import { coverageColor, coverageLabel } from "@/lib/analytics";
 import type { Memo } from "@/lib/research";
 import { entityColor } from "@/lib/sources/wallets";
 import { classifyWallet, confidenceColor } from "@/lib/orgs";
@@ -47,6 +49,270 @@ export function SectionCard({ title, right, children }: {
       </div>
       {children}
     </section>
+  );
+}
+
+// ------------------------------------------------------------------- risk
+
+const RISK_TONE: Record<string, { color: string; label: string }> = {
+  danger: { color: "var(--bad)", label: "Critical" },
+  warn: { color: "var(--warn)", label: "Warning" },
+  info: { color: "var(--ink-muted)", label: "Info" },
+};
+
+/**
+ * Contract-level risk. The headline is RugCheck's normalised score, where
+ * higher is safer — the raw score runs the other way, which is why only the
+ * normalised figure is shown.
+ */
+export function RiskPanel({ risk, flags }: { risk: ProjectDetail["risk"]; flags: RiskFlag[] }) {
+  if (!risk) {
+    return (
+      <SectionCard title="Contract Risk">
+        <div className="p-4">
+          <DataGap
+            title="No contract risk check on file"
+            why="Mint authority, freeze authority and LP lock status have not been verified for this token."
+          />
+        </div>
+      </SectionCard>
+    );
+  }
+
+  const safety = risk.score_normalised;
+  const tone = safety == null ? "var(--ink-muted)" : safety >= 80 ? "var(--good)" : safety >= 60 ? "var(--warn)" : "var(--bad)";
+  const authority = (on: number | null, name: string) =>
+    on ? { text: `${name} enabled`, tone: "bad" as const } : { text: `${name} revoked`, tone: "good" as const };
+  const mint = authority(risk.mint_authority, "Mint");
+  const freeze = authority(risk.freeze_authority, "Freeze");
+
+  return (
+    <SectionCard
+      title="Contract Risk"
+      right={
+        <span className="flex items-center gap-1.5 text-[11px] text-muted">
+          RugCheck safety
+          <span className="num text-[13px] font-semibold" style={{ color: tone }}>{safety ?? "—"}</span>
+          <span className="text-faint">/100</span>
+        </span>
+      }
+    >
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-b border-grid px-4 py-4 md:grid-cols-4">
+        <Metric
+          label="Mint Authority" value={<span className="text-[15px]">{risk.mint_authority ? "Enabled" : "Revoked"}</span>}
+          sub={risk.mint_authority ? "supply can still be inflated" : "supply is fixed"}
+          tone={mint.tone}
+        />
+        <Metric
+          label="Freeze Authority" value={<span className="text-[15px]">{risk.freeze_authority ? "Enabled" : "Revoked"}</span>}
+          sub={risk.freeze_authority ? "balances can be frozen" : "balances cannot be frozen"}
+          tone={freeze.tone}
+        />
+        <Metric
+          label="LP Locked"
+          value={risk.lp_locked_pct != null ? `${risk.lp_locked_pct.toFixed(2)}%` : "—"}
+          sub={risk.total_lp_providers != null ? `${risk.total_lp_providers} LP provider${risk.total_lp_providers === 1 ? "" : "s"}` : undefined}
+        />
+        <Metric
+          label="Holders (on-chain)"
+          value={risk.total_holders != null ? fmtNum(risk.total_holders) : "—"}
+          sub="per RugCheck"
+        />
+      </div>
+
+      {flags.length === 0 ? (
+        <p className="px-4 py-3 text-[12px] text-muted">No risk flags raised.</p>
+      ) : (
+        <ul className="divide-y divide-grid">
+          {flags.map((f, i) => {
+            const t = RISK_TONE[f.level] ?? RISK_TONE.info;
+            return (
+              <li key={i} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5">
+                <span
+                  className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
+                  style={{ color: t.color, borderColor: `${t.color}66` }}
+                >
+                  {t.label}
+                </span>
+                <span className="text-[13px] font-medium text-ink">{f.name}</span>
+                <span className="min-w-0 flex-1 text-[12px] text-muted">{f.description}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="border-t border-grid px-4 py-2.5 text-[11px] text-muted">
+        Automated contract checks from RugCheck. They describe what the token
+        <em> can</em> do, not intent — an enabled mint authority is a capability, not proof of misuse.
+      </p>
+    </SectionCard>
+  );
+}
+
+// --------------------------------------------------------------- listings
+
+/**
+ * Where the token actually trades. Centralised venues are called out because a
+ * CEX listing is a materially different fact from another AMM pool appearing.
+ */
+export function ListingsPanel({ listings }: { listings: ProjectDetail["listings"] }) {
+  if (listings.length === 0) {
+    return (
+      <SectionCard title="Exchange Listings">
+        <div className="p-4">
+          <DataGap
+            title="No venues indexed for this token"
+            why="CoinGecko reports no exchange tickers for this mint — either it is not listed there, or it trades only in pools the aggregator does not index."
+          />
+        </div>
+      </SectionCard>
+    );
+  }
+  const cex = listings.filter((l) => !l.is_dex);
+  const totalVol = listings.reduce((s, l) => s + (l.volume_usd ?? 0), 0);
+  return (
+    <SectionCard
+      title="Exchange Listings"
+      right={
+        <span className="text-[11px] text-muted">
+          {listings.length} venue{listings.length === 1 ? "" : "s"}
+          {cex.length > 0 && <> · <span className="text-ink2">{cex.length} centralised</span></>}
+        </span>
+      }
+    >
+      <div className="scroll-x">
+        <table className="itable text-[13px]">
+          <thead>
+            <tr>
+              <th>Venue</th>
+              <th>Pair</th>
+              <th>Type</th>
+              <th className="!text-right">24h Volume</th>
+              <th className="!text-right">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {listings.map((l) => (
+              <tr key={`${l.exchange}|${l.pair}`}>
+                <td className="font-medium">
+                  {l.url
+                    ? <a href={l.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{l.exchange}</a>
+                    : l.exchange}
+                </td>
+                <td className="num text-ink2">{l.pair}</td>
+                <td>
+                  <span className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+                    l.is_dex ? "border-line text-muted" : "border-accent/40 text-accent"
+                  }`}>
+                    {l.is_dex ? "DEX" : "CEX"}
+                  </span>
+                </td>
+                <td className="num text-right">{l.volume_usd != null ? fmtUsd(l.volume_usd) : "—"}</td>
+                <td className="num text-right text-muted">
+                  {totalVol > 0 && l.volume_usd != null ? `${((l.volume_usd / totalVol) * 100).toFixed(1)}%` : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="border-t border-grid px-4 py-2.5 text-[11px] text-muted">
+        Venue volumes are self-reported to CoinGecko and are not independently verified.
+      </p>
+    </SectionCard>
+  );
+}
+
+// --------------------------------------------------------------- coverage
+
+const PRIORITY_LABEL: Record<CoverageRow["priority"], string> = {
+  critical: "Critical", high: "High", medium: "Medium", low: "Low",
+};
+const PRIORITY_TONE: Record<CoverageRow["priority"], string> = {
+  critical: "text-bad border-bad/50 font-semibold",
+  high: "text-serious border-serious/40",
+  medium: "text-warn border-warn/40",
+  low: "text-muted border-line",
+};
+
+/**
+ * What we actually hold per category, versus what a live integration needs —
+ * shown per project so a thin section reads as "not indexed yet" rather than
+ * a silent gap the reader has to notice on their own.
+ */
+export function DataCoveragePanel({ rows }: { rows: CoverageRow[] }) {
+  const tracked = rows.filter((r) => r.status === "tracked").length;
+  const partial = rows.filter((r) => r.status === "sparse" || r.status === "almost_empty").length;
+  const missing = rows.filter((r) => r.status === "missing").length;
+
+  // Preserve the order dataCoverage() emitted rather than re-sorting groups.
+  const groups: { name: string; items: CoverageRow[] }[] = [];
+  for (const r of rows) {
+    const g = groups.find((x) => x.name === r.group);
+    if (g) g.items.push(r); else groups.push({ name: r.group, items: [r] });
+  }
+
+  return (
+    <SectionCard
+      title="Data Coverage"
+      right={
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
+          <span><span className="num font-semibold text-good">{tracked}</span> tracked</span>
+          <span><span className="num font-semibold text-warn">{partial}</span> partial</span>
+          <span><span className="num font-semibold text-bad">{missing}</span> missing</span>
+          <span className="text-faint">of {rows.length}</span>
+        </span>
+      }
+    >
+      <div className="scroll-x">
+        <table className="itable">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Status</th>
+              <th>Source</th>
+              <th>Priority</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => (
+              <Fragment key={g.name}>
+                <tr>
+                  <td colSpan={4} className="bg-surface2/60 !py-1.5 text-[10px] uppercase tracking-[0.09em] text-faint">
+                    {g.name}
+                  </td>
+                </tr>
+                {g.items.map((r) => (
+                  <tr key={r.key}>
+                    <td>
+                      <div className="text-[13px] font-medium text-ink">{r.label}</div>
+                      <div className="mt-0.5 max-w-sm whitespace-normal text-[11px] leading-snug text-muted">
+                        {r.detail}
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium"
+                        style={{ color: coverageColor(r.status) }}
+                      >
+                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: coverageColor(r.status) }} />
+                        {coverageLabel(r.status)}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap text-[12px] text-ink2">{r.source}</td>
+                    <td>
+                      <span className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${PRIORITY_TONE[r.priority]}`}>
+                        {PRIORITY_LABEL[r.priority]}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </SectionCard>
   );
 }
 
@@ -386,8 +652,33 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
 
 // -------------------------------------------------------------------- news
 
-export function NewsPanel({ items, project }: {
-  items: { ts: number; title: string; url: string | null; source: string | null }[];
+type FeedItem = { ts: number; title: string; url: string | null; source: string | null };
+
+function FeedList({ items, showSource }: { items: FeedItem[]; showSource?: boolean }) {
+  return (
+    <ul className="divide-y divide-grid">
+      {items.map((n, i) => (
+        <li key={i} className="flex flex-wrap items-baseline gap-3 px-4 py-2.5 text-[13px]">
+          <span className="num w-24 shrink-0 text-muted">{fmtDate(n.ts)}</span>
+          {showSource && n.source && (
+            <span className="shrink-0 rounded bg-surface2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink2">
+              {n.source}
+            </span>
+          )}
+          <span className="min-w-0 flex-1">
+            {n.url
+              ? <a href={n.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{n.title}</a>
+              : n.title}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function NewsPanel({ items, releases = [], project }: {
+  items: FeedItem[];
+  releases?: FeedItem[];
   project: { twitter: string | null; website: string | null; github: string | null; docs: string | null };
 }) {
   return (
@@ -396,31 +687,28 @@ export function NewsPanel({ items, project }: {
         {items.length === 0 ? (
           <div className="p-4">
             <DataGap
-              title="No feed indexed for this project"
-              why="News is aggregated from public RSS/Atom feeds and GitHub releases. This project has no discoverable feed on its site, and X/Twitter has no keyless public API for reading a timeline."
-              unlock="Add a blog or RSS URL to the project record, or set GITHUB_TOKEN to index release notes more deeply."
+              title="No news or announcement feed indexed for this project"
+              why="No external news wire is integrated, this project has no discoverable RSS/Atom feed on its site, and X/Twitter has no keyless public API for reading a timeline. Repository releases are listed separately below — they are engineering output, not press coverage."
+              unlock="Add a blog or RSS URL to the project record, or wire a news wire such as CryptoPanic."
             />
           </div>
         ) : (
-          <ul className="divide-y divide-grid">
-            {items.map((n, i) => (
-              <li key={i} className="flex flex-wrap items-baseline gap-3 px-4 py-2.5 text-[13px]">
-                <span className="num w-24 shrink-0 text-muted">{fmtDate(n.ts)}</span>
-                {n.source && (
-                  <span className="shrink-0 rounded bg-surface2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink2">
-                    {n.source}
-                  </span>
-                )}
-                <span className="min-w-0 flex-1">
-                  {n.url
-                    ? <a href={n.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{n.title}</a>
-                    : n.title}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <FeedList items={items} showSource />
         )}
       </SectionCard>
+
+      {releases.length > 0 && (
+        <SectionCard
+          title="Repository Releases"
+          right={
+            <span className="text-[11px] text-muted">
+              {releases.length} git tag{releases.length === 1 ? "" : "s"} · not press coverage
+            </span>
+          }
+        >
+          <FeedList items={releases} />
+        </SectionCard>
+      )}
 
       <SectionCard title="Official Channels">
         <div className="flex flex-wrap gap-3 px-4 py-4 text-[13px]">

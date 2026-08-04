@@ -150,6 +150,37 @@ function migrate(d: Database.Database) {
     PRIMARY KEY (project_id, ts)
   );
 
+  -- Current venue list per token. Replaced wholesale on each ingest rather than
+  -- appended: a delisting must disappear, not linger as stale history.
+  CREATE TABLE IF NOT EXISTS exchange_listings (
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    exchange TEXT NOT NULL,
+    pair TEXT NOT NULL,
+    volume_usd REAL,
+    trust TEXT,
+    url TEXT,
+    is_dex INTEGER,
+    ts INTEGER,
+    PRIMARY KEY (project_id, exchange, pair)
+  );
+
+  -- Contract risk as reported by RugCheck. score_normalised is 0-100 where
+  -- higher is safer, which is the opposite direction to the raw score.
+  CREATE TABLE IF NOT EXISTS risk_snapshots (
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    ts INTEGER NOT NULL,
+    score REAL,
+    score_normalised INTEGER,
+    rugged INTEGER,
+    mint_authority INTEGER,
+    freeze_authority INTEGER,
+    lp_locked_pct REAL,
+    total_holders INTEGER,
+    total_lp_providers INTEGER,
+    risks TEXT,
+    PRIMARY KEY (project_id, ts)
+  );
+
   CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 
   CREATE INDEX IF NOT EXISTS idx_snap_proj ON price_snapshots(project_id, ts DESC);
@@ -157,10 +188,7 @@ function migrate(d: Database.Database) {
   `);
 
   // additive column migrations for databases created by an earlier schema
-  const cols = new Set(
-    (d.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).map((c) => c.name)
-  );
-  const ADDED: [string, string][] = [
+  addColumns(d, "projects", [
     ["total_supply", "REAL"],
     ["circulating_supply", "REAL"],
     ["team_package", "REAL"],
@@ -172,9 +200,32 @@ function migrate(d: Database.Database) {
     ["raise_committed_usd", "REAL"],
     ["raise_fdv_usd", "REAL"],
     ["raise_track", "TEXT"],
-  ];
-  for (const [name, type] of ADDED) {
-    if (!cols.has(name)) d.exec(`ALTER TABLE projects ADD COLUMN ${name} ${type}`);
+  ]);
+
+  // The GitHub snapshot began as four headline counters; the development view
+  // needs the whole engineering picture, and these are all additive.
+  addColumns(d, "github_snapshots", [
+    ["commits_90d", "INTEGER"],
+    ["open_issues", "INTEGER"],
+    ["closed_issues", "INTEGER"],
+    ["open_prs", "INTEGER"],
+    ["merged_prs", "INTEGER"],
+    ["releases_count", "INTEGER"],
+    ["active_repos", "INTEGER"],
+    ["last_commit_ts", "INTEGER"],
+    // JSON blobs: a language breakdown and a weekly additions/deletions series.
+    // Neither is queried relationally, so a column beats a child table here.
+    ["languages", "TEXT"],
+    ["code_frequency", "TEXT"],
+  ]);
+}
+
+function addColumns(d: Database.Database, table: string, added: [string, string][]) {
+  const cols = new Set(
+    (d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+  );
+  for (const [name, type] of added) {
+    if (!cols.has(name)) d.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
   }
 }
 

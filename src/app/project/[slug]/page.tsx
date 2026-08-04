@@ -1,14 +1,18 @@
 import { notFound } from "next/navigation";
-import { projectDetail, priceIsReliable, MIN_LIQUIDITY_USD, crossProjectHolderCounts } from "@/lib/queries";
-import { healthScore, insights } from "@/lib/analytics";
+import {
+  projectDetail, priceIsReliable, MIN_LIQUIDITY_USD, crossProjectHolderCounts,
+  parseLanguages, parseCodeFrequency, parseRisks,
+} from "@/lib/queries";
+import { healthScore, insights, dataCoverage, developerScore } from "@/lib/analytics";
+import { DevelopmentPanel } from "@/components/Development";
 import { buildMemo } from "@/lib/research";
 import { PriceChart } from "@/components/PriceChart";
 import { Tabs, type TabDef } from "@/components/Tabs";
 import { HealthScorePanel } from "@/components/HealthScore";
 import {
   HoldersPanel, SmartMoneyPanel, TreasuryPanel, CompareRaisePanel, NewsPanel,
-  ResearchPanel, GovernancePanel, TimelinePanel, InsightList,
-  SectionCard, Metric, DataGap,
+  ResearchPanel, GovernancePanel, TimelinePanel, InsightList, DataCoveragePanel,
+  ListingsPanel, RiskPanel, SectionCard, Metric, DataGap,
 } from "@/components/panels";
 import { TradeTerminal } from "@/components/TradeTerminal";
 import { PortfolioCard } from "@/components/PortfolioCard";
@@ -17,6 +21,19 @@ import { Delta, Logo, StatTile, StatusBadge } from "@/components/ui";
 import { fmtUsd, fmtNum, fmtPct, fmtDate, timeAgo, shortAddr } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * The coverage panel reports which of our own sources came back empty for a
+ * project. That is a view of the pipeline's health, not of the asset, so it
+ * belongs on a developer's machine and not in front of a reader.
+ *
+ * Defaults to on outside production and off in it, but SHOW_DATA_COVERAGE
+ * overrides either way — so a deployed instance can be turned on to debug an
+ * ingest without a rebuild. Read on the server at render, so the markup never
+ * reaches a client that should not have it.
+ */
+const SHOW_COVERAGE =
+  (process.env.SHOW_DATA_COVERAGE ?? String(process.env.NODE_ENV !== "production")) === "true";
 
 const EVENT_LABEL: Record<string, string> = {
   raise_closed: "R", token_launch: "L", proposal: "P",
@@ -50,6 +67,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
 
   const hs = healthScore(d);
   const signals = insights(d);
+  const coverage = SHOW_COVERAGE ? dataCoverage(d) : [];
+  const devScore = developerScore(github, !!p.github);
+  const languages = parseLanguages(github);
+  const codeFrequency = parseCodeFrequency(github);
   const memo = buildMemo(d);
   const crossCounts = crossProjectHolderCounts();
 
@@ -68,9 +89,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
         <h2 className="text-[14px] font-semibold">
           {p.symbol ?? p.name}<span className="text-muted"> / USD</span>
         </h2>
-        <span className="text-[11px] text-muted">daily candles · USD</span>
+        <span className="text-[11px] text-muted">quoted in USD</span>
       </div>
-      <PriceChart candles={candles} events={chartEvents} />
+      <PriceChart candles={candles} events={chartEvents} slug={slug} />
     </section>
   );
 
@@ -81,13 +102,16 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
         <SectionCard title="AI Insights" right={<span className="text-[11px] text-muted">{signals.length} signal{signals.length === 1 ? "" : "s"}</span>}>
           <InsightList items={signals} />
         </SectionCard>
-        <SectionCard title="Development">
+        <SectionCard
+          title="Development"
+          right={<a href="#development" className="text-[11px] text-accent hover:underline">full breakdown →</a>}
+        >
           {github ? (
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
+              <Metric label="Commits 90d" value={fmtNum(github.commits_90d)} />
+              <Metric label="Contributors" value={fmtNum(github.contributors)} />
               <Metric label="Stars" value={fmtNum(github.stars)} />
-              <Metric label="Forks" value={fmtNum(github.forks)} />
-              <Metric label="Repos" value={github.repos ?? "—"} />
-              <Metric label="Last Push" value={timeAgo(github.last_push_ts)} />
+              <Metric label="Last Commit" value={timeAgo(github.last_commit_ts ?? github.last_push_ts)} />
             </div>
           ) : (
             <div className="p-4">
@@ -99,6 +123,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
           )}
         </SectionCard>
       </div>
+      <RiskPanel risk={d.risk} flags={parseRisks(d.risk)} />
+      <ListingsPanel listings={d.listings} />
+      {SHOW_COVERAGE && <DataCoveragePanel rows={coverage} />}
       <CompareRaisePanel d={d} />
       {(p.raise_amount_usd != null || p.raise_price != null || p.circulating_supply != null || p.raise_note != null) && (
         <SectionCard
@@ -159,9 +186,25 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     { key: "holders", label: "Holders", badge: latestHolders?.holder_count ? fmtNum(latestHolders.holder_count) : undefined, content: <HoldersPanel d={d} crossCounts={crossCounts} /> },
     { key: "smart", label: "Smart Money", content: <SmartMoneyPanel d={d} /> },
     { key: "treasury", label: "Treasury", content: <TreasuryPanel d={d} /> },
+    {
+      key: "development", label: "Development",
+      badge: devScore.overall ?? undefined,
+      content: (
+        <DevelopmentPanel
+          github={github} languages={languages} codeFrequency={codeFrequency}
+          score={devScore} githubUrl={p.github} releaseCount={d.releases.length}
+        />
+      ),
+    },
     { key: "governance", label: "Governance", badge: d.proposals.length || undefined, content: <GovernancePanel d={d} /> },
     { key: "timeline", label: "Timeline", badge: events.length || undefined, content: <TimelinePanel events={events} /> },
-    { key: "news", label: "News", badge: d.news.length || undefined, content: <NewsPanel items={d.news} project={p} /> },
+    {
+      key: "news", label: "News",
+      // Counts real news only — git tags used to inflate this badge to 17 on a
+      // project with no press coverage at all.
+      badge: d.news.length || undefined,
+      content: <NewsPanel items={d.news} releases={d.releases} project={p} />,
+    },
     { key: "research", label: "Research", content: <ResearchPanel memo={memo} /> },
   ];
 

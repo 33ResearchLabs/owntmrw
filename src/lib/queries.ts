@@ -96,6 +96,61 @@ export async function screenerRows(): Promise<ScreenerRow[]> {
   });
 }
 
+/** One reading of a project's public engineering output. */
+export interface GithubSnapshot {
+  ts: number;
+  stars: number | null; forks: number | null; repos: number | null;
+  last_push_ts: number | null; last_commit_ts: number | null;
+  contributors: number | null; commits_90d: number | null;
+  open_issues: number | null; closed_issues: number | null;
+  open_prs: number | null; merged_prs: number | null;
+  releases_count: number | null; active_repos: number | null;
+  /** JSON as stored; use parseLanguages / parseCodeFrequency to read them. */
+  languages: string | null;
+  code_frequency: string | null;
+}
+
+export interface RiskFlag { name: string; description: string; level: string; score: number }
+
+export interface RiskSnapshot {
+  ts: number;
+  score: number | null;
+  /** 0-100, higher is safer — the opposite direction to the raw score. */
+  score_normalised: number | null;
+  rugged: number | null;
+  mint_authority: number | null;
+  freeze_authority: number | null;
+  lp_locked_pct: number | null;
+  total_holders: number | null;
+  total_lp_providers: number | null;
+  risks: string | null;
+}
+
+export const parseRisks = (r: RiskSnapshot | null) => parseJson<RiskFlag>(r?.risks ?? null);
+
+export interface ExchangeListing {
+  exchange: string; pair: string;
+  volume_usd: number | null; trust: string | null;
+  url: string | null; is_dex: number | null; ts: number | null;
+}
+
+export interface Language { name: string; bytes: number }
+export interface CodeWeek { week: number; additions: number; deletions: number }
+
+/** Stored JSON is never trusted blindly — a malformed blob must not 500 a page. */
+function parseJson<T>(raw: string | null): T[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? (v as T[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export const parseLanguages = (g: GithubSnapshot | null) => parseJson<Language>(g?.languages ?? null);
+export const parseCodeFrequency = (g: GithubSnapshot | null) => parseJson<CodeWeek>(g?.code_frequency ?? null);
+
 export interface ProjectDetail {
   project: Project;
   latest: { price_usd: number | null; mcap: number | null; fdv: number | null; liquidity_usd: number | null; vol24h: number | null; change_24h: number | null } | null;
@@ -104,11 +159,16 @@ export interface ProjectDetail {
   topHolders: { rank: number; address: string; owner: string | null; amount: number; pct: number; label: string | null }[];
   holderHistory: { ts: number; holder_count: number | null; top10_pct: number | null }[];
   proposals: { number: number | null; title: string | null; state: string | null; created_ts: number | null; url: string | null; author: string | null }[];
-  github: { ts: number; stars: number | null; forks: number | null; repos: number | null; last_push_ts: number | null } | null;
+  github: GithubSnapshot | null;
   observations: { ts: number; kind: string | null; text: string }[];
   treasuryValue: number | null;
   treasuryHistory: { ts: number; value_usd: number | null }[];
-  news: { ts: number; title: string; url: string | null; source: string | null }[];
+  /** `source` is the publisher (CoinDesk…); `type` is the event class. */
+  news: { ts: number; title: string; url: string | null; source: string | null; type: string }[];
+  /** Git tags from the project's repos — engineering output, not press. */
+  releases: { ts: number; title: string; url: string | null; source: string | null }[];
+  listings: ExchangeListing[];
+  risk: RiskSnapshot | null;
   ath: number | null; atl: number | null;
   athTs: number | null;
 }
@@ -136,18 +196,41 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   const topHolders = d.prepare("SELECT rank,address,owner,amount,pct,label FROM top_holders WHERE project_id = ? ORDER BY rank LIMIT 20").all(id) as ProjectDetail["topHolders"];
   const holderHistory = d.prepare("SELECT ts,holder_count,top10_pct FROM holder_snapshots WHERE project_id = ? ORDER BY ts").all(id) as ProjectDetail["holderHistory"];
   const proposals = d.prepare("SELECT number,title,state,created_ts,url,author FROM proposals WHERE project_id = ? ORDER BY created_ts DESC").all(id) as ProjectDetail["proposals"];
-  const github = d.prepare("SELECT ts,stars,forks,repos,last_push_ts FROM github_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1").get(id) as ProjectDetail["github"];
+  const github = d.prepare(`
+    SELECT ts, stars, forks, repos, last_push_ts, last_commit_ts, contributors, commits_90d,
+           open_issues, closed_issues, open_prs, merged_prs, releases_count, active_repos,
+           languages, code_frequency
+    FROM github_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1
+  `).get(id) as ProjectDetail["github"];
   const observations = d.prepare("SELECT ts,kind,text FROM observations WHERE project_id = ? ORDER BY ts DESC LIMIT 30").all(id) as ProjectDetail["observations"];
   const treasury = d.prepare("SELECT value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1").get(id) as { value_usd: number | null } | undefined;
   const treasuryHistory = d.prepare(
     "SELECT ts, value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts"
   ).all(id) as ProjectDetail["treasuryHistory"];
-  // News is drawn from the event log: releases and announcements carry a URL.
+  // News and releases are kept apart. Folding git tags into "news" made the
+  // News tab read "17" on a project with no press coverage at all, and half of
+  // those tags were from a test repo — an availability claim we cannot support.
+  // detail carries the publisher for wire items; fall back to the type so an
+  // older row written before the wire existed still labels itself.
   const news = d.prepare(`
-    SELECT ts, title, url, type AS source FROM events
-    WHERE project_id = ? AND type IN ('github_release','news','announcement','blog')
+    SELECT ts, title, url, type, COALESCE(detail, type) AS source FROM events
+    WHERE project_id = ? AND type IN ('news','announcement','blog')
     ORDER BY ts DESC LIMIT 50
   `).all(id) as ProjectDetail["news"];
+  const releases = d.prepare(`
+    SELECT ts, title, url, type AS source FROM events
+    WHERE project_id = ? AND type = 'github_release'
+    ORDER BY ts DESC LIMIT 50
+  `).all(id) as ProjectDetail["releases"];
+  const listings = d.prepare(`
+    SELECT exchange, pair, volume_usd, trust, url, is_dex, ts FROM exchange_listings
+    WHERE project_id = ? ORDER BY volume_usd DESC NULLS LAST
+  `).all(id) as ProjectDetail["listings"];
+  const risk = d.prepare(`
+    SELECT ts, score, score_normalised, rugged, mint_authority, freeze_authority,
+           lp_locked_pct, total_holders, total_lp_providers, risks
+    FROM risk_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1
+  `).get(id) as ProjectDetail["risk"];
 
   // Candles are written by ingest, so on a deployment that re-ingests
   // occasionally the series stops days short of today and the chart contradicts
@@ -189,7 +272,8 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   }
   return {
     project, latest, candles, events, topHolders, holderHistory, proposals, github, observations,
-    treasuryValue: treasury?.value_usd ?? null, treasuryHistory, news, ath, atl, athTs,
+    treasuryValue: treasury?.value_usd ?? null, treasuryHistory, news, releases, listings, risk,
+    ath, atl, athTs,
   };
 }
 

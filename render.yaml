@@ -14,3 +14,8 @@ services:
         sync: false
       - key: GITHUB_TOKEN
         sync: false
+      # Pipeline-health panel — development only. Stated explicitly rather than
+      # left to the NODE_ENV default so turning it on to debug a deploy is a
+      # dashboard edit, not a code change.
+      - key: SHOW_DATA_COVERAGE
+        value: "false"

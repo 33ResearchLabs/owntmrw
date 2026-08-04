@@ -15,9 +15,12 @@ import { db, upsertProject, allProjects } from "../src/lib/db";
 import { discoverProjects, fetchSupply } from "../src/lib/sources/metadao";
 import { fetchMarketHistory } from "../src/lib/sources/marketdata";
 import { bestPairForMint, socialsFromPair } from "../src/lib/sources/dexscreener";
-import { dailyOHLCV, topPoolForToken, tokenInfo, poolsForToken } from "../src/lib/sources/geckoterminal";
+import { dailyOHLCV, topPoolForToken, tokenInfo, poolsForToken, poolListings } from "../src/lib/sources/geckoterminal";
 import { largestTokenAccounts, tokenAccountOwner, tokenSupply } from "../src/lib/sources/rpc";
 import { orgStats, githubOwner } from "../src/lib/sources/github";
+import { coinIdByContract, coinListings } from "../src/lib/sources/coingecko";
+import { fetchWire, matchProject, searchNews, filterForProject } from "../src/lib/sources/newswire";
+import { tokenReport } from "../src/lib/sources/rugcheck";
 import { jupTokenSearch, jupPrices } from "../src/lib/sources/jupiter";
 import { raiseFor, refundRate } from "../src/lib/sources/raises";
 import { sleep } from "../src/lib/sources/http";
@@ -292,6 +295,113 @@ async function main() {
     }
   }
 
+  // 4b. exchange listings (CoinGecko free tier; its /news endpoint is PRO-only)
+  if (!FAST) {
+    console.log("[4b] exchange listings…");
+    for (const p of allProjects()) {
+      if (!p.mint) continue;
+      // CoinGecko is the only source of centralised venues, but only covers
+      // tokens it has listed. GeckoTerminal indexes every pool on the chain but
+      // is on-chain by definition. Neither is a superset, so both are merged.
+      const { id: cgId, failed } = await coinIdByContract(p.mint);
+      // A broken lookup must not be read as "delisted" — leave the row alone.
+      if (failed) { console.log(`      ${p.name}: lookup failed, keeping stored venues`); continue; }
+
+      const cg = cgId ? (await coinListings(cgId)) ?? [] : [];
+      const pools = (await poolListings(p.mint)) ?? [];
+
+      const byKey = new Map<string, {
+        exchange: string; pair: string; volumeUsd: number | null;
+        trust: string | null; url: string | null; isDex: boolean;
+      }>();
+      for (const l of cg) {
+        byKey.set(`${l.exchange.toLowerCase()}|${l.pair.toLowerCase()}`, {
+          exchange: l.exchange, pair: l.pair, volumeUsd: l.volumeUsd,
+          trust: l.trust, url: l.url, isDex: l.isDex,
+        });
+      }
+      for (const l of pools) {
+        // CoinGecko's entry wins on a collision: it carries the CEX/DEX call.
+        const key = `${l.exchange.toLowerCase()}|${l.pair.toLowerCase()}`;
+        if (byKey.has(key)) continue;
+        byKey.set(key, {
+          exchange: l.exchange, pair: l.pair, volumeUsd: l.volumeUsd,
+          trust: null, url: l.url, isDex: true,
+        });
+      }
+      const rows = [...byKey.values()].sort((a, b) => (b.volumeUsd ?? 0) - (a.volumeUsd ?? 0));
+      if (!rows.length) continue;
+
+      // Replaced, not merged: a venue that stopped trading must drop off.
+      d.prepare("DELETE FROM exchange_listings WHERE project_id = ?").run(p.id);
+      const ins = d.prepare(`
+        INSERT OR REPLACE INTO exchange_listings
+          (project_id, exchange, pair, volume_usd, trust, url, is_dex, ts)
+        VALUES (?,?,?,?,?,?,?,?)
+      `);
+      for (const l of rows) {
+        ins.run(p.id, l.exchange, l.pair, l.volumeUsd, l.trust, l.url, l.isDex ? 1 : 0, now());
+      }
+      const cex = rows.filter((l) => !l.isDex).length;
+      console.log(`      ${p.name}: ${rows.length} venues (${cex} CEX, ${cg.length} from CoinGecko)`);
+    }
+  }
+
+  // 4c. contract risk + holder list (RugCheck, keyless). One call per mint
+  //     fills three categories: risk, the top-holder list, and concentration.
+  if (!FAST) {
+    console.log("[4c] risk & holder list…");
+    for (const p of allProjects()) {
+      if (!p.mint) continue;
+      const r = await tokenReport(p.mint);
+      if (!r) continue;
+
+      d.prepare(`
+        INSERT OR REPLACE INTO risk_snapshots (
+          project_id, ts, score, score_normalised, rugged, mint_authority,
+          freeze_authority, lp_locked_pct, total_holders, total_lp_providers, risks
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+      `).run(
+        p.id, now(), r.score, r.scoreNormalised, r.rugged ? 1 : 0,
+        r.mintAuthorityEnabled ? 1 : 0, r.freezeAuthorityEnabled ? 1 : 0,
+        r.lpLockedPct, r.totalHolders, r.totalLpProviders,
+        r.risks.length ? JSON.stringify(r.risks) : null
+      );
+
+      if (r.holders.length) {
+        // Replaced wholesale: a wallet that sold must leave the table.
+        d.prepare("DELETE FROM top_holders WHERE project_id = ?").run(p.id);
+        const insH = d.prepare(`
+          INSERT OR REPLACE INTO top_holders (project_id, rank, address, owner, amount, pct, label, ts)
+          VALUES (?,?,?,?,?,?,?,?)
+        `);
+        r.holders.forEach((h, i) => {
+          // Prefer RugCheck's own venue label, then our curated wallet registry.
+          const label = h.label ?? KNOWN_WALLETS[h.owner ?? ""]?.label ?? (h.insider ? "Insider network" : null);
+          insH.run(p.id, i + 1, h.address, h.owner, h.uiAmount, h.pct, label, now());
+        });
+      }
+
+      // Concentration rides on the holder snapshot the holders step wrote.
+      if (r.top10Pct != null) {
+        const last = d.prepare(
+          "SELECT ts FROM holder_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1"
+        ).get(p.id) as { ts: number } | undefined;
+        if (last) {
+          d.prepare(
+            "UPDATE holder_snapshots SET top10_pct = ?, top20_pct = ? WHERE project_id = ? AND ts = ?"
+          ).run(r.top10Pct, r.top20Pct, p.id, last.ts);
+        }
+      }
+
+      const danger = r.risks.filter((x) => x.level === "danger").length;
+      console.log(
+        `      ${p.name}: risk ${r.scoreNormalised ?? "?"}/100, ${r.holders.length} holders` +
+        `${r.top10Pct != null ? `, top10 ${r.top10Pct.toFixed(1)}%` : ""}${danger ? `, ${danger} danger` : ""}`
+      );
+    }
+  }
+
   // 5. github + events + observations
   console.log("[5/5] github, events, observations…");
   for (const p of allProjects()) {
@@ -301,9 +411,18 @@ async function main() {
         const gs = await orgStats(owner);
         if (gs) {
           d.prepare(`
-            INSERT OR REPLACE INTO github_snapshots (project_id, ts, stars, forks, repos, last_push_ts)
-            VALUES (?,?,?,?,?,?)
-          `).run(p.id, now(), gs.stars, gs.forks, gs.repos, gs.lastPushTs || null);
+            INSERT OR REPLACE INTO github_snapshots (
+              project_id, ts, stars, forks, repos, last_push_ts,
+              contributors, commits_90d, open_issues, closed_issues, open_prs, merged_prs,
+              releases_count, active_repos, last_commit_ts, languages, code_frequency
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          `).run(
+            p.id, now(), gs.stars, gs.forks, gs.repos, gs.lastPushTs || null,
+            gs.contributors, gs.commits90d, gs.openIssues, gs.closedIssues, gs.openPRs, gs.mergedPRs,
+            gs.releasesCount, gs.activeRepos, gs.lastCommitTs,
+            gs.languages.length ? JSON.stringify(gs.languages) : null,
+            gs.codeFrequency.length ? JSON.stringify(gs.codeFrequency) : null
+          );
           const insEv = d.prepare(`
             INSERT OR IGNORE INTO events (project_id, ts, type, title, detail, url) VALUES (?,?,?,?,?,?)
           `);
@@ -351,6 +470,42 @@ async function main() {
     const insEv = d.prepare("INSERT OR IGNORE INTO events (project_id, ts, type, title, detail, url) VALUES (?,?,?,?,?,?)");
     if (p.raise_end_ts) insEv.run(p.id, p.raise_end_ts, "raise_closed", "Raise closed", p.raise_amount_usd ? `$${Math.round(p.raise_amount_usd).toLocaleString()} raised` : null, null);
     if (p.launch_ts) insEv.run(p.id, p.launch_ts, "token_launch", "Token trading began", null, null);
+  }
+
+  // 6. press coverage, from two complementary directions:
+  //    the publisher wire catches the majors, and a per-token search reaches
+  //    the smaller outlets that cover a $3M raise the majors never mention.
+  if (!FAST) {
+    console.log("[6/6] news…");
+    const wire = await fetchWire();
+    const insNews = d.prepare(
+      "INSERT OR IGNORE INTO events (project_id, ts, type, title, detail, url) VALUES (?,?,?,?,?,?)"
+    );
+    let matched = 0, rows = 0;
+    for (const p of allProjects()) {
+      const fromWire = matchProject(wire, p.name).map((h) => ({ ...h }));
+      const found = await searchNews(`"${p.name}" crypto`);
+      await sleep(1800); // space the search requests
+      const fromSearch = filterForProject(found, p.name, p.symbol, "Bing News");
+
+      // The wire already carries a publisher name; searched items are titled by
+      // outlet inside the feed, so they are attributed generically.
+      const all = [...fromWire, ...fromSearch];
+      const seen = new Set<string>();
+      let added = 0;
+      for (const a of all) {
+        const key = a.title.toLowerCase().trim();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        added += insNews.run(p.id, a.ts, "news", a.title, a.source, a.url).changes;
+      }
+      rows += added;
+      if (all.length) {
+        matched++;
+        console.log(`      ${p.name}: ${all.length} article${all.length === 1 ? "" : "s"} (${added} new)`);
+      }
+    }
+    console.log(`      ${matched} projects with coverage, ${rows} rows written`);
   }
 
   generateObservations();
