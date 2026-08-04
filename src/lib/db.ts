@@ -9,14 +9,17 @@ const BUNDLED_DB_PATH = path.join(DATA_DIR, "metaintel.db");
 // only /tmp is writable. WAL mode needs to create -shm/-wal sidecar files
 // even for reads, so on read-only filesystems we copy the bundled snapshot
 // into /tmp once per cold start and open it there instead.
-const IS_READONLY_FS = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
-const DB_PATH = IS_READONLY_FS ? path.join("/tmp", "metaintel.db") : BUNDLED_DB_PATH;
+// Render mounts the repo checkout on a filesystem where WAL's mmap segfaults
+// (better-sqlite3 crashes on first query), so it takes the same /tmp-copy path.
+const NEEDS_TMP_COPY =
+  !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME || !!process.env.RENDER;
+const DB_PATH = NEEDS_TMP_COPY ? path.join("/tmp", "metaintel.db") : BUNDLED_DB_PATH;
 
 let _db: Database.Database | null = null;
 
 export function db(): Database.Database {
   if (_db) return _db;
-  if (IS_READONLY_FS) {
+  if (NEEDS_TMP_COPY) {
     if (!fs.existsSync(DB_PATH) && fs.existsSync(BUNDLED_DB_PATH)) {
       fs.copyFileSync(BUNDLED_DB_PATH, DB_PATH);
     }
