@@ -1,26 +1,198 @@
 @import "tailwindcss";
 
+/*
+ * The original OwnTmrw terminal theme: dark grey institutional surfaces with a
+ * blue accent (validated dark-mode viz tokens). Layout and components keep the
+ * Own Tomorrow structure; only the palette is this older, calmer scheme.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: dark;
+
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #222221;
+  --elevated: #1f1f1e;
+
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-muted: #898781;
+  --ink-faint: #6b6a64;
+
+  --hair: rgba(255, 255, 255, 0.07);
+  --hair-strong: rgba(255, 255, 255, 0.14);
+  --grid: #2c2c2a;
+
+  /* blue accent from the original terminal */
+  --accent: #3987e5;
+  --accent-hi: #5598e7;
+  --accent-dim: rgba(57, 135, 229, 0.14);
+  --accent-ink: #ffffff;
+
+  --good: #0ca30c;
+  --bad: #d03b3b;
+  --warn: #fab219;
+  --serious: #ec835a;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface-2);
+  --color-elevated: var(--elevated);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink-2);
+  --color-muted: var(--ink-muted);
+  --color-faint: var(--ink-faint);
+  --color-line: var(--hair);
+  --color-line2: var(--hair-strong);
+  --color-grid: var(--grid);
+  --color-accent: var(--accent);
+  --color-accenthi: var(--accent-hi);
+  --color-good: var(--good);
+  --color-bad: var(--bad);
+  --color-warn: var(--warn);
+  --color-serious: var(--serious);
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+html { background: var(--page); }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+a { color: inherit; text-decoration: none; }
+
+.num { font-variant-numeric: tabular-nums; }
+
+::selection { background: rgba(57, 135, 229, 0.35); }
+
+/* ---------- surfaces ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 18px;
+}
+
+.card-tight { border-radius: 14px; }
+
+/* Hero / feature panel — the design's radial-gradient treatment. */
+.hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--hair);
+  border-radius: 24px;
+  background:
+    radial-gradient(120% 90% at 78% 105%, rgba(57, 135, 229, 0.30) 0%, rgba(24, 79, 149, 0.18) 28%, rgba(13, 13, 13, 0) 62%),
+    radial-gradient(90% 70% at 85% 118%, #0d366b 0%, rgba(13, 13, 13, 0) 55%),
+    linear-gradient(180deg, #161615 0%, #101010 100%);
+}
+
+.hero-glow {
+  position: absolute;
+  inset-inline: 0;
+  bottom: -2px;
+  height: 180px;
+  background: radial-gradient(140% 200% at 70% 210%, rgba(0, 0, 0, 0.9) 40%, rgba(134, 182, 239, 0.22) 58%, rgba(13, 13, 13, 0) 70%);
+  pointer-events: none;
+}
+
+/* ---------- data tables ---------- */
+
+.itable { width: 100%; border-collapse: collapse; }
+
+.itable th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--grid);
+  white-space: nowrap;
+}
+
+.itable td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--grid);
+  white-space: nowrap;
+}
+
+.itable tbody tr { transition: background 120ms ease; }
+.itable tbody tr:hover { background: rgba(255, 255, 255, 0.025); }
+.itable tbody tr:last-child td { border-bottom: none; }
+
+/* ---------- controls ---------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 15px;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
+}
+.chip:hover { border-color: var(--hair-strong); color: var(--ink); }
+.chip[data-on="true"] { background: var(--ink); color: #0a0a0a; border-color: transparent; }
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13.5px;
+  font-weight: 700;
+  transition: background 140ms ease;
+}
+.btn-primary:hover { background: var(--accent-hi); }
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 22px;
+  border: 1px solid var(--hair-strong);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  transition: background 140ms ease;
+}
+.btn-ghost:hover { background: rgba(255, 255, 255, 0.09); }
+
+/* Lifts a listing card on hover, per the design's card interaction. */
+.lift { transition: transform 200ms ease, border-color 200ms ease; }
+.lift:hover { transform: translateY(-3px); border-color: rgba(57, 135, 229, 0.4); }
+
+.scroll-x { overflow-x: auto; }
+
+/* thin scrollbars so dense tables stay calm */
+.scroll-x::-webkit-scrollbar { height: 8px; }
+.scroll-x::-webkit-scrollbar-track { background: transparent; }
+.scroll-x::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+.scroll-x::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.18); }
+
+@keyframes pulseDot { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
+.pulse { animation: pulseDot 2s infinite; }
