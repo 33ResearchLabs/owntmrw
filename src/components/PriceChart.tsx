@@ -59,6 +59,28 @@ const T = {
   surface: "#1a1a19",
 };
 
+/**
+ * Price:volume height ratio. Volume is context for the bars above it, never the
+ * subject, so it gets a fifth of the chart the way a desk terminal shows it.
+ */
+const PRICE_STRETCH = 4;
+const VOLUME_STRETCH = 1;
+
+/**
+ * Hold the price/volume split.
+ *
+ * Stretch factors rather than setHeight: an absolute pixel height is a one-off
+ * instruction the library re-apportions whenever a pane is rebuilt or the chart
+ * resizes, which let volume creep up to over half the chart. A ratio is
+ * declarative and survives both.
+ */
+function sizeVolumePane(chart: IChartApi) {
+  const panes = chart.panes();
+  if (panes.length < 2) return;
+  panes[0].setStretchFactor(PRICE_STRETCH);
+  panes[1].setStretchFactor(VOLUME_STRETCH);
+}
+
 /** Compact span for the header, e.g. 5400s → "1h", 950400s → "11d". */
 function spanLabel(seconds: number): string {
   const units: [number, string][] = [
@@ -68,6 +90,52 @@ function spanLabel(seconds: number): string {
     if (seconds >= size) return `${Math.round(seconds / size)}${suffix}`;
   }
   return `${Math.max(1, Math.round(seconds))}s`;
+}
+
+/** Candlestick glyph: two bodies with wicks, drawn at 14px. */
+function CandlesIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden focusable="false">
+      <path d="M4 1.5v11M10 1.5v11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <rect x="2.2" y="4" width="3.6" height="6" rx="0.6" fill="currentColor" />
+      <rect x="8.2" y="2.8" width="3.6" height="5" rx="0.6" fill="currentColor" />
+    </svg>
+  );
+}
+
+/** Line glyph: a simple price path. */
+function LineIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden focusable="false">
+      <path
+        d="M1.5 9.5 4.5 6 7 8 12.5 3"
+        stroke="currentColor" strokeWidth="1.4"
+        strokeLinecap="round" strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Square icon button for the series-type switch. */
+function IconButton({
+  active, onClick, label, children,
+}: {
+  active: boolean; onClick: () => void; label: string; children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-label={label}
+      title={label}
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded transition-colors ${
+        active ? "bg-white/10 text-ink" : "text-muted hover:bg-white/5 hover:text-ink2"
+      }`}
+    >
+      {children}
+    </button>
+  );
 }
 
 /** Flat toolbar button shared by the interval and series-type groups. */
@@ -93,9 +161,19 @@ function SegButton({
   );
 }
 
+/** What the y-axis measures. Market cap is price scaled by circulating supply. */
+type Metric = "price" | "mcap";
+
 export function PriceChart({
-  candles, events = [], height = 470, slug,
-}: { candles: Candle[]; events?: ChartEvent[]; height?: number; slug?: string }) {
+  candles, events = [], height = 470, slug, circulatingSupply = null,
+}: {
+  candles: Candle[];
+  events?: ChartEvent[];
+  height?: number;
+  slug?: string;
+  /** Enables the Market Cap switch. Without it the toggle is not offered. */
+  circulatingSupply?: number | null;
+}) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const priceRef = useRef<ISeriesApi<"Candlestick"> | ISeriesApi<"Area"> | null>(null);
@@ -103,6 +181,7 @@ export function PriceChart({
 
   const [timeframe, setTimeframe] = useState<Timeframe>("1D");
   const [mode, setMode] = useState<Mode>("candles");
+  const [metric, setMetric] = useState<Metric>("price");
   const [hover, setHover] = useState<Candle | null>(null);
   const [hoverEvents, setHoverEvents] = useState<ChartEvent[]>([]);
   const [off, setOff] = useState<Set<string>>(new Set());
@@ -157,9 +236,22 @@ export function PriceChart({
   const data = useMemo(() => {
     // normalize() again on the client: the series is asserted on by the chart
     // library, and a duplicate timestamp from any source takes the page down.
-    if (intra) return ready ? normalize(feed!.candles) : [];
-    return fromDaily(candles, timeframe);
-  }, [candles, timeframe, intra, ready, feed]);
+    const series = intra
+      ? (ready ? normalize(feed!.candles) : [])
+      : fromDaily(candles, timeframe);
+
+    if (metric === "price" || !circulatingSupply) return series;
+    // Market cap is the same shape scaled by supply, so OHLC ordering and the
+    // volume pane are untouched. Supply is today's figure applied to every bar:
+    // we hold no supply history, so early bars are stated at the current float.
+    return series.map((c) => ({
+      ...c,
+      o: c.o * circulatingSupply,
+      h: c.h * circulatingSupply,
+      l: c.l * circulatingSupply,
+      c: c.c * circulatingSupply,
+    }));
+  }, [candles, timeframe, intra, ready, feed, metric, circulatingSupply]);
 
   // The resize observer and range subscription outlive any one render, so they
   // read the series through a ref rather than a stale closure.
@@ -241,6 +333,15 @@ export function PriceChart({
         fontSize: 11,
         fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
         attributionLogo: false,
+        // The price and volume panes read as one chart, so the separator is
+        // dropped rather than drawn — the library's default is a light rule
+        // that cuts straight across the middle. Resizing goes with it: the
+        // volume pane is pinned at a fixed height anyway.
+        panes: {
+          enableResize: false,
+          separatorColor: "transparent",
+          separatorHoverColor: "transparent",
+        },
       },
       grid: {
         vertLines: { color: T.grid, style: LineStyle.Solid },
@@ -280,6 +381,7 @@ export function PriceChart({
     // in portrait gets fewer bars than the same chart rotated, with no input.
     const ro = new ResizeObserver(() => {
       chart.applyOptions({ width: el.clientWidth });
+      sizeVolumePane(chart);
       fitToWidth();
     });
     ro.observe(el);
@@ -305,7 +407,13 @@ export function PriceChart({
     };
   }, [height, fitToWidth]);
 
-  // (re)build series when the display mode changes
+  // (re)build series when the display mode changes.
+  //
+  // Deliberately NOT keyed on precision. Removing the last series in a pane
+  // destroys the pane, and the replacement is created at a default height — so
+  // switching to market cap (which changes precision, 6.19 -> 124M) used to
+  // hand most of the chart to the volume histogram. Precision is applied to the
+  // live series instead, below.
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -313,20 +421,18 @@ export function PriceChart({
     if (priceRef.current) { chart.removeSeries(priceRef.current); priceRef.current = null; }
     if (volRef.current) { chart.removeSeries(volRef.current); volRef.current = null; }
 
-    const priceFormat = { type: "price" as const, precision, minMove: Math.pow(10, -precision) };
-
+    // No priceFormat here: the precision effect below applies it, which keeps
+    // this effect off `precision` and so off the rebuild path entirely.
     priceRef.current =
       mode === "candles"
         ? chart.addSeries(CandlestickSeries, {
             upColor: T.up, downColor: T.down,
             borderUpColor: T.up, borderDownColor: T.down,
             wickUpColor: T.up, wickDownColor: T.down,
-            priceFormat,
           })
         : chart.addSeries(AreaSeries, {
             lineColor: T.accent, lineWidth: 2,
             topColor: "rgba(57,135,229,0.28)", bottomColor: "rgba(57,135,229,0)",
-            priceFormat,
           });
 
     // Volume goes in its own pane (index 1). Sharing the price pane made the
@@ -349,9 +455,18 @@ export function PriceChart({
       },
       1
     );
-    const panes = chart.panes();
-    if (panes[1]) panes[1].setHeight(86);
-  }, [mode, precision]);
+    sizeVolumePane(chart);
+  }, [mode]);
+
+  // Precision follows the magnitude on screen — market cap runs six orders
+  // larger than price — and is applied to the live series so that changing it
+  // never tears a pane down. Runs straight after the builder above on a mode
+  // change, so a freshly created series is formatted before it draws.
+  useEffect(() => {
+    priceRef.current?.applyOptions({
+      priceFormat: { type: "price", precision, minMove: Math.pow(10, -precision) },
+    });
+  }, [precision, mode]);
 
   // Daily and above are labelled by date; sub-daily needs the clock.
   useEffect(() => {
@@ -407,6 +522,7 @@ export function PriceChart({
       }));
     createSeriesMarkers(price, markers);
 
+    sizeVolumePane(chart);
     fitToWidth();
   }, [data, visibleEvents, mode, fitToWidth]);
 
@@ -446,8 +562,15 @@ export function PriceChart({
     );
   }
 
+  // Prices sit below ~$100 and market caps above $1M, so the same readout has
+  // to span both — "$22684693.00" is unreadable where "$22.68M" is not.
   const fmtP = (n: number | undefined) =>
-    n == null ? "—" : n >= 1 ? `$${n.toFixed(2)}` : `$${n.toPrecision(4)}`;
+    n == null ? "—"
+      : n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B`
+        : n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M`
+          : n >= 1e4 ? `$${(n / 1e3).toFixed(1)}K`
+            : n >= 1 ? `$${n.toFixed(2)}`
+              : `$${n.toPrecision(4)}`;
 
   return (
     <div>
@@ -486,24 +609,42 @@ export function PriceChart({
         )}
       </div>
 
-      {/* interval bar — sits directly on top of the chart, TradingView-style */}
-      <div className="flex items-stretch gap-1 border-y border-grid py-1">
+      {/* Toolbar: what is measured on the left, over what interval on the right. */}
+      <div className="flex items-center gap-2 border-y border-grid py-1">
+        <div className="flex shrink-0 items-center gap-1">
+          {circulatingSupply ? (
+            <div className="flex items-center gap-0.5" role="group" aria-label="Chart metric">
+              <SegButton active={metric === "price"} onClick={() => setMetric("price")}>
+                Price
+              </SegButton>
+              <SegButton active={metric === "mcap"} onClick={() => setMetric("mcap")}>
+                Market Cap
+              </SegButton>
+            </div>
+          ) : (
+            // Without a supply figure a market cap would be fabricated, so the
+            // switch is withheld rather than offered and left dead.
+            <span className="px-2 text-[11px] text-muted">Price</span>
+          )}
+          <span aria-hidden className="mx-0.5 h-4 w-px bg-grid" />
+          <div className="flex items-center gap-0.5" role="group" aria-label="Series type">
+            <IconButton active={mode === "candles"} onClick={() => setMode("candles")} label="Candlestick">
+              <CandlesIcon />
+            </IconButton>
+            <IconButton active={mode === "area"} onClick={() => setMode("area")} label="Line">
+              <LineIcon />
+            </IconButton>
+          </div>
+        </div>
+
         <div
-          className="scroll-x flex min-w-0 flex-1 items-center gap-0.5"
+          className="scroll-x flex min-w-0 flex-1 items-center justify-end gap-0.5"
           role="group"
           aria-label="Candle interval"
         >
           {TIMEFRAMES.map((tf) => (
             <SegButton key={tf} active={timeframe === tf} onClick={() => setTimeframe(tf)}>
               {tf}
-            </SegButton>
-          ))}
-        </div>
-        <span aria-hidden className="my-1 w-px shrink-0 bg-grid" />
-        <div className="flex shrink-0 items-center gap-0.5" role="group" aria-label="Series type">
-          {(["candles", "area"] as Mode[]).map((m) => (
-            <SegButton key={m} active={mode === m} onClick={() => setMode(m)} className="capitalize">
-              {m}
             </SegButton>
           ))}
         </div>
