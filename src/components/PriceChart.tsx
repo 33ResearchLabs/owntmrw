@@ -11,6 +11,7 @@ import {
   TIMEFRAMES, TF_SECONDS, fromDaily, isIntraday, normalize,
   type Candle, type Timeframe,
 } from "@/lib/candles";
+import { IconBadge, DeltaChip } from "@/components/viz";
 
 export type { Candle };
 export interface ChartEvent {
@@ -574,15 +575,19 @@ export function PriceChart({
 
   return (
     <div>
-      {/* readout */}
-      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+      {/* readout — same IconBadge + DeltaChip language as Market Depth & Risk
+          and Performance Since Raise, so the price up here reads as the same
+          kind of figure as the ones below it rather than a plainer one-off. */}
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+        <IconBadge
+          name="chart"
+          color={period == null ? "var(--ink-muted)" : period.change >= 0 ? "var(--good)" : "var(--bad)"}
+          size={26}
+        />
         <div className="flex items-baseline gap-2">
           <span className="num text-[20px] font-semibold">{fmtP(shown?.c)}</span>
           {period && !hover && (
-            <span className={`num text-[13px] ${period.change >= 0 ? "text-good" : "text-bad"}`}>
-              {period.change >= 0 ? "▲" : "▼"} {Math.abs(period.change).toFixed(1)}%{" "}
-              <span className="text-muted">{spanLabel(period.seconds)}</span>
-            </span>
+            <DeltaChip pct={period.change} period={spanLabel(period.seconds)} />
           )}
         </div>
 

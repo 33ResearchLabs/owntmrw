@@ -352,7 +352,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
         </div>
         <aside className="hidden w-[300px] shrink-0 xl:block">
           <div className="space-y-4">
-            <PortfolioCard />
+            {/* <PortfolioCard /> */}
             {observations.length > 0 && (
               <div className="card">
                 <div className="border-b border-grid px-4 py-3">
