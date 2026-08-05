@@ -53,20 +53,40 @@ export default async function Home() {
         </section>
 
         {/* market strip */}
-        <div className="card flex flex-wrap items-center gap-x-9 gap-y-4 px-6 py-4">
-          {([
-            ["Markets", String(rows.length)],
-            ["Combined cap", fmtUsd(totalMcap)],
-            ["24h volume", fmtUsd(totalVol)],
-            ["Capital raised", fmtUsd(totalRaised)],
-          ] as const).map(([k, v]) => (
-            <div key={k}>
-              <div className="text-[10.5px] uppercase tracking-[0.09em] text-faint">{k}</div>
-              <div className="num mt-0.5 text-[17px] font-extrabold tracking-tight">{v}</div>
-            </div>
-          ))}
-          <Link href="/screener" className="ml-auto text-[12.5px] text-muted transition-colors hover:text-accent">
-            Full screener →
+        {/* Shadow is inline because Tailwind will not emit an arbitrary
+            box-shadow whose spread is negative — `shadow-[…_-22px_…]` silently
+            produces no rule at all. */}
+        <div
+          className="card flex flex-col gap-6 px-6 py-6 sm:px-8 md:flex-row md:items-center md:gap-8"
+          style={{ boxShadow: "0 14px 36px -22px rgba(0, 0, 0, 0.95)" }}
+        >
+          <div className="grid flex-1 grid-cols-2 gap-y-6 sm:grid-cols-4">
+            {([
+              ["Markets", String(rows.length)],
+              ["Combined cap", fmtUsd(totalMcap)],
+              ["24h volume", fmtUsd(totalVol)],
+              ["Capital raised", fmtUsd(totalRaised)],
+            ] as const).map(([k, v], i) => (
+              <div
+                key={k}
+                // The rule sits on the cell that follows a divide, so it tracks
+                // the column count: every cell but the first at 4-up, and only
+                // the right-hand cell of each row at 2-up.
+                className={`min-w-0 ${i % 2 === 1 ? "border-l border-line pl-5" : ""} ${
+                  i > 0 ? "sm:border-l sm:border-line sm:pl-6" : "sm:border-l-0 sm:pl-0"
+                }`}
+              >
+                <div className="text-[10.5px] uppercase tracking-[0.11em] text-faint">{k}</div>
+                <div className="num mt-2 text-[22px] font-extrabold leading-none tracking-tight">{v}</div>
+              </div>
+            ))}
+          </div>
+          <Link
+            href="/screener"
+            className="group inline-flex shrink-0 items-center gap-2 self-start text-[13.5px] font-medium text-ink2 transition-colors duration-150 hover:text-accent md:ml-auto md:self-auto"
+          >
+            Full screener
+            <span aria-hidden className="transition-transform duration-150 group-hover:translate-x-0.5">→</span>
           </Link>
         </div>
 

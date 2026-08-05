@@ -32,6 +32,14 @@ export function GlobalSearch() {
 
   return (
     <div ref={boxRef} className="relative">
+      <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" aria-hidden>
+        <svg
+          width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        >
+          <circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" />
+        </svg>
+      </span>
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
@@ -43,7 +51,7 @@ export function GlobalSearch() {
           if (e.key === "Escape") setOpen(false);
         }}
         placeholder="Search projects, tokens, wallets, proposals…"
-        className="w-full rounded-full border border-line bg-white/5 px-4 py-2 text-[13px] text-ink placeholder:text-faint outline-none transition-colors focus:border-accent/50"
+        className="w-full rounded-xl border border-line bg-black/25 py-2.5 pl-10 pr-4 text-[13px] text-ink placeholder:text-faint outline-none transition-colors duration-150 hover:border-line2 focus:border-accent/60 focus:bg-black/35"
       />
       {open && hits.length > 0 && (
         <div className="absolute top-full z-50 mt-2 w-full overflow-hidden rounded-xl border border-line bg-surface shadow-2xl">
