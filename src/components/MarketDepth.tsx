@@ -2,7 +2,7 @@ import type { ProjectDetail } from "@/lib/queries";
 import { DAY, changeVsAgo } from "@/lib/series";
 import { fmtUsd, timeAgo } from "@/lib/format";
 import {
-  IconBadge, Sparkline, MiniBars, DeltaChip, MeterBar, ScaleMarker, type IconName,
+  IconBadge, Sparkline, DeltaChip, MeterBar, ScaleMarker, type IconName,
 } from "./viz";
 
 function Tile({
@@ -101,25 +101,18 @@ export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
         <Tile
           icon="droplet" color="var(--accent)" label="Liquidity"
           value={fmtUsd(latest?.liquidity_usd)} sub="pool depth, USD"
-        >
-          {/* No daily liquidity series exists — pool depth is only captured at
-              ingest time, so there is nothing honest to draw here yet. */}
-          <Sparkline values={[]} label="pool depth is not archived daily" />
-        </Tile>
+        />
 
         <Tile
           icon="bars" color="#9b7ae0" label="24h Volume"
           value={fmtUsd(latest?.vol24h)}
           sub={noVolumeNote ?? "traded, USD"}
         >
-          <MiniBars values={volSeries.map((s) => s.v)} color="#9b7ae0" />
-          <div className="mt-1.5">
-            <DeltaChip
-              pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, now)}
-              period="7d"
-              reason={latest?.vol24h == null ? "no live volume to compare" : undefined}
-            />
-          </div>
+          <DeltaChip
+            pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, now)}
+            period="7d"
+            reason={latest?.vol24h == null ? "no live volume to compare" : undefined}
+          />
         </Tile>
 
         <Tile
