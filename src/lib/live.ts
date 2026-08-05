@@ -98,10 +98,11 @@ async function refresh(): Promise<Map<string, LiveQuote>> {
   return out;
 }
 
-/** Current quotes keyed by mint. Empty when every upstream is unreachable. */
-export async function liveQuotes(): Promise<Map<string, LiveQuote>> {
-  const now = Date.now();
-  if (cached && now - cached.at < (cached.ok ? FRESH_MS : BACKOFF_MS)) return cached.map;
+/**
+ * Kicks off a refresh if one isn't already running, deduped through
+ * `inflight` regardless of how many stale requests arrive while it's out.
+ */
+function triggerQuoteRefresh(): Promise<Map<string, LiveQuote>> {
   if (inflight) return inflight;
 
   inflight = refresh()
@@ -114,13 +115,33 @@ export async function liveQuotes(): Promise<Map<string, LiveQuote>> {
     })
     .catch(() => {
       cached = { at: Date.now(), map: cached?.map ?? new Map(), ok: false };
-      return cached.map;
+      return cached!.map;
     })
     .finally(() => {
       inflight = null;
     });
 
   return inflight;
+}
+
+/**
+ * Current quotes keyed by mint. Empty when every upstream is unreachable.
+ *
+ * Stale-while-revalidate: a page render only ever waits on the network on the
+ * very first request this process has ever served. After that, a stale cache
+ * is served immediately and the refresh runs in the background for whoever
+ * asks next — DexScreener is fetched one mint at a time with retries, and a
+ * single slow token used to stall every concurrent page load behind it for
+ * up to 20+ seconds. A price that's a few seconds staler than it could be
+ * beats a page that hangs waiting for one.
+ */
+export async function liveQuotes(): Promise<Map<string, LiveQuote>> {
+  const now = Date.now();
+  if (cached && now - cached.at < (cached.ok ? FRESH_MS : BACKOFF_MS)) return cached.map;
+  if (!cached) return triggerQuoteRefresh();
+
+  triggerQuoteRefresh();
+  return cached.map;
 }
 
 /**
@@ -137,10 +158,7 @@ const TREASURY_FRESH_MS = 120_000;
 let treasuryCached: { at: number; map: Map<string, number>; ok: boolean } | null = null;
 let treasuryInflight: Promise<Map<string, number>> | null = null;
 
-export async function liveTreasury(): Promise<Map<string, number>> {
-  const now = Date.now();
-  const ttl = treasuryCached?.ok ? TREASURY_FRESH_MS : BACKOFF_MS;
-  if (treasuryCached && now - treasuryCached.at < ttl) return treasuryCached.map;
+function triggerTreasuryRefresh(): Promise<Map<string, number>> {
   if (treasuryInflight) return treasuryInflight;
 
   treasuryInflight = treasuryAum()
@@ -154,13 +172,24 @@ export async function liveTreasury(): Promise<Map<string, number>> {
     })
     .catch(() => {
       treasuryCached = { at: Date.now(), map: treasuryCached?.map ?? new Map(), ok: false };
-      return treasuryCached.map;
+      return treasuryCached!.map;
     })
     .finally(() => {
       treasuryInflight = null;
     });
 
   return treasuryInflight;
+}
+
+/** Stale-while-revalidate, same reasoning as `liveQuotes` above. */
+export async function liveTreasury(): Promise<Map<string, number>> {
+  const now = Date.now();
+  const ttl = treasuryCached?.ok ? TREASURY_FRESH_MS : BACKOFF_MS;
+  if (treasuryCached && now - treasuryCached.at < ttl) return treasuryCached.map;
+  if (!treasuryCached) return triggerTreasuryRefresh();
+
+  triggerTreasuryRefresh();
+  return treasuryCached.map;
 }
 
 /** When the served quotes were fetched, for the freshness indicator. */
