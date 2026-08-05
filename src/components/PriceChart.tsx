@@ -378,6 +378,47 @@ export function PriceChart({
     });
     chartRef.current = chart;
 
+    /**
+     * Stretch the price axis with a trackpad, over the price scale only.
+     *
+     * The library scales price on `axisPressedMouseMove` — click the scale and
+     * drag — which is a mouse gesture. On a trackpad that means press-drag with
+     * one finger while the natural motion is a two-finger scroll, so the axis
+     * read as fixed unless you knew to grab it.
+     *
+     * Bounded to the price column deliberately. Over the candles two fingers
+     * still zooms time, which is the library's default and the one gesture that
+     * would otherwise change meaning depending on where the pointer sat.
+     *
+     * Implemented through scaleMargins rather than a fixed visible range so
+     * autoScale keeps working: the data still fits itself, into a taller or
+     * shorter band. A fixed range would freeze the axis and strand the price
+     * off-screen the moment the visible window moved.
+     */
+    const MARGIN_MIN = 0;
+    const MARGIN_MAX = 0.42;
+    const onWheel = (e: WheelEvent) => {
+      const priceScale = chart.priceScale("right");
+      const scaleWidth = priceScale.width();
+      const rect = el.getBoundingClientRect();
+      // Over the candles: leave it to the library, which prevents default
+      // itself while zooming time.
+      if (scaleWidth <= 0 || e.clientX < rect.right - scaleWidth) return;
+
+      e.preventDefault();
+      const { top = 0.1, bottom = 0.08 } = priceScale.options().scaleMargins ?? {};
+      // Scrolling down compresses, matching the direction the axis moves when
+      // dragged down. A fixed step rather than a multiplier so a margin already
+      // at zero can still grow back.
+      const step = e.deltaY > 0 ? 0.02 : -0.02;
+      const clamp = (v: number) => Math.min(MARGIN_MAX, Math.max(MARGIN_MIN, v));
+      const next = { top: clamp(top + step), bottom: clamp(bottom + step) };
+      if (next.top === top && next.bottom === bottom) return;
+      priceScale.applyOptions({ scaleMargins: next });
+    };
+    // Not passive: the whole point is to stop the page scrolling underneath.
+    el.addEventListener("wheel", onWheel, { passive: false });
+
     // Re-fitting on resize is what makes the window follow the width: a phone
     // in portrait gets fewer bars than the same chart rotated, with no input.
     const ro = new ResizeObserver(() => {
@@ -413,6 +454,7 @@ export function PriceChart({
 
     return () => {
       ro.disconnect();
+      el.removeEventListener("wheel", onWheel);
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       if (rafId != null) cancelAnimationFrame(rafId);
       chart.remove();
