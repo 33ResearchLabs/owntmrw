@@ -141,7 +141,10 @@ export function DashboardCard({
   return (
     <section className="card overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-5 sm:px-6">
-        <h3 className="text-[19px] font-semibold leading-tight tracking-tight">{title}</h3>
+        {/* Same as the Market Depth header, which is the reference on this
+            page — two cards stacked in one column should not announce
+            themselves at two different weights. */}
+        <h3 className="text-[15px] font-semibold">{title}</h3>
         {right != null && <div className="flex flex-wrap items-center gap-2">{right}</div>}
       </div>
       {children}
@@ -209,9 +212,12 @@ export function MetricCell({
 }) {
   return (
     <div className="flex flex-col bg-surface px-5 py-4 sm:py-5">
-      <div className="text-[10px] uppercase tracking-[0.09em] text-muted">{label}</div>
+      {/* Matched to the Market Depth tiles — 10.5 / 22 / 11.5. Those sit on the
+          same screen, so a figure that changed size between the two panels read
+          as two different kinds of number rather than one scale. */}
+      <div className="text-[10.5px] uppercase tracking-[0.08em] text-muted">{label}</div>
       <div
-        className={`num mt-2 text-[26px] font-semibold leading-none tracking-tight ${
+        className={`num mt-2 text-[22px] font-bold leading-none tracking-tight ${
           tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : ""
         }`}
       >

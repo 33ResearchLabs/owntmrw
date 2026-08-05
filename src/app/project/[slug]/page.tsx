@@ -39,6 +39,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     treasuryValue, ath, athTs,
   } = d;
 
+  // The clock is read once, here, so the panels that take it stay pure and
+  // their period-over-period deltas are reproducible from their inputs. This
+  // page is force-dynamic and renders once per request, which is the one place
+  // reading the time is correct.
+  // eslint-disable-next-line react-hooks/purity
+  const nowSec = Math.floor(Date.now() / 1000);
+
   const tradable = priceIsReliable(latest?.liquidity_usd);
   const rp = raisePriceOf(p);
   const roi = rp && latest?.price_usd && tradable
@@ -332,7 +339,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           {chartBlock}
-          <MarketDepthPanel d={d} />
+          <MarketDepthPanel d={d} nowSec={nowSec} />
         </div>
         <div id="trade">
           <div className="card sticky top-[calc(var(--nav-h)+20px)] overflow-hidden">
