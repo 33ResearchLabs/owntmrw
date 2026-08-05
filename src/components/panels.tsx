@@ -89,6 +89,118 @@ export function SectionCard({
   );
 }
 
+/* ------------------------------------------------------- dashboard cards --- */
+
+/**
+ * The display-scale card: a bigger title and a controls slot that sits on its
+ * own baseline rather than the title's, so an outlined button never drags the
+ * heading off-centre. Deliberately separate from `SectionCard` — the dense
+ * sections elsewhere on the page are still correct at their current scale.
+ */
+export function DashboardCard({
+  title,
+  right,
+  children,
+}: {
+  title: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="card overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-5 sm:px-6">
+        <h3 className="text-[19px] font-semibold leading-tight tracking-tight">{title}</h3>
+        {right != null && <div className="flex flex-wrap items-center gap-2">{right}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Outlined action in a card header. Renders nothing without a destination. */
+export function CardAction({ href, children }: { href: string | null; children: React.ReactNode }) {
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-line2 px-3 py-1.5 text-[12px] font-medium text-ink2 transition-colors duration-150 hover:border-accent hover:text-accent"
+    >
+      {children}
+      <svg
+        width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden
+      >
+        <path d="M14 4h6v6" /><path d="M20 4 10.5 13.5" /><path d="M19 14.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4.5" />
+      </svg>
+    </a>
+  );
+}
+
+/** Pill for a categorical tag in a card header (e.g. the raise track). */
+export function CardTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-line2 bg-surface2 px-2.5 py-1 text-[10px] uppercase tracking-[0.08em] text-ink2">
+      <span className="h-1.5 w-1.5 rounded-full bg-muted" aria-hidden />
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Metric grid with hairline rules between every cell.
+ *
+ * The rules are the 1px grid gaps showing the divider colour through, not
+ * per-cell borders: at 1/2/4 columns the wrap points move, and hand-placed
+ * borders would leave a stray edge on whichever cell happens to end a row.
+ */
+export function MetricGrid({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 gap-px border-y border-grid bg-grid sm:grid-cols-2 lg:grid-cols-4">
+      {children}
+    </div>
+  );
+}
+
+/** One cell of a `MetricGrid`. Same props as `Metric`, at display scale. */
+export function MetricCell({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  tone?: "good" | "bad";
+}) {
+  return (
+    <div className="flex flex-col bg-surface px-5 py-4 sm:py-5">
+      <div className="text-[10px] uppercase tracking-[0.09em] text-muted">{label}</div>
+      <div
+        className={`num mt-2 text-[26px] font-semibold leading-none tracking-tight ${
+          tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : ""
+        }`}
+      >
+        {value}
+      </div>
+      {sub != null && <div className="mt-2 text-[11.5px] leading-snug text-muted">{sub}</div>}
+    </div>
+  );
+}
+
+/** Boxed note beneath a `MetricGrid` — caveats, provenance, methodology. */
+export function CardNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-5 py-5 sm:px-6">
+      <p className="rounded-xl border border-line bg-surface2 px-4 py-3.5 text-[12px] leading-relaxed text-muted">
+        {children}
+      </p>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------- risk
 
 const RISK_TONE: Record<string, { color: string; label: string }> = {
@@ -1027,63 +1139,63 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   const holdersNow = hh.length ? hh[hh.length - 1].holder_count : null;
 
   return (
-    <SectionCard
+    <DashboardCard
       title="Performance Since Raise"
-      right={
-        p.raise_source_url ? (
-          <a
-            href={p.raise_source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] text-accent hover:underline"
-          >
-            raise source ↗
-          </a>
-        ) : undefined
-      }
+      right={<CardAction href={p.raise_source_url}>Data source</CardAction>}
     >
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
-        <Metric
+      <MetricGrid>
+        <MetricCell
           label="Raise Price"
           value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : "—"}
           sub={rp?.derived ? "derived: raise ÷ 10M sold" : undefined}
         />
-        <Metric label="Current Price" value={fmtPrice(cur)} />
-        <Metric label="ROI Since Raise" value={<Delta v={roi} />} />
-        <Metric
+        <MetricCell label="Current Price" value={fmtPrice(cur)} />
+        <MetricCell
+          label="ROI Since Raise"
+          value={<Delta v={roi} notation="sign" />}
+          sub="vs raise price"
+        />
+        <MetricCell
           label="Current Drawdown"
-          value={<Delta v={drawdown} />}
+          value={<Delta v={drawdown} notation="sign" />}
           sub="from all-time high"
         />
-        <Metric
+        <MetricCell
           label="ATH"
           value={fmtUsd(ath, { compact: false })}
           sub={athRet != null ? `${fmtPct(athRet)} vs raise` : undefined}
         />
-        <Metric
+        <MetricCell
           label="ATL"
           value={fmtUsd(atl, { compact: false })}
           sub={atlRet != null ? `${fmtPct(atlRet)} vs raise` : undefined}
         />
-        <Metric
+        <MetricCell
           label="Days to ATH"
           value={daysToAth != null ? `${daysToAth}d` : "—"}
           sub={athTs ? fmtDate(athTs) : undefined}
         />
-        <Metric
+        <MetricCell
           label="Treasury Remaining"
           value={
             treasuryValue != null && treasuryValue < 1
               ? "~$0"
               : fmtUsd(treasuryValue)
           }
+          // Same expression and rounding as the Treasury dimension in
+          // `analytics.ts`, so the two places cannot print different figures.
+          sub={
+            treasuryValue != null && p.raise_amount_usd
+              ? `${((treasuryValue / p.raise_amount_usd) * 100).toFixed(0)}% of raise still held`
+              : undefined
+          }
         />
-        <Metric
+        <MetricCell
           label="Contributors at Raise"
           value={fmtNum(p.raise_contributors)}
         />
-        <Metric label="Holders Now" value={fmtNum(holdersNow)} />
-        <Metric
+        <MetricCell label="Holders Now" value={fmtNum(holdersNow)} />
+        <MetricCell
           label="Committed"
           value={fmtUsd(p.raise_committed_usd)}
           sub={
@@ -1092,16 +1204,16 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
               : undefined
           }
         />
-        <Metric label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
-      </div>
+        <MetricCell label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
+      </MetricGrid>
       {p.raise_contributors == null && (
-        <p className="border-t border-grid px-4 py-2.5 text-[11px] text-muted">
+        <CardNote>
           Holders-at-launch and whale growth since the raise need a holder
           snapshot taken at launch; this platform began tracking later, so those
           deltas start from first ingest rather than from TGE.
-        </p>
+        </CardNote>
       )}
-    </SectionCard>
+    </DashboardCard>
   );
 }
 
