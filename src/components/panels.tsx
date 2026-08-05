@@ -15,6 +15,7 @@ import {
   shortAddr,
 } from "@/lib/format";
 import { Delta, StatusBadge } from "./ui";
+import { Sparkline, DeltaChip } from "./viz";
 import { DAY, changeVsAgo, deltaVsAgo } from "@/lib/series";
 import { MoreRows } from "./MoreRows";
 import { CopyButton } from "./CopyButton";
@@ -50,11 +51,14 @@ export function Metric({
   value,
   sub,
   tone,
+  chart,
 }: {
   label: string;
   value: React.ReactNode;
   sub?: React.ReactNode;
   tone?: "good" | "bad";
+  /** Small trend visual (a Sparkline + DeltaChip, typically) rendered under the sub. */
+  chart?: React.ReactNode;
 }) {
   return (
     <div>
@@ -67,6 +71,7 @@ export function Metric({
         {value}
       </div>
       {sub != null && <div className="mt-0.5 text-[11px] text-ink2">{sub}</div>}
+      {chart != null && <div className="mt-2 max-w-[160px]">{chart}</div>}
     </div>
   );
 }
@@ -84,16 +89,22 @@ export function MetricGrid({
 }: {
   tiles: (false | null | undefined | {
     label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "good" | "bad";
+    chart?: React.ReactNode;
+    /** Spans two grid columns, for a tile carrying a chart that needs the room. */
+    wide?: boolean;
   })[];
 }) {
   const shown = tiles.filter(Boolean) as {
     label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "good" | "bad";
+    chart?: React.ReactNode; wide?: boolean;
   }[];
   if (!shown.length) return null;
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
       {shown.map((t) => (
-        <Metric key={t.label} label={t.label} value={t.value} sub={t.sub} tone={t.tone} />
+        <div key={t.label} className={t.wide ? "col-span-2" : undefined}>
+          <Metric label={t.label} value={t.value} sub={t.sub} tone={t.tone} chart={t.chart} />
+        </div>
       ))}
     </div>
   );
@@ -577,8 +588,14 @@ export function HoldersPanel({
   const series = hh.map((h) => ({ ts: h.ts, v: h.holder_count! }));
   const pctChg = (days: number) => changeVsAgo(cur, series, days * DAY, now);
   const chg = (days: number) => deltaVsAgo(cur, series, days * DAY, now);
+  // The newest reading that carries each band, not necessarily the newest row:
+  // concentration and holder count come from different sources and one can be
+  // absent on a run the other succeeded on.
   const t10 =
     [...holderHistory].reverse().find((h) => h.top10_pct != null)?.top10_pct ??
+    null;
+  const t20 =
+    [...holderHistory].reverse().find((h) => h.top20_pct != null)?.top20_pct ??
     null;
 
   return (
@@ -610,6 +627,10 @@ export function HoldersPanel({
               t10 != null && {
                 label: "Top 10 Concentration", value: `${t10.toFixed(1)}%`,
                 tone: t10 > 60 ? ("bad" as const) : t10 < 35 ? ("good" as const) : undefined,
+              },
+              t20 != null && {
+                label: "Top 20 Concentration", value: `${t20.toFixed(1)}%`,
+                sub: t10 != null ? `${(t20 - t10).toFixed(1)}% in ranks 11–20` : undefined,
               },
               p.circulating_supply != null && {
                 label: "Circulating Supply", value: fmtNum(p.circulating_supply),
@@ -898,8 +919,14 @@ export function TreasuryPanel({ d }: { d: ProjectDetail }) {
                           100
                         : null;
                     // A balance holds until the next change starts, or — for the
-                    // current one — until the most recent read confirmed it.
-                    const until = i === 0 ? t.last_seen_ts : arr[i - 1].ts;
+                    // current one — until now: nothing on file says it moved, so
+                    // it's still that value. Using last_seen_ts here instead (the
+                    // last time ingest happened to confirm it) understated this
+                    // badly whenever ingest had gone a while without running —
+                    // a balance that changed 6 days ago read as "held 6h" the
+                    // moment ingest fell behind, flatly contradicting the date
+                    // right next to it. Staleness is what treasuryLastRead is for.
+                    const until = i === 0 ? Math.floor(Date.now() / 1000) : arr[i - 1].ts;
                     return (
                       <tr key={t.ts}>
                         <td className="num text-ink2">{fmtDate(t.ts)}</td>
@@ -954,6 +981,11 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
     athTs && start ? Math.max(0, Math.round((athTs - start) / 86400)) : null;
   const hh = holderHistory.filter((h) => h.holder_count != null);
   const holdersNow = hh.length ? hh[hh.length - 1].holder_count : null;
+  // Price path since the token started trading, for the Current Price tile's
+  // sparkline — same series shape MarketDepthPanel's Market Cap/FDV tiles use.
+  const priceSeries = candles.map((c) => ({ ts: c.ts, v: c.c }));
+  const now = Math.floor(Date.now() / 1000);
+  const priceChg7d = changeVsAgo(cur, priceSeries, 7 * DAY, now);
 
   return (
     <SectionCard
@@ -978,7 +1010,19 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
             value: `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`,
             sub: rp.derived ? "derived: raise ÷ 10M sold" : undefined,
           },
-          cur != null && { label: "Current Price", value: fmtPrice(cur) },
+          cur != null && {
+            label: "Current Price",
+            value: fmtPrice(cur),
+            wide: true,
+            chart: (
+              <>
+                <Sparkline values={priceSeries.map((s) => s.v)} height={32} />
+                <div className="mt-1.5">
+                  <DeltaChip pct={priceChg7d} period="7d" />
+                </div>
+              </>
+            ),
+          },
           roi != null && { label: "ROI Since Raise", value: <Delta v={roi} /> },
           drawdown != null && {
             label: "Current Drawdown", value: <Delta v={drawdown} />, sub: "from all-time high",

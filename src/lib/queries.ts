@@ -226,7 +226,7 @@ export interface ProjectDetail {
   candles: { ts: number; o: number; h: number; l: number; c: number; v: number }[];
   events: { ts: number; type: string; title: string; detail: string | null; url: string | null }[];
   topHolders: { rank: number; address: string; owner: string | null; amount: number; pct: number; label: string | null }[];
-  holderHistory: { ts: number; holder_count: number | null; top10_pct: number | null }[];
+  holderHistory: { ts: number; holder_count: number | null; top10_pct: number | null; top20_pct: number | null }[];
   proposals: { number: number | null; title: string | null; state: string | null; created_ts: number | null; url: string | null; author: string | null }[];
   github: GithubSnapshot | null;
   observations: { ts: number; kind: string | null; text: string }[];
@@ -273,7 +273,7 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   const candles = d.prepare("SELECT ts,o,h,l,c,v FROM candles WHERE project_id = ? ORDER BY ts").all(id) as ProjectDetail["candles"];
   const events = d.prepare("SELECT ts,type,title,detail,url FROM events WHERE project_id = ? ORDER BY ts DESC LIMIT 100").all(id) as ProjectDetail["events"];
   const topHolders = d.prepare("SELECT rank,address,owner,amount,pct,label FROM top_holders WHERE project_id = ? ORDER BY rank LIMIT 20").all(id) as ProjectDetail["topHolders"];
-  const holderHistory = d.prepare("SELECT ts,holder_count,top10_pct FROM holder_snapshots WHERE project_id = ? ORDER BY ts").all(id) as ProjectDetail["holderHistory"];
+  const holderHistory = d.prepare("SELECT ts,holder_count,top10_pct,top20_pct FROM holder_snapshots WHERE project_id = ? ORDER BY ts").all(id) as ProjectDetail["holderHistory"];
   const proposals = d.prepare("SELECT number,title,state,created_ts,url,author FROM proposals WHERE project_id = ? ORDER BY created_ts DESC").all(id) as ProjectDetail["proposals"];
   const github = d.prepare(`
     SELECT ts, stars, forks, repos, last_push_ts, last_commit_ts, contributors, commits_90d,
