@@ -42,6 +42,16 @@ export function timeAgo(ts: number | null | undefined): string {
   return `${(s / (86400 * 365)).toFixed(1)}y ago`;
 }
 
+/** A span between two timestamps, phrased like timeAgo but without the "ago". */
+export function fmtDuration(seconds: number | null | undefined): string {
+  if (seconds == null || seconds < 0) return "—";
+  if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds < 86400 * 30) return `${Math.floor(seconds / 86400)}d`;
+  if (seconds < 86400 * 365) return `${Math.floor(seconds / (86400 * 30))}mo`;
+  return `${(seconds / (86400 * 365)).toFixed(1)}y`;
+}
+
 export function shortAddr(a: string | null | undefined): string {
   if (!a) return "—";
   return `${a.slice(0, 4)}…${a.slice(-4)}`;

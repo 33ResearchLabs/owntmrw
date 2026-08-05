@@ -1,4 +1,4 @@
-import { db, Project } from "./db";
+import { db, Project, sameBalance } from "./db";
 import { applyQuote, liveQuotes } from "./live";
 
 export interface ScreenerRow extends Project {
@@ -162,7 +162,15 @@ export interface ProjectDetail {
   github: GithubSnapshot | null;
   observations: { ts: number; kind: string | null; text: string }[];
   treasuryValue: number | null;
-  treasuryHistory: { ts: number; value_usd: number | null }[];
+  /**
+   * A step series, not a read log: one entry per balance change, where `ts` is
+   * when the balance first read that way and `last_seen_ts` when we last
+   * confirmed it. Coverage is `treasuryLastRead`, not the entry count — a
+   * well-tracked vault that never moves is a single long-lived entry.
+   */
+  treasuryHistory: { ts: number; value_usd: number | null; last_seen_ts: number }[];
+  /** When the vault was last read at all, regardless of whether it moved. */
+  treasuryLastRead: number | null;
   /** `source` is the publisher (CoinDesk…); `type` is the event class. */
   news: { ts: number; title: string; url: string | null; source: string | null; type: string }[];
   /** Git tags from the project's repos — engineering output, not press. */
@@ -204,9 +212,27 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   `).get(id) as ProjectDetail["github"];
   const observations = d.prepare("SELECT ts,kind,text FROM observations WHERE project_id = ? ORDER BY ts DESC LIMIT 30").all(id) as ProjectDetail["observations"];
   const treasury = d.prepare("SELECT value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1").get(id) as { value_usd: number | null } | undefined;
-  const treasuryHistory = d.prepare(
-    "SELECT ts, value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts"
+  // recordTreasurySnapshot keeps this one-row-per-change going forward, but
+  // rows written before that ran are one-per-read: a balance that sat still
+  // for a day rendered as a dozen identical dates at 0.0%, which reads like a
+  // data bug. Collapse runs of equal balances onto the read that first saw the
+  // value, carrying last_seen_ts forward, so the date answers "when did the
+  // treasury move" — the question the column is there to answer.
+  const treasuryReads = d.prepare(
+    "SELECT ts, value_usd, COALESCE(last_seen_ts, ts) AS last_seen_ts FROM treasury_snapshots WHERE project_id = ? ORDER BY ts"
   ).all(id) as ProjectDetail["treasuryHistory"];
+  const treasuryHistory: ProjectDetail["treasuryHistory"] = [];
+  for (const read of treasuryReads) {
+    const open = treasuryHistory[treasuryHistory.length - 1];
+    if (open && sameBalance(open.value_usd, read.value_usd)) {
+      open.last_seen_ts = Math.max(open.last_seen_ts, read.last_seen_ts);
+    } else {
+      treasuryHistory.push({ ...read });
+    }
+  }
+  const treasuryLastRead = treasuryHistory.length
+    ? treasuryHistory[treasuryHistory.length - 1].last_seen_ts
+    : null;
   // News and releases are kept apart. Folding git tags into "news" made the
   // News tab read "17" on a project with no press coverage at all, and half of
   // those tags were from a test repo — an availability claim we cannot support.
@@ -272,7 +298,8 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   }
   return {
     project, latest, candles, events, topHolders, holderHistory, proposals, github, observations,
-    treasuryValue: treasury?.value_usd ?? null, treasuryHistory, news, releases, listings, risk,
+    treasuryValue: treasury?.value_usd ?? null, treasuryHistory, treasuryLastRead,
+    news, releases, listings, risk,
     ath, atl, athTs,
   };
 }

@@ -1,25 +1,80 @@
 import type { HealthScore as HS } from "@/lib/analytics";
 import { scoreColor } from "@/lib/analytics";
 
-/** Radial gauge for the composite score. */
+/**
+ * The bands the needle points into. Thresholds are `scoreColor`'s own, so the
+ * arc a needle lands on is always the colour that function would return —
+ * the dial cannot disagree with the number printed inside it.
+ */
+const BANDS = [
+  { from: 0, to: 30, color: "var(--bad)", label: "Weak" },
+  { from: 30, to: 50, color: "var(--serious)", label: "Fragile" },
+  { from: 50, to: 75, color: "var(--warn)", label: "Mixed" },
+  { from: 75, to: 100, color: "var(--good)", label: "Strong" },
+];
+
+const CX = 100, CY = 96, R = 76;
+
+/** Score → point on the dial. 0 is due west, 100 due east. */
+function polar(score: number, radius: number) {
+  const rad = (Math.PI * (180 - (score / 100) * 180)) / 180;
+  return { x: CX + radius * Math.cos(rad), y: CY - radius * Math.sin(rad) };
+}
+
+function arc(from: number, to: number) {
+  const a = polar(from, R), b = polar(to, R);
+  return `M ${a.x} ${a.y} A ${R} ${R} 0 0 1 ${b.x} ${b.y}`;
+}
+
+/**
+ * Semicircular gauge for the composite score.
+ *
+ * All four bands are on screen at once, and two of them (Mixed and Fragile) are
+ * close enough in hue that a reader cannot reliably name them side by side. So
+ * the inactive bands are dimmed to read as a background scale and the band the
+ * needle is in is stated in words underneath — colour ranks the bands, it never
+ * has to identify them.
+ */
 function Gauge({ score }: { score: number | null }) {
-  const r = 42, c = 2 * Math.PI * r;
-  const pct = score == null ? 0 : score / 100;
+  const band = score == null ? null : BANDS.find((b) => score < b.to) ?? BANDS[BANDS.length - 1];
+  const needle = polar(score ?? 0, R - 16);
+
   return (
-    <div className="relative shrink-0" style={{ width: 108, height: 108 }}>
-      <svg width="108" height="108" viewBox="0 0 108 108" className="-rotate-90">
-        <circle cx="54" cy="54" r={r} fill="none" stroke="var(--grid)" strokeWidth="8" />
-        {score != null && (
-          <circle
-            cx="54" cy="54" r={r} fill="none"
-            stroke={scoreColor(score)} strokeWidth="8" strokeLinecap="round"
-            strokeDasharray={`${c * pct} ${c}`}
+    // The readout sits below the dial, not inside it: the needle sweeps the
+    // whole semicircle, so any text in there is crossed out at some scores.
+    <div className="flex shrink-0 flex-col items-center" style={{ width: 200 }}>
+      <svg width="200" height="108" viewBox="0 0 200 108">
+        {BANDS.map((b) => (
+          <path
+            key={b.from}
+            // A 0.6 gap either side is the 2px surface separator at this radius.
+            d={arc(b.from + (b.from === 0 ? 0 : 0.6), b.to - (b.to === 100 ? 0 : 0.6))}
+            fill="none"
+            stroke={b.color}
+            strokeWidth="11"
+            opacity={band === b ? 1 : 0.22}
           />
+        ))}
+        {score != null && (
+          <>
+            <line
+              x1={CX} y1={CY} x2={needle.x} y2={needle.y}
+              stroke="var(--ink)" strokeWidth="2.5" strokeLinecap="round"
+            />
+            <circle cx={CX} cy={CY} r="5" fill="var(--ink)" />
+            <circle cx={CX} cy={CY} r="2" fill="var(--surface)" />
+          </>
         )}
       </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="num text-[26px] font-semibold leading-none">{score ?? "—"}</span>
-        <span className="text-[10px] uppercase tracking-[0.1em] text-muted">/ 100</span>
+
+      <div className="mt-1 flex flex-col items-center">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-[30px] font-semibold leading-none">{score ?? "—"}</span>
+          <span className="text-[11px] text-faint">/ 100</span>
+        </div>
+        <span className="mt-1 text-[11px] font-medium" style={{ color: band?.color }}>
+          {band?.label ?? "Not scored"}
+        </span>
       </div>
     </div>
   );

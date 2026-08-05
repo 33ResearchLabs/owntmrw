@@ -3,7 +3,7 @@ import {
   projectDetail, priceIsReliable, MIN_LIQUIDITY_USD, crossProjectHolderCounts,
   parseLanguages, parseCodeFrequency, parseRisks,
 } from "@/lib/queries";
-import { healthScore, insights, dataCoverage, developerScore } from "@/lib/analytics";
+import { healthScore, insights, developerScore } from "@/lib/analytics";
 import { DevelopmentPanel } from "@/components/Development";
 import { buildMemo } from "@/lib/research";
 import { PriceChart } from "@/components/PriceChart";
@@ -11,7 +11,7 @@ import { Tabs, type TabDef } from "@/components/Tabs";
 import { HealthScorePanel } from "@/components/HealthScore";
 import {
   HoldersPanel, SmartMoneyPanel, TreasuryPanel, CompareRaisePanel, NewsPanel,
-  ResearchPanel, GovernancePanel, TimelinePanel, InsightList, DataCoveragePanel,
+  ResearchPanel, GovernancePanel, TimelinePanel, InsightList,
   ListingsPanel, RiskPanel, SectionCard, Metric, DataGap,
 } from "@/components/panels";
 import { TradeTerminal } from "@/components/TradeTerminal";
@@ -21,19 +21,6 @@ import { Delta, Logo, StatTile, StatusBadge } from "@/components/ui";
 import { fmtUsd, fmtNum, fmtPct, fmtDate, timeAgo, shortAddr } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-/**
- * The coverage panel reports which of our own sources came back empty for a
- * project. That is a view of the pipeline's health, not of the asset, so it
- * belongs on a developer's machine and not in front of a reader.
- *
- * Defaults to on outside production and off in it, but SHOW_DATA_COVERAGE
- * overrides either way — so a deployed instance can be turned on to debug an
- * ingest without a rebuild. Read on the server at render, so the markup never
- * reaches a client that should not have it.
- */
-const SHOW_COVERAGE =
-  (process.env.SHOW_DATA_COVERAGE ?? String(process.env.NODE_ENV !== "production")) === "true";
 
 const EVENT_LABEL: Record<string, string> = {
   raise_closed: "R", token_launch: "L", proposal: "P",
@@ -67,7 +54,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
 
   const hs = healthScore(d);
   const signals = insights(d);
-  const coverage = SHOW_COVERAGE ? dataCoverage(d) : [];
   const devScore = developerScore(github, !!p.github);
   const languages = parseLanguages(github);
   const codeFrequency = parseCodeFrequency(github);
@@ -125,7 +111,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       </div>
       <RiskPanel risk={d.risk} flags={parseRisks(d.risk)} />
       <ListingsPanel listings={d.listings} />
-      {SHOW_COVERAGE && <DataCoveragePanel rows={coverage} />}
       <CompareRaisePanel d={d} />
       {(p.raise_amount_usd != null || p.raise_price != null || p.circulating_supply != null || p.raise_note != null) && (
         <SectionCard

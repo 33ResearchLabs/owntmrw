@@ -143,10 +143,15 @@ function migrate(d: Database.Database) {
     text TEXT NOT NULL
   );
 
+  -- One row per balance *change*, not per read. ts is when the balance first
+  -- read as value_usd, last_seen_ts when we last confirmed it still did — so a
+  -- vault that sits still stays one row without losing the fact that we kept
+  -- checking. See recordTreasurySnapshot.
   CREATE TABLE IF NOT EXISTS treasury_snapshots (
     project_id INTEGER NOT NULL REFERENCES projects(id),
     ts INTEGER NOT NULL,
     value_usd REAL,
+    last_seen_ts INTEGER,
     PRIMARY KEY (project_id, ts)
   );
 
@@ -218,6 +223,10 @@ function migrate(d: Database.Database) {
     ["languages", "TEXT"],
     ["code_frequency", "TEXT"],
   ]);
+
+  // Rows written before the series became change-based have no last_seen_ts;
+  // readers coalesce it to ts, which is correct for a one-read-one-row past.
+  addColumns(d, "treasury_snapshots", [["last_seen_ts", "INTEGER"]]);
 }
 
 function addColumns(d: Database.Database, table: string, added: [string, string][]) {
@@ -289,4 +298,41 @@ export function allProjects(): Project[] {
 
 export function projectBySlug(slug: string): Project | undefined {
   return db().prepare("SELECT * FROM projects WHERE slug = ?").get(slug) as Project | undefined;
+}
+
+/**
+ * Two vault reads that mean "the balance did not move". Compared at cent
+ * precision because the balance is a USDC total: anything finer is float
+ * noise from the RPC decimal conversion, not money leaving the treasury.
+ */
+export function sameBalance(a: number | null, b: number | null): boolean {
+  if (a == null || b == null) return a === b;
+  return Math.abs(a - b) < 0.005;
+}
+
+/**
+ * Record a treasury reading. Ingest runs on a schedule while balances move on
+ * governance time, so appending every read buries the handful of real
+ * movements under hundreds of identical rows. An unchanged balance instead
+ * extends the current row's last_seen_ts — the read is still on file, it just
+ * does not pretend to be a new data point. Returns true on a real change.
+ */
+export function recordTreasurySnapshot(projectId: number, ts: number, valueUsd: number): boolean {
+  const d = db();
+  const prev = d.prepare(
+    "SELECT ts, value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1"
+  ).get(projectId) as { ts: number; value_usd: number | null } | undefined;
+
+  if (prev && sameBalance(prev.value_usd, valueUsd)) {
+    // max() guards a clock skew or a backfill from walking last_seen_ts backwards.
+    d.prepare(
+      "UPDATE treasury_snapshots SET last_seen_ts = max(COALESCE(last_seen_ts, ts), ?) WHERE project_id = ? AND ts = ?"
+    ).run(ts, projectId, prev.ts);
+    return false;
+  }
+
+  d.prepare(
+    "INSERT OR REPLACE INTO treasury_snapshots (project_id, ts, value_usd, last_seen_ts) VALUES (?,?,?,?)"
+  ).run(projectId, ts, valueUsd, ts);
+  return true;
 }

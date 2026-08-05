@@ -1,36 +1,65 @@
-import { Fragment } from "react";
 import Link from "next/link";
 import type { ProjectDetail, RiskFlag } from "@/lib/queries";
-import type { Insight, CoverageRow } from "@/lib/analytics";
-import { coverageColor, coverageLabel } from "@/lib/analytics";
+import type { Insight } from "@/lib/analytics";
 import type { Memo } from "@/lib/research";
 import { entityColor } from "@/lib/sources/wallets";
 import { classifyWallet, confidenceColor } from "@/lib/orgs";
-import { fmtUsd, fmtNum, fmtPct, fmtDate, timeAgo, shortAddr } from "@/lib/format";
+import {
+  fmtUsd,
+  fmtNum,
+  fmtPct,
+  fmtDate,
+  fmtDuration,
+  timeAgo,
+  shortAddr,
+} from "@/lib/format";
 import { Delta, StatusBadge } from "./ui";
 
 /** Shown wherever a section needs data we cannot obtain from public sources. */
-export function DataGap({ title, why, unlock }: { title: string; why: string; unlock?: string }) {
+export function DataGap({
+  title,
+  why,
+  unlock,
+}: {
+  title: string;
+  why: string;
+  unlock?: string;
+}) {
   return (
     <div className="rounded-md border border-dashed border-line px-4 py-5">
       <div className="text-[13px] font-medium text-ink2">{title}</div>
-      <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-muted">{why}</p>
+      <p className="mt-1 max-w-2xl text-[12px] leading-relaxed text-muted">
+        {why}
+      </p>
       {unlock && (
         <p className="mt-1.5 max-w-2xl text-[12px] leading-relaxed text-muted">
-          <span className="text-ink2">To enable: </span>{unlock}
+          <span className="text-ink2">To enable: </span>
+          {unlock}
         </p>
       )}
     </div>
   );
 }
 
-export function Metric({ label, value, sub, tone }: {
-  label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "good" | "bad";
+export function Metric({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  tone?: "good" | "bad";
 }) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-[0.06em] text-muted">{label}</div>
-      <div className={`num mt-0.5 text-[17px] font-semibold ${tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : ""}`}>
+      <div className="text-[11px] uppercase tracking-[0.06em] text-muted">
+        {label}
+      </div>
+      <div
+        className={`num mt-0.5 text-[17px] font-semibold ${tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : ""}`}
+      >
         {value}
       </div>
       {sub != null && <div className="mt-0.5 text-[11px] text-ink2">{sub}</div>}
@@ -38,8 +67,14 @@ export function Metric({ label, value, sub, tone }: {
   );
 }
 
-export function SectionCard({ title, right, children }: {
-  title: string; right?: React.ReactNode; children: React.ReactNode;
+export function SectionCard({
+  title,
+  right,
+  children,
+}: {
+  title: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <section className="card">
@@ -61,11 +96,94 @@ const RISK_TONE: Record<string, { color: string; label: string }> = {
 };
 
 /**
+ * Safety bands, descending. `floor` is inclusive, so 80 is the first Low Risk
+ * score. The two middle colours sit close enough together that a reader cannot
+ * reliably name the band from the fill alone, so the meter always states the
+ * band in words — the colour reinforces the label rather than carrying it.
+ */
+const SAFETY_BANDS = [
+  { floor: 80, color: "var(--good)", label: "Low risk" },
+  { floor: 60, color: "var(--warn)", label: "Caution" },
+  { floor: 40, color: "var(--serious)", label: "Elevated risk" },
+  { floor: 0, color: "var(--bad)", label: "High risk" },
+] as const;
+
+const safetyBand = (score: number) =>
+  SAFETY_BANDS.find((b) => score >= b.floor) ?? SAFETY_BANDS[SAFETY_BANDS.length - 1];
+
+/**
+ * Where this token's safety score falls on the 0-100 scale, and which band that
+ * puts it in. A bare "74" says nothing about whether 74 is good; the banded
+ * track is what makes it legible, and it is why the number is worth showing big.
+ */
+function SafetyMeter({ score }: { score: number | null }) {
+  const band = score == null ? null : safetyBand(score);
+
+  return (
+    <div className="px-4 py-4">
+      {/* The band word sits against the number, not out at the right edge:
+          it is the part that survives when the colour cannot be judged. */}
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+        <span className="text-[28px] font-semibold leading-none" style={{ color: band?.color }}>
+          {score ?? "—"}
+        </span>
+        <span className="text-[12px] text-faint">/ 100</span>
+        <span className="text-[13px] font-medium" style={{ color: band?.color }}>
+          {band?.label ?? "Not scored"}
+        </span>
+        <span className="text-[11px] text-muted">RugCheck safety score</span>
+      </div>
+
+      <div
+        className="relative mt-2.5 h-2.5 overflow-hidden rounded-full bg-grid"
+        role="meter"
+        aria-valuenow={score ?? undefined}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`RugCheck safety score${band ? `: ${band.label}` : ""}`}
+      >
+        {score != null && (
+          <div
+            className="h-full rounded-full"
+            style={{ width: `${Math.max(0, Math.min(100, score))}%`, background: band!.color }}
+          />
+        )}
+        {/* Band edges are cut out of the track rather than drawn over it — a
+            2px gap in the surface colour separates without adding ink. */}
+        {SAFETY_BANDS.slice(0, -1).map((b) => (
+          <span
+            key={b.floor}
+            className="absolute inset-y-0 w-0.5 bg-surface"
+            style={{ left: `${b.floor}%` }}
+          />
+        ))}
+      </div>
+
+      <div className="num relative mt-1 h-3 text-[10px] text-faint">
+        <span className="absolute left-0">0</span>
+        {SAFETY_BANDS.slice(0, -1).map((b) => (
+          <span key={b.floor} className="absolute -translate-x-1/2" style={{ left: `${b.floor}%` }}>
+            {b.floor}
+          </span>
+        ))}
+        <span className="absolute right-0">100</span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Contract-level risk. The headline is RugCheck's normalised score, where
  * higher is safer — the raw score runs the other way, which is why only the
  * normalised figure is shown.
  */
-export function RiskPanel({ risk, flags }: { risk: ProjectDetail["risk"]; flags: RiskFlag[] }) {
+export function RiskPanel({
+  risk,
+  flags,
+}: {
+  risk: ProjectDetail["risk"];
+  flags: RiskFlag[];
+}) {
   if (!risk) {
     return (
       <SectionCard title="Contract Risk">
@@ -80,38 +198,67 @@ export function RiskPanel({ risk, flags }: { risk: ProjectDetail["risk"]; flags:
   }
 
   const safety = risk.score_normalised;
-  const tone = safety == null ? "var(--ink-muted)" : safety >= 80 ? "var(--good)" : safety >= 60 ? "var(--warn)" : "var(--bad)";
-  const authority = (on: number | null, name: string) =>
-    on ? { text: `${name} enabled`, tone: "bad" as const } : { text: `${name} revoked`, tone: "good" as const };
-  const mint = authority(risk.mint_authority, "Mint");
-  const freeze = authority(risk.freeze_authority, "Freeze");
+  const critical = flags.filter((f) => f.level === "danger").length;
+  // Three states, not two. A null column means the report never carried the
+  // field, and calling that "Revoked" in green is the one error this panel
+  // must not make — it is the reassuring answer, asserted without evidence.
+  const authority = (on: number | null, enabled: string, revoked: string) =>
+    on == null
+      ? { value: "Unknown", sub: "not reported by RugCheck", tone: undefined }
+      : on
+        ? { value: "Enabled", sub: enabled, tone: "bad" as const }
+        : { value: "Revoked", sub: revoked, tone: "good" as const };
+  const mint = authority(
+    risk.mint_authority,
+    "supply can still be inflated",
+    "supply is fixed",
+  );
+  const freeze = authority(
+    risk.freeze_authority,
+    "balances can be frozen",
+    "balances cannot be frozen",
+  );
 
   return (
     <SectionCard
       title="Contract Risk"
       right={
-        <span className="flex items-center gap-1.5 text-[11px] text-muted">
-          RugCheck safety
-          <span className="num text-[13px] font-semibold" style={{ color: tone }}>{safety ?? "—"}</span>
-          <span className="text-faint">/100</span>
+        <span className="text-[11px] text-muted">
+          {flags.length === 0
+            ? "no flags raised"
+            : `${flags.length} flag${flags.length === 1 ? "" : "s"}${critical ? ` · ${critical} critical` : ""}`}
         </span>
       }
     >
+      <div className="border-b border-grid">
+        <SafetyMeter score={safety} />
+      </div>
+
       <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-b border-grid px-4 py-4 md:grid-cols-4">
         <Metric
-          label="Mint Authority" value={<span className="text-[15px]">{risk.mint_authority ? "Enabled" : "Revoked"}</span>}
-          sub={risk.mint_authority ? "supply can still be inflated" : "supply is fixed"}
+          label="Mint Authority"
+          value={<span className="text-[15px]">{mint.value}</span>}
+          sub={mint.sub}
           tone={mint.tone}
         />
         <Metric
-          label="Freeze Authority" value={<span className="text-[15px]">{risk.freeze_authority ? "Enabled" : "Revoked"}</span>}
-          sub={risk.freeze_authority ? "balances can be frozen" : "balances cannot be frozen"}
+          label="Freeze Authority"
+          value={<span className="text-[15px]">{freeze.value}</span>}
+          sub={freeze.sub}
           tone={freeze.tone}
         />
         <Metric
           label="LP Locked"
-          value={risk.lp_locked_pct != null ? `${risk.lp_locked_pct.toFixed(2)}%` : "—"}
-          sub={risk.total_lp_providers != null ? `${risk.total_lp_providers} LP provider${risk.total_lp_providers === 1 ? "" : "s"}` : undefined}
+          value={
+            risk.lp_locked_pct != null
+              ? `${risk.lp_locked_pct.toFixed(2)}%`
+              : "—"
+          }
+          sub={
+            risk.total_lp_providers != null
+              ? `${risk.total_lp_providers} LP provider${risk.total_lp_providers === 1 ? "" : "s"}`
+              : undefined
+          }
         />
         <Metric
           label="Holders (on-chain)"
@@ -121,21 +268,30 @@ export function RiskPanel({ risk, flags }: { risk: ProjectDetail["risk"]; flags:
       </div>
 
       {flags.length === 0 ? (
-        <p className="px-4 py-3 text-[12px] text-muted">No risk flags raised.</p>
+        <p className="px-4 py-3 text-[12px] text-muted">
+          No risk flags raised.
+        </p>
       ) : (
         <ul className="divide-y divide-grid">
           {flags.map((f, i) => {
             const t = RISK_TONE[f.level] ?? RISK_TONE.info;
             return (
-              <li key={i} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5">
+              <li
+                key={i}
+                className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-2.5"
+              >
                 <span
                   className="shrink-0 rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide"
                   style={{ color: t.color, borderColor: `${t.color}66` }}
                 >
                   {t.label}
                 </span>
-                <span className="text-[13px] font-medium text-ink">{f.name}</span>
-                <span className="min-w-0 flex-1 text-[12px] text-muted">{f.description}</span>
+                <span className="text-[13px] font-medium text-ink">
+                  {f.name}
+                </span>
+                <span className="min-w-0 flex-1 text-[12px] text-muted">
+                  {f.description}
+                </span>
               </li>
             );
           })}
@@ -143,7 +299,8 @@ export function RiskPanel({ risk, flags }: { risk: ProjectDetail["risk"]; flags:
       )}
       <p className="border-t border-grid px-4 py-2.5 text-[11px] text-muted">
         Automated contract checks from RugCheck. They describe what the token
-        <em> can</em> do, not intent — an enabled mint authority is a capability, not proof of misuse.
+        <em> can</em> do, not intent — an enabled mint authority is a
+        capability, not proof of misuse.
       </p>
     </SectionCard>
   );
@@ -155,7 +312,11 @@ export function RiskPanel({ risk, flags }: { risk: ProjectDetail["risk"]; flags:
  * Where the token actually trades. Centralised venues are called out because a
  * CEX listing is a materially different fact from another AMM pool appearing.
  */
-export function ListingsPanel({ listings }: { listings: ProjectDetail["listings"] }) {
+export function ListingsPanel({
+  listings,
+}: {
+  listings: ProjectDetail["listings"];
+}) {
   if (listings.length === 0) {
     return (
       <SectionCard title="Exchange Listings">
@@ -176,7 +337,12 @@ export function ListingsPanel({ listings }: { listings: ProjectDetail["listings"
       right={
         <span className="text-[11px] text-muted">
           {listings.length} venue{listings.length === 1 ? "" : "s"}
-          {cex.length > 0 && <> · <span className="text-ink2">{cex.length} centralised</span></>}
+          {cex.length > 0 && (
+            <>
+              {" "}
+              · <span className="text-ink2">{cex.length} centralised</span>
+            </>
+          )}
         </span>
       }
     >
@@ -195,21 +361,38 @@ export function ListingsPanel({ listings }: { listings: ProjectDetail["listings"
             {listings.map((l) => (
               <tr key={`${l.exchange}|${l.pair}`}>
                 <td className="font-medium">
-                  {l.url
-                    ? <a href={l.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{l.exchange}</a>
-                    : l.exchange}
+                  {l.url ? (
+                    <a
+                      href={l.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-accent"
+                    >
+                      {l.exchange}
+                    </a>
+                  ) : (
+                    l.exchange
+                  )}
                 </td>
                 <td className="num text-ink2">{l.pair}</td>
                 <td>
-                  <span className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
-                    l.is_dex ? "border-line text-muted" : "border-accent/40 text-accent"
-                  }`}>
+                  <span
+                    className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+                      l.is_dex
+                        ? "border-line text-muted"
+                        : "border-accent/40 text-accent"
+                    }`}
+                  >
                     {l.is_dex ? "DEX" : "CEX"}
                   </span>
                 </td>
-                <td className="num text-right">{l.volume_usd != null ? fmtUsd(l.volume_usd) : "—"}</td>
+                <td className="num text-right">
+                  {l.volume_usd != null ? fmtUsd(l.volume_usd) : "—"}
+                </td>
                 <td className="num text-right text-muted">
-                  {totalVol > 0 && l.volume_usd != null ? `${((l.volume_usd / totalVol) * 100).toFixed(1)}%` : "—"}
+                  {totalVol > 0 && l.volume_usd != null
+                    ? `${((l.volume_usd / totalVol) * 100).toFixed(1)}%`
+                    : "—"}
                 </td>
               </tr>
             ))}
@@ -217,101 +400,9 @@ export function ListingsPanel({ listings }: { listings: ProjectDetail["listings"
         </table>
       </div>
       <p className="border-t border-grid px-4 py-2.5 text-[11px] text-muted">
-        Venue volumes are self-reported to CoinGecko and are not independently verified.
+        Venue volumes are self-reported to CoinGecko and are not independently
+        verified.
       </p>
-    </SectionCard>
-  );
-}
-
-// --------------------------------------------------------------- coverage
-
-const PRIORITY_LABEL: Record<CoverageRow["priority"], string> = {
-  critical: "Critical", high: "High", medium: "Medium", low: "Low",
-};
-const PRIORITY_TONE: Record<CoverageRow["priority"], string> = {
-  critical: "text-bad border-bad/50 font-semibold",
-  high: "text-serious border-serious/40",
-  medium: "text-warn border-warn/40",
-  low: "text-muted border-line",
-};
-
-/**
- * What we actually hold per category, versus what a live integration needs —
- * shown per project so a thin section reads as "not indexed yet" rather than
- * a silent gap the reader has to notice on their own.
- */
-export function DataCoveragePanel({ rows }: { rows: CoverageRow[] }) {
-  const tracked = rows.filter((r) => r.status === "tracked").length;
-  const partial = rows.filter((r) => r.status === "sparse" || r.status === "almost_empty").length;
-  const missing = rows.filter((r) => r.status === "missing").length;
-
-  // Preserve the order dataCoverage() emitted rather than re-sorting groups.
-  const groups: { name: string; items: CoverageRow[] }[] = [];
-  for (const r of rows) {
-    const g = groups.find((x) => x.name === r.group);
-    if (g) g.items.push(r); else groups.push({ name: r.group, items: [r] });
-  }
-
-  return (
-    <SectionCard
-      title="Data Coverage"
-      right={
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
-          <span><span className="num font-semibold text-good">{tracked}</span> tracked</span>
-          <span><span className="num font-semibold text-warn">{partial}</span> partial</span>
-          <span><span className="num font-semibold text-bad">{missing}</span> missing</span>
-          <span className="text-faint">of {rows.length}</span>
-        </span>
-      }
-    >
-      <div className="scroll-x">
-        <table className="itable">
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Status</th>
-              <th>Source</th>
-              <th>Priority</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((g) => (
-              <Fragment key={g.name}>
-                <tr>
-                  <td colSpan={4} className="bg-surface2/60 !py-1.5 text-[10px] uppercase tracking-[0.09em] text-faint">
-                    {g.name}
-                  </td>
-                </tr>
-                {g.items.map((r) => (
-                  <tr key={r.key}>
-                    <td>
-                      <div className="text-[13px] font-medium text-ink">{r.label}</div>
-                      <div className="mt-0.5 max-w-sm whitespace-normal text-[11px] leading-snug text-muted">
-                        {r.detail}
-                      </div>
-                    </td>
-                    <td>
-                      <span
-                        className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] font-medium"
-                        style={{ color: coverageColor(r.status) }}
-                      >
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: coverageColor(r.status) }} />
-                        {coverageLabel(r.status)}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap text-[12px] text-ink2">{r.source}</td>
-                    <td>
-                      <span className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${PRIORITY_TONE[r.priority]}`}>
-                        {PRIORITY_LABEL[r.priority]}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </SectionCard>
   );
 }
@@ -320,7 +411,11 @@ export function DataCoveragePanel({ rows }: { rows: CoverageRow[] }) {
 
 export function InsightList({ items }: { items: Insight[] }) {
   if (!items.length) {
-    return <div className="px-4 py-6 text-center text-[13px] text-muted">No signals cross the reporting threshold yet.</div>;
+    return (
+      <div className="px-4 py-6 text-center text-[13px] text-muted">
+        No signals cross the reporting threshold yet.
+      </div>
+    );
   }
   return (
     <ul className="divide-y divide-grid">
@@ -328,7 +423,14 @@ export function InsightList({ items }: { items: Insight[] }) {
         <li key={i} className="flex items-start gap-3 px-4 py-2.5 text-[13px]">
           <span
             className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ background: o.tone === "good" ? "var(--good)" : o.tone === "bad" ? "var(--bad)" : "var(--ink-muted)" }}
+            style={{
+              background:
+                o.tone === "good"
+                  ? "var(--good)"
+                  : o.tone === "bad"
+                    ? "var(--bad)"
+                    : "var(--ink-muted)",
+            }}
           />
           <span className="text-ink2">{o.text}</span>
           <span className="ml-auto shrink-0 rounded bg-surface2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted">
@@ -342,15 +444,164 @@ export function InsightList({ items }: { items: Insight[] }) {
 
 // ------------------------------------------------------------------- holders
 
-export function HoldersPanel({ d, crossCounts }: {
-  d: ProjectDetail; crossCounts?: Map<string, number>;
+/**
+ * How the total supply is split. Deliberately a stacked bar rather than the
+ * donut this pattern usually gets: the two halves are near-equal on a typical
+ * MetaDAO launch (half locked, half floating), and a donut is exactly the wrong
+ * form for comparing close values.
+ *
+ * `liquidity_tokens` is not a segment — those tokens sit inside the circulating
+ * float, so adding them would sum past 100%. They are stated underneath instead.
+ * Anything the three known figures cannot account for is shown as unattributed
+ * rather than folded into a segment that would then be wrong.
+ */
+function SupplyAllocation({ p }: { p: ProjectDetail["project"] }) {
+  const total = p.total_supply;
+  if (!total) return null;
+
+  // Sub-0.05% figures are rounding dust from the supply feed, not allocations.
+  const dust = total * 0.0005;
+  const clean = (n: number | null | undefined) => (n != null && n > dust ? n : 0);
+  const team = clean(p.team_package);
+  const circulating = clean(p.circulating_supply);
+  const unattributed = Math.max(0, total - team - circulating);
+
+  const segments = [
+    { key: "circulating", label: "Circulating", value: circulating, color: "var(--accent)" },
+    { key: "team", label: "Team locked", value: team, color: "var(--series-2)" },
+    { key: "unattributed", label: "Unattributed", value: unattributed, color: "var(--series-none)" },
+  ].filter((s) => s.value > dust);
+
+  // One segment is a one-bar bar chart — the Metric tiles already say it better.
+  if (segments.length < 2) return null;
+
+  const pool = clean(p.liquidity_tokens);
+
+  return (
+    <SectionCard title="Supply Allocation">
+      <div className="px-4 py-4">
+        <div className="flex h-3 w-full gap-0.5">
+          {segments.map((s, i) => (
+            <div
+              key={s.key}
+              className={`h-full ${i === 0 ? "rounded-l-full" : ""} ${i === segments.length - 1 ? "rounded-r-full" : ""}`}
+              style={{ width: `${(s.value / total) * 100}%`, background: s.color }}
+            />
+          ))}
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
+          {segments.map((s) => (
+            <div key={s.key} className="flex items-baseline gap-2">
+              <span
+                className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-full"
+                style={{ background: s.color }}
+              />
+              <span className="text-[12px] text-ink2">{s.label}</span>
+              <span className="num text-[12px] font-medium">
+                {((s.value / total) * 100).toFixed(1)}%
+              </span>
+              <span className="num text-[11px] text-faint">{fmtNum(s.value)}</span>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-3 text-[11px] text-muted">
+          {fmtNum(total)} total supply
+          {pool > 0 && (
+            <> · {fmtNum(pool)} of the circulating float sits in liquidity pools</>
+          )}
+        </p>
+      </div>
+    </SectionCard>
+  );
+}
+
+/**
+ * The top holders as bars, because the table buries the shape of the thing: one
+ * wallet at 50% and nine under 6% is a different asset from ten wallets at 5%,
+ * and that is visible in two seconds here and not at all in a column of numbers.
+ *
+ * Bars scale to the largest holder, not to 100 — on a normal distribution every
+ * bar would otherwise be a sliver. The percentage rides each bar's tip so the
+ * absolute value is never trapped in the geometry.
+ */
+function ConcentrationChart({
+  holders,
+}: {
+  holders: ProjectDetail["topHolders"];
+}) {
+  const top = holders.filter((h) => h.pct != null).slice(0, 10);
+  if (top.length < 2) return null;
+
+  const max = Math.max(...top.map((h) => h.pct));
+  // A labelled account is infrastructure — a pool holding 3% is not a whale.
+  // Splitting them out stops the chart reading as concentration it isn't.
+  const anyVenue = top.some((h) => h.label);
+
+  return (
+    <SectionCard
+      title="Concentration"
+      right={
+        anyVenue ? (
+          <span className="flex items-center gap-3 text-[11px] text-muted">
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} />
+              Wallet
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full" style={{ background: "var(--series-none)" }} />
+              Pool / venue
+            </span>
+          </span>
+        ) : undefined
+      }
+    >
+      <div className="space-y-1.5 px-4 py-4">
+        {top.map((h) => {
+          const owner = h.owner ?? h.address;
+          return (
+            <div key={h.rank} className="flex items-center gap-3">
+              <span className="num w-[150px] shrink-0 truncate text-[12px] text-ink2" title={owner}>
+                {h.label ?? shortAddr(owner)}
+              </span>
+              {/* The bar keeps its own track so every row shares one plot
+                  width, and the value sits in a column outside it — a tip
+                  label on the longest bar would otherwise run at the card edge. */}
+              <div className="min-w-0 flex-1">
+                <div
+                  className="h-2.5 rounded-r-sm"
+                  style={{
+                    width: `${Math.max(1, (h.pct / max) * 100)}%`,
+                    background: h.label ? "var(--series-none)" : "var(--accent)",
+                  }}
+                />
+              </div>
+              <span className="num w-14 shrink-0 text-right text-[12px] font-medium">
+                {h.pct.toFixed(2)}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
+export function HoldersPanel({
+  d,
+  crossCounts,
+}: {
+  d: ProjectDetail;
+  crossCounts?: Map<string, number>;
 }) {
   const { project: p, topHolders, holderHistory, latest } = d;
   const hh = holderHistory.filter((h) => h.holder_count != null);
   const cur = hh.length ? hh[hh.length - 1].holder_count! : null;
   const supply = p.circulating_supply ?? p.total_supply;
   const avgWallet = cur && supply ? supply / cur : null;
-  const avgUsd = avgWallet && latest?.price_usd ? avgWallet * latest.price_usd : null;
+  const avgUsd =
+    avgWallet && latest?.price_usd ? avgWallet * latest.price_usd : null;
 
   const at = (daysAgo: number): number | null => {
     const target = Math.floor(Date.now() / 1000) - daysAgo * 86400;
@@ -361,25 +612,51 @@ export function HoldersPanel({ d, crossCounts }: {
     const then = at(daysAgo);
     return then != null && cur != null ? cur - then : null;
   };
-  const t10 = [...holderHistory].reverse().find((h) => h.top10_pct != null)?.top10_pct ?? null;
+  const t10 =
+    [...holderHistory].reverse().find((h) => h.top10_pct != null)?.top10_pct ??
+    null;
 
   return (
     <div className="space-y-5">
       <SectionCard
         title="Holder Base"
-        right={<span className="text-[11px] text-muted">{hh.length} snapshot{hh.length === 1 ? "" : "s"} recorded</span>}
+        right={
+          <span className="text-[11px] text-muted">
+            {hh.length} snapshot{hh.length === 1 ? "" : "s"} recorded
+          </span>
+        }
       >
         <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
           <Metric label="Total Holders" value={fmtNum(cur)} />
           <Metric
             label="Net 7d"
-            value={chg(7) != null ? <Delta v={at(7) ? (chg(7)! / at(7)!) * 100 : null} /> : "—"}
-            sub={chg(7) != null ? `${chg(7)! >= 0 ? "+" : ""}${fmtNum(chg(7))} wallets` : "needs 7d of history"}
+            value={
+              chg(7) != null ? (
+                <Delta v={at(7) ? (chg(7)! / at(7)!) * 100 : null} />
+              ) : (
+                "—"
+              )
+            }
+            sub={
+              chg(7) != null
+                ? `${chg(7)! >= 0 ? "+" : ""}${fmtNum(chg(7))} wallets`
+                : "needs 7d of history"
+            }
           />
           <Metric
             label="Net 30d"
-            value={chg(30) != null ? <Delta v={at(30) ? (chg(30)! / at(30)!) * 100 : null} /> : "—"}
-            sub={chg(30) != null ? `${chg(30)! >= 0 ? "+" : ""}${fmtNum(chg(30))} wallets` : "needs 30d of history"}
+            value={
+              chg(30) != null ? (
+                <Delta v={at(30) ? (chg(30)! / at(30)!) * 100 : null} />
+              ) : (
+                "—"
+              )
+            }
+            sub={
+              chg(30) != null
+                ? `${chg(30)! >= 0 ? "+" : ""}${fmtNum(chg(30))} wallets`
+                : "needs 30d of history"
+            }
           />
           <Metric
             label="Avg Wallet"
@@ -389,17 +666,41 @@ export function HoldersPanel({ d, crossCounts }: {
           <Metric
             label="Top 10 Concentration"
             value={t10 != null ? `${t10.toFixed(1)}%` : "—"}
-            tone={t10 != null ? (t10 > 60 ? "bad" : t10 < 35 ? "good" : undefined) : undefined}
+            tone={
+              t10 != null
+                ? t10 > 60
+                  ? "bad"
+                  : t10 < 35
+                    ? "good"
+                    : undefined
+                : undefined
+            }
           />
-          <Metric label="Circulating Supply" value={fmtNum(p.circulating_supply)} sub={p.total_supply ? `of ${fmtNum(p.total_supply)} total` : undefined} />
+          <Metric
+            label="Circulating Supply"
+            value={fmtNum(p.circulating_supply)}
+            sub={
+              p.total_supply ? `of ${fmtNum(p.total_supply)} total` : undefined
+            }
+          />
           <Metric
             label="Locked (Team)"
             value={fmtNum(p.team_package)}
-            sub={p.team_package && p.total_supply ? `${((p.team_package / p.total_supply) * 100).toFixed(0)}% of supply` : undefined}
+            sub={
+              p.team_package && p.total_supply
+                ? `${((p.team_package / p.total_supply) * 100).toFixed(0)}% of supply`
+                : undefined
+            }
           />
-          <Metric label="Market Cap / Holder" value={cur && latest?.mcap ? fmtUsd(latest.mcap / cur) : "—"} />
+          <Metric
+            label="Market Cap / Holder"
+            value={cur && latest?.mcap ? fmtUsd(latest.mcap / cur) : "—"}
+          />
         </div>
       </SectionCard>
+
+      <SupplyAllocation p={p} />
+      <ConcentrationChart holders={topHolders} />
 
       <SectionCard title="Top Holders">
         {topHolders.length === 0 ? (
@@ -415,7 +716,9 @@ export function HoldersPanel({ d, crossCounts }: {
             <table className="itable text-[13px]">
               <thead>
                 <tr>
-                  <th>#</th><th>Holder</th><th>Type</th>
+                  <th>#</th>
+                  <th>Holder</th>
+                  <th>Type</th>
                   <th className="!text-right">Balance</th>
                   <th className="!text-right">% Supply</th>
                   <th className="!text-right">Value</th>
@@ -424,27 +727,44 @@ export function HoldersPanel({ d, crossCounts }: {
               <tbody>
                 {topHolders.map((h) => {
                   const owner = h.owner ?? h.address;
-                  const value = latest?.price_usd ? h.amount * latest.price_usd : null;
+                  const value = latest?.price_usd
+                    ? h.amount * latest.price_usd
+                    : null;
                   const verdict = classifyWallet({
-                    address: h.address, owner: h.owner,
+                    address: h.address,
+                    owner: h.owner,
                     treasuryAddress: p.treasury_address,
                     launchAddress: p.launch_address,
                     poolAddress: p.pool_address,
                     projectCount: crossCounts?.get(owner),
                     pct: h.pct,
                   });
-                  const org = verdict ?? (h.label ? {
-                    label: h.label, type: h.label, isOrganisation: true,
-                    confidence: "confirmed" as const, reason: "Labelled from the wallet registry.",
-                  } : null);
+                  const org =
+                    verdict ??
+                    (h.label
+                      ? {
+                          label: h.label,
+                          type: h.label,
+                          isOrganisation: true,
+                          confidence: "confirmed" as const,
+                          reason: "Labelled from the wallet registry.",
+                        }
+                      : null);
                   return (
                     <tr key={h.rank}>
                       <td className="num text-faint">{h.rank}</td>
                       <td>
-                        <Link href={`/wallet/${owner}`} className="flex items-center gap-2 hover:text-accent">
-                          <span className="num">{org?.isOrganisation ? org.label : shortAddr(owner)}</span>
+                        <Link
+                          href={`/wallet/${owner}`}
+                          className="flex items-center gap-2 hover:text-accent"
+                        >
+                          <span className="num">
+                            {org?.isOrganisation ? org.label : shortAddr(owner)}
+                          </span>
                           {org?.isOrganisation && (
-                            <span className="num text-[11px] text-faint">{shortAddr(owner)}</span>
+                            <span className="num text-[11px] text-faint">
+                              {shortAddr(owner)}
+                            </span>
                           )}
                         </Link>
                       </td>
@@ -452,23 +772,33 @@ export function HoldersPanel({ d, crossCounts }: {
                         {org ? (
                           <span
                             className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px]"
-                            style={{ color: entityColor(org.type), background: "var(--surface-2)" }}
+                            style={{
+                              color: entityColor(org.type),
+                              background: "var(--surface-2)",
+                            }}
                             title={org.reason}
                           >
                             <span
                               className="h-1.5 w-1.5 rounded-full"
-                              style={{ background: confidenceColor(org.confidence) }}
+                              style={{
+                                background: confidenceColor(org.confidence),
+                              }}
                             />
                             {org.isOrganisation ? org.type : "Individual?"}
                           </span>
                         ) : (
-                          <span className="text-[11px] text-faint" title="No on-chain role, registry match or cross-project pattern found.">
+                          <span
+                            className="text-[11px] text-faint"
+                            title="No on-chain role, registry match or cross-project pattern found."
+                          >
                             Unidentified
                           </span>
                         )}
                       </td>
                       <td className="num text-right">{fmtNum(h.amount)}</td>
-                      <td className="num text-right">{h.pct != null ? `${h.pct.toFixed(2)}%` : "—"}</td>
+                      <td className="num text-right">
+                        {h.pct != null ? `${h.pct.toFixed(2)}%` : "—"}
+                      </td>
                       <td className="num text-right">{fmtUsd(value)}</td>
                     </tr>
                   );
@@ -476,9 +806,10 @@ export function HoldersPanel({ d, crossCounts }: {
               </tbody>
             </table>
             <p className="border-t border-grid px-4 py-2.5 text-[11px] leading-relaxed text-faint">
-              Organisations are identified by evidence, not inference alone: a green dot means a
-              confirmed on-chain role or documented address, amber means a strong pattern
-              (e.g. top-holder across several MetaDAO raises). Hover any badge for the reason.
+              Organisations are identified by evidence, not inference alone: a
+              green dot means a confirmed on-chain role or documented address,
+              amber means a strong pattern (e.g. top-holder across several
+              MetaDAO raises). Hover any badge for the reason.
             </p>
           </div>
         )}
@@ -496,7 +827,9 @@ export function HoldersPanel({ d, crossCounts }: {
 // -------------------------------------------------------------- smart money
 
 export function SmartMoneyPanel({ d }: { d: ProjectDetail }) {
-  const whaleEvents = d.events.filter((e) => e.type === "whale_buy" || e.type === "whale_sell");
+  const whaleEvents = d.events.filter(
+    (e) => e.type === "whale_buy" || e.type === "whale_sell",
+  );
   return (
     <div className="space-y-5">
       <SectionCard title="Smart Money Flow">
@@ -511,9 +844,16 @@ export function SmartMoneyPanel({ d }: { d: ProjectDetail }) {
         ) : (
           <ul className="divide-y divide-grid">
             {whaleEvents.map((e, i) => (
-              <li key={i} className="flex items-baseline gap-3 px-4 py-2.5 text-[13px]">
-                <span className="num w-24 shrink-0 text-muted">{fmtDate(e.ts)}</span>
-                <span className={e.type === "whale_buy" ? "text-good" : "text-bad"}>
+              <li
+                key={i}
+                className="flex items-baseline gap-3 px-4 py-2.5 text-[13px]"
+              >
+                <span className="num w-24 shrink-0 text-muted">
+                  {fmtDate(e.ts)}
+                </span>
+                <span
+                  className={e.type === "whale_buy" ? "text-good" : "text-bad"}
+                >
                   {e.type === "whale_buy" ? "BUY" : "SELL"}
                 </span>
                 <span className="text-ink2">{e.title}</span>
@@ -529,61 +869,124 @@ export function SmartMoneyPanel({ d }: { d: ProjectDetail }) {
 // ---------------------------------------------------------------- treasury
 
 export function TreasuryPanel({ d }: { d: ProjectDetail }) {
-  const { project: p, treasuryValue, treasuryHistory, latest } = d;
-  const vsRaise = treasuryValue && p.raise_amount_usd ? treasuryValue / p.raise_amount_usd : null;
-  const vsMcap = treasuryValue && latest?.mcap ? treasuryValue / latest.mcap : null;
+  const {
+    project: p,
+    treasuryValue,
+    treasuryHistory,
+    treasuryLastRead,
+    latest,
+  } = d;
+  const vsRaise =
+    treasuryValue && p.raise_amount_usd
+      ? treasuryValue / p.raise_amount_usd
+      : null;
+  const vsMcap =
+    treasuryValue && latest?.mcap ? treasuryValue / latest.mcap : null;
 
   return (
     <div className="space-y-5">
       <SectionCard
         title="Treasury"
-        right={p.treasury_address ? (
-          <a
-            href={`https://solscan.io/account/${p.treasury_address}`}
-            target="_blank" rel="noopener noreferrer"
-            className="num text-[11px] text-accent hover:underline"
-          >
-            {shortAddr(p.treasury_address)} ↗
-          </a>
-        ) : undefined}
+        right={
+          p.treasury_address ? (
+            <a
+              href={`https://solscan.io/account/${p.treasury_address}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="num text-[11px] text-accent hover:underline"
+            >
+              {shortAddr(p.treasury_address)} ↗
+            </a>
+          ) : undefined
+        }
       >
         <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
           <Metric
             label="Current Value"
-            value={treasuryValue != null && treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)}
+            value={
+              treasuryValue != null && treasuryValue < 1
+                ? "~$0"
+                : fmtUsd(treasuryValue)
+            }
             sub="USDC AUM in the DAO vault"
           />
-          <Metric label="Raised" value={p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd)} />
+          <Metric
+            label="Raised"
+            value={p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd)}
+          />
           <Metric
             label="Remaining vs Raise"
             value={vsRaise != null ? `${(vsRaise * 100).toFixed(0)}%` : "—"}
-            tone={vsRaise != null ? (vsRaise > 0.7 ? "good" : vsRaise < 0.2 ? "bad" : undefined) : undefined}
+            tone={
+              vsRaise != null
+                ? vsRaise > 0.7
+                  ? "good"
+                  : vsRaise < 0.2
+                    ? "bad"
+                    : undefined
+                : undefined
+            }
           />
           <Metric
             label="Treasury / Mkt Cap"
             value={vsMcap != null ? `${(vsMcap * 100).toFixed(0)}%` : "—"}
-            sub={vsMcap != null && vsMcap > 0.5 ? "backed above half of valuation" : undefined}
+            sub={
+              vsMcap != null && vsMcap > 0.5
+                ? "backed above half of valuation"
+                : undefined
+            }
           />
         </div>
       </SectionCard>
 
-      {treasuryHistory.length > 1 && (
-        <SectionCard title="Treasury History">
+      {treasuryHistory.length > 0 && (
+        <SectionCard
+          title="Treasury History"
+          right={
+            <span className="text-[11px] text-muted">
+              one row per balance change · read {timeAgo(treasuryLastRead)}
+            </span>
+          }
+        >
           <div className="scroll-x">
             <table className="itable text-[13px]">
-              <thead><tr><th>Date</th><th className="!text-right">Value</th><th className="!text-right">Change</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Changed</th>
+                  <th className="!text-right">Value</th>
+                  <th className="!text-right">Change</th>
+                  <th className="!text-right">Held</th>
+                </tr>
+              </thead>
               <tbody>
-                {[...treasuryHistory].reverse().slice(0, 20).map((t, i, arr) => {
-                  const prev = arr[i + 1];
-                  const delta = prev && prev.value_usd ? ((t.value_usd! - prev.value_usd) / prev.value_usd) * 100 : null;
-                  return (
-                    <tr key={t.ts}>
-                      <td className="num text-ink2">{fmtDate(t.ts)}</td>
-                      <td className="num text-right">{fmtUsd(t.value_usd)}</td>
-                      <td className="text-right"><Delta v={delta} /></td>
-                    </tr>
-                  );
-                })}
+                {[...treasuryHistory]
+                  .reverse()
+                  .slice(0, 20)
+                  .map((t, i, arr) => {
+                    const prev = arr[i + 1];
+                    const delta =
+                      prev && prev.value_usd
+                        ? ((t.value_usd! - prev.value_usd) / prev.value_usd) *
+                          100
+                        : null;
+                    // A balance holds until the next change starts, or — for the
+                    // current one — until the most recent read confirmed it.
+                    const until = i === 0 ? t.last_seen_ts : arr[i - 1].ts;
+                    return (
+                      <tr key={t.ts}>
+                        <td className="num text-ink2">{fmtDate(t.ts)}</td>
+                        <td className="num text-right">
+                          {fmtUsd(t.value_usd)}
+                        </td>
+                        <td className="text-right">
+                          <Delta v={delta} />
+                        </td>
+                        <td className="num text-right text-muted">
+                          {fmtDuration(until - t.ts)}
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
@@ -602,48 +1005,107 @@ export function TreasuryPanel({ d }: { d: ProjectDetail }) {
 // ---------------------------------------------------------------- vs raise
 
 export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
-  const { project: p, latest, candles, ath, atl, athTs, holderHistory, treasuryValue } = d;
+  const {
+    project: p,
+    latest,
+    candles,
+    ath,
+    atl,
+    athTs,
+    holderHistory,
+    treasuryValue,
+  } = d;
   const cur = latest?.price_usd ?? null;
-  const roi = p.raise_price && cur ? ((cur - p.raise_price) / p.raise_price) * 100 : null;
-  const athRet = p.raise_price && ath ? ((ath - p.raise_price) / p.raise_price) * 100 : null;
-  const atlRet = p.raise_price && atl ? ((atl - p.raise_price) / p.raise_price) * 100 : null;
+  const roi =
+    p.raise_price && cur ? ((cur - p.raise_price) / p.raise_price) * 100 : null;
+  const athRet =
+    p.raise_price && ath ? ((ath - p.raise_price) / p.raise_price) * 100 : null;
+  const atlRet =
+    p.raise_price && atl ? ((atl - p.raise_price) / p.raise_price) * 100 : null;
   const drawdown = ath && cur ? ((cur - ath) / ath) * 100 : null;
-  const start = p.raise_end_ts ?? p.launch_ts ?? (candles.length ? candles[0].ts : null);
-  const daysToAth = athTs && start ? Math.max(0, Math.round((athTs - start) / 86400)) : null;
+  const start =
+    p.raise_end_ts ?? p.launch_ts ?? (candles.length ? candles[0].ts : null);
+  const daysToAth =
+    athTs && start ? Math.max(0, Math.round((athTs - start) / 86400)) : null;
   const hh = holderHistory.filter((h) => h.holder_count != null);
   const holdersNow = hh.length ? hh[hh.length - 1].holder_count : null;
 
   return (
     <SectionCard
       title="Performance Since Raise"
-      right={p.raise_source_url ? (
-        <a href={p.raise_source_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-accent hover:underline">
-          raise source ↗
-        </a>
-      ) : undefined}
+      right={
+        p.raise_source_url ? (
+          <a
+            href={p.raise_source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-accent hover:underline"
+          >
+            raise source ↗
+          </a>
+        ) : undefined
+      }
     >
       <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
-        <Metric label="Raise Price" value={p.raise_price != null ? fmtUsd(p.raise_price, { compact: false }) : "—"} />
+        <Metric
+          label="Raise Price"
+          value={
+            p.raise_price != null
+              ? fmtUsd(p.raise_price, { compact: false })
+              : "—"
+          }
+        />
         <Metric label="Current Price" value={fmtUsd(cur, { compact: false })} />
         <Metric label="ROI Since Raise" value={<Delta v={roi} />} />
-        <Metric label="Current Drawdown" value={<Delta v={drawdown} />} sub="from all-time high" />
-        <Metric label="ATH" value={fmtUsd(ath, { compact: false })} sub={athRet != null ? `${fmtPct(athRet)} vs raise` : undefined} />
-        <Metric label="ATL" value={fmtUsd(atl, { compact: false })} sub={atlRet != null ? `${fmtPct(atlRet)} vs raise` : undefined} />
-        <Metric label="Days to ATH" value={daysToAth != null ? `${daysToAth}d` : "—"} sub={athTs ? fmtDate(athTs) : undefined} />
-        <Metric label="Treasury Remaining" value={treasuryValue != null && treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)} />
-        <Metric label="Contributors at Raise" value={fmtNum(p.raise_contributors)} />
+        <Metric
+          label="Current Drawdown"
+          value={<Delta v={drawdown} />}
+          sub="from all-time high"
+        />
+        <Metric
+          label="ATH"
+          value={fmtUsd(ath, { compact: false })}
+          sub={athRet != null ? `${fmtPct(athRet)} vs raise` : undefined}
+        />
+        <Metric
+          label="ATL"
+          value={fmtUsd(atl, { compact: false })}
+          sub={atlRet != null ? `${fmtPct(atlRet)} vs raise` : undefined}
+        />
+        <Metric
+          label="Days to ATH"
+          value={daysToAth != null ? `${daysToAth}d` : "—"}
+          sub={athTs ? fmtDate(athTs) : undefined}
+        />
+        <Metric
+          label="Treasury Remaining"
+          value={
+            treasuryValue != null && treasuryValue < 1
+              ? "~$0"
+              : fmtUsd(treasuryValue)
+          }
+        />
+        <Metric
+          label="Contributors at Raise"
+          value={fmtNum(p.raise_contributors)}
+        />
         <Metric label="Holders Now" value={fmtNum(holdersNow)} />
         <Metric
           label="Committed"
           value={fmtUsd(p.raise_committed_usd)}
-          sub={p.raise_committed_usd && p.raise_amount_usd ? `${Math.round(p.raise_committed_usd / p.raise_amount_usd)}× oversubscribed` : undefined}
+          sub={
+            p.raise_committed_usd && p.raise_amount_usd
+              ? `${Math.round(p.raise_committed_usd / p.raise_amount_usd)}× oversubscribed`
+              : undefined
+          }
         />
         <Metric label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
       </div>
       {p.raise_contributors == null && (
         <p className="border-t border-grid px-4 py-2.5 text-[11px] text-muted">
-          Holders-at-launch and whale growth since the raise need a holder snapshot taken at launch;
-          this platform began tracking later, so those deltas start from first ingest rather than from TGE.
+          Holders-at-launch and whale growth since the raise need a holder
+          snapshot taken at launch; this platform began tracking later, so those
+          deltas start from first ingest rather than from TGE.
         </p>
       )}
     </SectionCard>
@@ -652,13 +1114,27 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
 
 // -------------------------------------------------------------------- news
 
-type FeedItem = { ts: number; title: string; url: string | null; source: string | null };
+type FeedItem = {
+  ts: number;
+  title: string;
+  url: string | null;
+  source: string | null;
+};
 
-function FeedList({ items, showSource }: { items: FeedItem[]; showSource?: boolean }) {
+function FeedList({
+  items,
+  showSource,
+}: {
+  items: FeedItem[];
+  showSource?: boolean;
+}) {
   return (
     <ul className="divide-y divide-grid">
       {items.map((n, i) => (
-        <li key={i} className="flex flex-wrap items-baseline gap-3 px-4 py-2.5 text-[13px]">
+        <li
+          key={i}
+          className="flex flex-wrap items-baseline gap-3 px-4 py-2.5 text-[13px]"
+        >
           <span className="num w-24 shrink-0 text-muted">{fmtDate(n.ts)}</span>
           {showSource && n.source && (
             <span className="shrink-0 rounded bg-surface2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink2">
@@ -666,9 +1142,18 @@ function FeedList({ items, showSource }: { items: FeedItem[]; showSource?: boole
             </span>
           )}
           <span className="min-w-0 flex-1">
-            {n.url
-              ? <a href={n.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{n.title}</a>
-              : n.title}
+            {n.url ? (
+              <a
+                href={n.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-accent"
+              >
+                {n.title}
+              </a>
+            ) : (
+              n.title
+            )}
           </span>
         </li>
       ))}
@@ -676,10 +1161,19 @@ function FeedList({ items, showSource }: { items: FeedItem[]; showSource?: boole
   );
 }
 
-export function NewsPanel({ items, releases = [], project }: {
+export function NewsPanel({
+  items,
+  releases = [],
+  project,
+}: {
   items: FeedItem[];
   releases?: FeedItem[];
-  project: { twitter: string | null; website: string | null; github: string | null; docs: string | null };
+  project: {
+    twitter: string | null;
+    website: string | null;
+    github: string | null;
+    docs: string | null;
+  };
 }) {
   return (
     <div className="space-y-5">
@@ -702,7 +1196,8 @@ export function NewsPanel({ items, releases = [], project }: {
           title="Repository Releases"
           right={
             <span className="text-[11px] text-muted">
-              {releases.length} git tag{releases.length === 1 ? "" : "s"} · not press coverage
+              {releases.length} git tag{releases.length === 1 ? "" : "s"} · not
+              press coverage
             </span>
           }
         >
@@ -712,19 +1207,32 @@ export function NewsPanel({ items, releases = [], project }: {
 
       <SectionCard title="Official Channels">
         <div className="flex flex-wrap gap-3 px-4 py-4 text-[13px]">
-          {([["Website", project.website], ["X / Twitter", project.twitter], ["GitHub", project.github], ["Docs", project.docs]] as const)
+          {(
+            [
+              ["Website", project.website],
+              ["X / Twitter", project.twitter],
+              ["GitHub", project.github],
+              ["Docs", project.docs],
+            ] as const
+          )
             .filter(([, u]) => u)
             .map(([label, url]) => (
               <a
-                key={label} href={url!} target="_blank" rel="noopener noreferrer"
+                key={label}
+                href={url!}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="rounded border border-line px-2.5 py-1 text-ink2 hover:border-accent/50 hover:text-accent"
               >
                 {label} ↗
               </a>
             ))}
-          {!project.website && !project.twitter && !project.github && !project.docs && (
-            <span className="text-muted">No official links indexed.</span>
-          )}
+          {!project.website &&
+            !project.twitter &&
+            !project.github &&
+            !project.docs && (
+              <span className="text-muted">No official links indexed.</span>
+            )}
         </div>
       </SectionCard>
     </div>
@@ -734,13 +1242,29 @@ export function NewsPanel({ items, releases = [], project }: {
 // ---------------------------------------------------------------- research
 
 export function ResearchPanel({ memo }: { memo: Memo }) {
-  const List = ({ items, tone }: { items: string[]; tone?: "good" | "bad" }) => (
+  const List = ({
+    items,
+    tone,
+  }: {
+    items: string[];
+    tone?: "good" | "bad";
+  }) => (
     <ul className="space-y-2 px-4 py-3.5">
       {items.map((s, i) => (
-        <li key={i} className="flex gap-2.5 text-[13px] leading-relaxed text-ink2">
+        <li
+          key={i}
+          className="flex gap-2.5 text-[13px] leading-relaxed text-ink2"
+        >
           <span
             className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ background: tone === "good" ? "var(--good)" : tone === "bad" ? "var(--bad)" : "var(--ink-muted)" }}
+            style={{
+              background:
+                tone === "good"
+                  ? "var(--good)"
+                  : tone === "bad"
+                    ? "var(--bad)"
+                    : "var(--ink-muted)",
+            }}
           />
           <span>{s}</span>
         </li>
@@ -751,48 +1275,74 @@ export function ResearchPanel({ memo }: { memo: Memo }) {
   return (
     <div className="space-y-5">
       <SectionCard title="Executive Summary">
-        <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">{memo.summary}</p>
+        <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
+          {memo.summary}
+        </p>
       </SectionCard>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard title="Bull Case"><List items={memo.bull} tone="good" /></SectionCard>
-        <SectionCard title="Bear Case"><List items={memo.bear} tone="bad" /></SectionCard>
+        <SectionCard title="Bull Case">
+          <List items={memo.bull} tone="good" />
+        </SectionCard>
+        <SectionCard title="Bear Case">
+          <List items={memo.bear} tone="bad" />
+        </SectionCard>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <SectionCard title="Strengths">
-          {memo.strengths.length ? <List items={memo.strengths} tone="good" />
-            : <p className="px-4 py-3.5 text-[13px] text-muted">None identified from the indexed metrics.</p>}
+          {memo.strengths.length ? (
+            <List items={memo.strengths} tone="good" />
+          ) : (
+            <p className="px-4 py-3.5 text-[13px] text-muted">
+              None identified from the indexed metrics.
+            </p>
+          )}
         </SectionCard>
         <SectionCard title="Weaknesses">
-          {memo.weaknesses.length ? <List items={memo.weaknesses} tone="bad" />
-            : <p className="px-4 py-3.5 text-[13px] text-muted">None identified from the indexed metrics.</p>}
+          {memo.weaknesses.length ? (
+            <List items={memo.weaknesses} tone="bad" />
+          ) : (
+            <p className="px-4 py-3.5 text-[13px] text-muted">
+              None identified from the indexed metrics.
+            </p>
+          )}
         </SectionCard>
       </div>
 
-      <SectionCard title="Risks"><List items={memo.risks} tone="bad" /></SectionCard>
+      <SectionCard title="Risks">
+        <List items={memo.risks} tone="bad" />
+      </SectionCard>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <SectionCard title="Momentum">
-          <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">{memo.momentum}</p>
+          <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
+            {memo.momentum}
+          </p>
         </SectionCard>
         <SectionCard title="Competition">
-          <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">{memo.competition}</p>
+          <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
+            {memo.competition}
+          </p>
         </SectionCard>
       </div>
 
       {memo.developments.length > 0 && (
-        <SectionCard title="Recent Developments"><List items={memo.developments} /></SectionCard>
+        <SectionCard title="Recent Developments">
+          <List items={memo.developments} />
+        </SectionCard>
       )}
 
       <SectionCard title="Long-term Outlook">
-        <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">{memo.outlook}</p>
+        <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
+          {memo.outlook}
+        </p>
       </SectionCard>
 
       <p className="text-[11px] leading-relaxed text-muted">
-        This memo is generated from indexed on-chain and public data at page load. Every claim
-        restates a measured figure shown elsewhere on this page — it contains no forecasts and is
-        not investment advice.
+        This memo is generated from indexed on-chain and public data at page
+        load. Every claim restates a measured figure shown elsewhere on this
+        page — it contains no forecasts and is not investment advice.
       </p>
     </div>
   );
@@ -804,7 +1354,14 @@ export function GovernancePanel({ d }: { d: ProjectDetail }) {
   const { proposals, project: p } = d;
   return (
     <div className="space-y-5">
-      <SectionCard title="Proposals" right={<span className="text-[11px] text-muted">{proposals.length} indexed</span>}>
+      <SectionCard
+        title="Proposals"
+        right={
+          <span className="text-[11px] text-muted">
+            {proposals.length} indexed
+          </span>
+        }
+      >
         {proposals.length === 0 ? (
           <div className="p-4">
             <DataGap
@@ -816,16 +1373,38 @@ export function GovernancePanel({ d }: { d: ProjectDetail }) {
         ) : (
           <div className="scroll-x">
             <table className="itable text-[13px]">
-              <thead><tr><th>#</th><th>Proposal</th><th>State</th><th className="!text-right">Date</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Proposal</th>
+                  <th>State</th>
+                  <th className="!text-right">Date</th>
+                </tr>
+              </thead>
               <tbody>
                 {proposals.map((pr, i) => (
                   <tr key={i}>
                     <td className="num text-muted">{pr.number ?? "—"}</td>
                     <td className="max-w-[420px] truncate">
-                      {pr.url ? <a href={pr.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{pr.title ?? "Proposal"}</a> : (pr.title ?? "Proposal")}
+                      {pr.url ? (
+                        <a
+                          href={pr.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-accent"
+                        >
+                          {pr.title ?? "Proposal"}
+                        </a>
+                      ) : (
+                        (pr.title ?? "Proposal")
+                      )}
                     </td>
-                    <td><StatusBadge status={pr.state} /></td>
-                    <td className="num text-right text-ink2">{fmtDate(pr.created_ts)}</td>
+                    <td>
+                      <StatusBadge status={pr.state} />
+                    </td>
+                    <td className="num text-right text-ink2">
+                      {fmtDate(pr.created_ts)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -836,10 +1415,11 @@ export function GovernancePanel({ d }: { d: ProjectDetail }) {
 
       <SectionCard title="Governance Model">
         <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
-          {p.name} is governed by MetaDAO futarchy: proposals are decided by conditional prediction
-          markets rather than token votes. Each proposal spawns pass and fail markets, and the
-          outcome is determined by which market prices the token higher — so the treasury is
-          steered by traders forecasting value, not by turnout.
+          {p.name} is governed by MetaDAO futarchy: proposals are decided by
+          conditional prediction markets rather than token votes. Each proposal
+          spawns pass and fail markets, and the outcome is determined by which
+          market prices the token higher — so the treasury is steered by traders
+          forecasting value, not by turnout.
         </p>
       </SectionCard>
     </div>
@@ -848,21 +1428,37 @@ export function GovernancePanel({ d }: { d: ProjectDetail }) {
 
 // ----------------------------------------------------------------- timeline
 
-export function TimelinePanel({ events }: {
-  events: { ts: number; type: string; title: string; detail: string | null; url: string | null }[];
+export function TimelinePanel({
+  events,
+}: {
+  events: {
+    ts: number;
+    type: string;
+    title: string;
+    detail: string | null;
+    url: string | null;
+  }[];
 }) {
   if (!events.length) {
-    return <div className="card px-4 py-8 text-center text-[13px] text-muted">No events indexed yet.</div>;
+    return (
+      <div className="card px-4 py-8 text-center text-[13px] text-muted">
+        No events indexed yet.
+      </div>
+    );
   }
   return (
     <div className="card">
       <ul className="divide-y divide-grid">
         {events.map((e, i) => (
           <li key={i} className="flex gap-4 px-4 py-3">
-            <span className="num w-24 shrink-0 pt-0.5 text-[12px] text-muted">{fmtDate(e.ts)}</span>
+            <span className="num w-24 shrink-0 pt-0.5 text-[12px] text-muted">
+              {fmtDate(e.ts)}
+            </span>
             <span className="relative flex w-3 shrink-0 justify-center">
               <span className="absolute top-1.5 h-2 w-2 rounded-full bg-accent" />
-              {i < events.length - 1 && <span className="absolute top-4 bottom-[-14px] w-px bg-grid" />}
+              {i < events.length - 1 && (
+                <span className="absolute top-4 bottom-[-14px] w-px bg-grid" />
+              )}
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-2">
@@ -870,11 +1466,26 @@ export function TimelinePanel({ events }: {
                   {e.type.replace(/_/g, " ")}
                 </span>
                 <span className="text-[13px]">
-                  {e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent">{e.title}</a> : e.title}
+                  {e.url ? (
+                    <a
+                      href={e.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-accent"
+                    >
+                      {e.title}
+                    </a>
+                  ) : (
+                    e.title
+                  )}
                 </span>
-                <span className="ml-auto text-[11px] text-muted">{timeAgo(e.ts)}</span>
+                <span className="ml-auto text-[11px] text-muted">
+                  {timeAgo(e.ts)}
+                </span>
               </div>
-              {e.detail && <p className="mt-0.5 text-[12px] text-ink2">{e.detail}</p>}
+              {e.detail && (
+                <p className="mt-0.5 text-[12px] text-ink2">{e.detail}</p>
+              )}
             </div>
           </li>
         ))}
