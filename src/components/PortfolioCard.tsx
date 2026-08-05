@@ -8,8 +8,18 @@ import { fmtUsd } from "@/lib/format";
  * Portfolio card, per the design's "Total Value" panel. Shows the connected
  * wallet's real USDC + SOL — never a fabricated balance. Position tracking
  * across MetaDAO tokens arrives with the trading release.
+ *
+ * `hideWhenDisconnected` drops the card entirely rather than showing its empty
+ * state. It is opt-in because the two placements want different things: the
+ * home page leads with the hero and has no room for a card of dashes, while the
+ * project page's rail sits beside the trade panel, where the card's connect
+ * button is the prompt that gets a reader trading.
  */
-export function PortfolioCard() {
+export function PortfolioCard({
+  hideWhenDisconnected = false,
+}: {
+  hideWhenDisconnected?: boolean;
+}) {
   const w = useWallet();
   const [hidden, setHidden] = useState(false);
 
@@ -17,6 +27,10 @@ export function PortfolioCard() {
     w.usdcBalance != null || w.solBalance != null
       ? (w.usdcBalance ?? 0) // SOL priced separately later; USDC is 1:1
       : null;
+
+  // After the hooks, never before — an early return above them would change
+  // the hook order between connected and disconnected renders.
+  if (hideWhenDisconnected && !w.address) return null;
 
   return (
     <div className="card p-5">
