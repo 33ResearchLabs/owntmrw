@@ -72,14 +72,16 @@ export function Metric({
 }
 
 /**
- * A grid of metrics with the empty ones dropped.
+ * A dense grid of metrics with the empty ones dropped, for `SectionCard`-scale
+ * panels. Distinct from the display-scale `MetricGrid` below it — that one is
+ * for `DashboardCard`'s bigger, hero-style tiles.
  *
  * Panels used to render every tile unconditionally, so a token that never had a
  * public sale showed seven dashes for figures that do not exist for it — which
  * reads as a broken page rather than an inapplicable one. Same convention the
  * project brief already follows: no data, no tile.
  */
-export function MetricGrid({
+export function DenseMetricGrid({
   tiles,
 }: {
   tiles: (false | null | undefined | {
@@ -116,6 +118,118 @@ export function SectionCard({
       </div>
       {children}
     </section>
+  );
+}
+
+/* ------------------------------------------------------- dashboard cards --- */
+
+/**
+ * The display-scale card: a bigger title and a controls slot that sits on its
+ * own baseline rather than the title's, so an outlined button never drags the
+ * heading off-centre. Deliberately separate from `SectionCard` — the dense
+ * sections elsewhere on the page are still correct at their current scale.
+ */
+export function DashboardCard({
+  title,
+  right,
+  children,
+}: {
+  title: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="card overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-5 sm:px-6">
+        <h3 className="text-[19px] font-semibold leading-tight tracking-tight">{title}</h3>
+        {right != null && <div className="flex flex-wrap items-center gap-2">{right}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** Outlined action in a card header. Renders nothing without a destination. */
+export function CardAction({ href, children }: { href: string | null; children: React.ReactNode }) {
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-line2 px-3 py-1.5 text-[12px] font-medium text-ink2 transition-colors duration-150 hover:border-accent hover:text-accent"
+    >
+      {children}
+      <svg
+        width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden
+      >
+        <path d="M14 4h6v6" /><path d="M20 4 10.5 13.5" /><path d="M19 14.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4.5" />
+      </svg>
+    </a>
+  );
+}
+
+/** Pill for a categorical tag in a card header (e.g. the raise track). */
+export function CardTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-line2 bg-surface2 px-2.5 py-1 text-[10px] uppercase tracking-[0.08em] text-ink2">
+      <span className="h-1.5 w-1.5 rounded-full bg-muted" aria-hidden />
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Metric grid with hairline rules between every cell.
+ *
+ * The rules are the 1px grid gaps showing the divider colour through, not
+ * per-cell borders: at 1/2/4 columns the wrap points move, and hand-placed
+ * borders would leave a stray edge on whichever cell happens to end a row.
+ */
+export function MetricGrid({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 gap-px border-y border-grid bg-grid sm:grid-cols-2 lg:grid-cols-4">
+      {children}
+    </div>
+  );
+}
+
+/** One cell of a `MetricGrid`. Same props as `Metric`, at display scale. */
+export function MetricCell({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  tone?: "good" | "bad";
+}) {
+  return (
+    <div className="flex flex-col bg-surface px-5 py-4 sm:py-5">
+      <div className="text-[10px] uppercase tracking-[0.09em] text-muted">{label}</div>
+      <div
+        className={`num mt-2 text-[26px] font-semibold leading-none tracking-tight ${
+          tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : ""
+        }`}
+      >
+        {value}
+      </div>
+      {sub != null && <div className="mt-2 text-[11.5px] leading-snug text-muted">{sub}</div>}
+    </div>
+  );
+}
+
+/** Boxed note beneath a `MetricGrid` — caveats, provenance, methodology. */
+export function CardNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="px-5 py-5 sm:px-6">
+      <p className="rounded-xl border border-line bg-surface2 px-4 py-3.5 text-[12px] leading-relaxed text-muted">
+        {children}
+      </p>
+    </div>
   );
 }
 
@@ -597,7 +711,7 @@ export function HoldersPanel({
           </span>
         }
       >
-        <MetricGrid
+        <DenseMetricGrid
             tiles={[
               cur != null && { label: "Total Holders", value: fmtNum(cur) },
               // Kept even when empty: unlike the tiles below, these are metrics
@@ -852,7 +966,7 @@ export function TreasuryPanel({ d }: { d: ProjectDetail }) {
           ) : undefined
         }
       >
-        <MetricGrid
+        <DenseMetricGrid
           tiles={[
             treasuryValue != null && {
               label: "Current Value",
@@ -972,70 +1086,78 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   const holdersNow = hh.length ? hh[hh.length - 1].holder_count : null;
 
   return (
-    <SectionCard
+    <DashboardCard
       title="Performance Since Raise"
-      right={
-        p.raise_source_url ? (
-          <a
-            href={p.raise_source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] text-accent hover:underline"
-          >
-            raise source ↗
-          </a>
-        ) : undefined
-      }
+      right={<CardAction href={p.raise_source_url}>Data source</CardAction>}
     >
-      <MetricGrid
-        tiles={[
-          rp && {
-            label: "Raise Price",
-            value: `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`,
-            sub: rp.derived ? "derived: raise ÷ 10M sold" : undefined,
-          },
-          cur != null && { label: "Current Price", value: fmtPrice(cur) },
-          roi != null && { label: "ROI Since Raise", value: <Delta v={roi} /> },
-          drawdown != null && {
-            label: "Current Drawdown", value: <Delta v={drawdown} />, sub: "from all-time high",
-          },
-          ath != null && {
-            label: "ATH", value: fmtPrice(ath),
-            sub: athRet != null ? `${fmtPct(athRet)} vs raise` : undefined,
-          },
-          atl != null && {
-            label: "ATL", value: fmtPrice(atl),
-            sub: atlRet != null ? `${fmtPct(atlRet)} vs raise` : undefined,
-          },
-          daysToAth != null && {
-            label: "Days to ATH", value: `${daysToAth}d`,
-            sub: athTs ? fmtDate(athTs) : undefined,
-          },
-          treasuryValue != null && {
-            label: "Treasury Remaining",
-            value: treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue),
-          },
-          p.raise_contributors != null && {
-            label: "Contributors at Raise", value: fmtNum(p.raise_contributors),
-          },
-          holdersNow != null && { label: "Holders Now", value: fmtNum(holdersNow) },
-          p.raise_committed_usd != null && {
-            label: "Committed", value: fmtUsd(p.raise_committed_usd),
-            sub: p.raise_amount_usd
-              ? `${Math.round(p.raise_committed_usd / p.raise_amount_usd)}× oversubscribed`
-              : undefined,
-          },
-          p.raise_fdv_usd != null && { label: "Raise FDV", value: fmtUsd(p.raise_fdv_usd) },
-        ]}
-      />
+      <MetricGrid>
+        {rp && (
+          <MetricCell
+            label="Raise Price"
+            value={`${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`}
+            sub={rp.derived ? "derived: raise ÷ 10M sold" : undefined}
+          />
+        )}
+        {cur != null && <MetricCell label="Current Price" value={fmtPrice(cur)} />}
+        {roi != null && <MetricCell label="ROI Since Raise" value={<Delta v={roi} />} />}
+        {drawdown != null && (
+          <MetricCell label="Current Drawdown" value={<Delta v={drawdown} />} sub="from all-time high" />
+        )}
+        {ath != null && (
+          <MetricCell
+            label="ATH"
+            value={fmtPrice(ath)}
+            sub={athRet != null ? `${fmtPct(athRet)} vs raise` : undefined}
+          />
+        )}
+        {atl != null && (
+          <MetricCell
+            label="ATL"
+            value={fmtPrice(atl)}
+            sub={atlRet != null ? `${fmtPct(atlRet)} vs raise` : undefined}
+          />
+        )}
+        {daysToAth != null && (
+          <MetricCell label="Days to ATH" value={`${daysToAth}d`} sub={athTs ? fmtDate(athTs) : undefined} />
+        )}
+        {treasuryValue != null && (
+          <MetricCell
+            label="Treasury Remaining"
+            value={treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)}
+            // Same expression and rounding as the Treasury dimension in
+            // `analytics.ts`, so the two places cannot print different figures.
+            sub={
+              p.raise_amount_usd
+                ? `${((treasuryValue / p.raise_amount_usd) * 100).toFixed(0)}% of raise still held`
+                : undefined
+            }
+          />
+        )}
+        {p.raise_contributors != null && (
+          <MetricCell label="Contributors at Raise" value={fmtNum(p.raise_contributors)} />
+        )}
+        {holdersNow != null && <MetricCell label="Holders Now" value={fmtNum(holdersNow)} />}
+        {p.raise_committed_usd != null && (
+          <MetricCell
+            label="Committed"
+            value={fmtUsd(p.raise_committed_usd)}
+            sub={
+              p.raise_amount_usd
+                ? `${Math.round(p.raise_committed_usd / p.raise_amount_usd)}× oversubscribed`
+                : undefined
+            }
+          />
+        )}
+        {p.raise_fdv_usd != null && <MetricCell label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />}
+      </MetricGrid>
       {!p.raise_track && (
-        <p className="border-t border-grid px-4 py-2.5 text-[11px] text-muted">
+        <CardNote>
           Not a launchpad sale, so the public-sale figures — per-token price,
           minimum, commitments, contributor count — do not exist for this token
           and are omitted rather than shown empty.
-        </p>
+        </CardNote>
       )}
-    </SectionCard>
+    </DashboardCard>
   );
 }
 

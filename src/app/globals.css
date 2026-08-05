@@ -101,6 +101,53 @@ a { color: inherit; text-decoration: none; }
     linear-gradient(180deg, #161615 0%, #101010 100%);
 }
 
+/*
+ * Photographic variant of `.hero`. A modifier rather than a change to `.hero`
+ * itself, because the "next generation of great companies" card on the home
+ * page shares that class and keeps the plain gradient treatment.
+ *
+ * Layer order is top-to-bottom: a veil, the artwork, then the original `.hero`
+ * gradients. The gradients are unreachable while the image loads clean, and are
+ * kept deliberately — if the PNG 404s or is still in flight, the card falls back
+ * to exactly its previous appearance instead of to bare surface colour.
+ */
+.hero-banner {
+  background:
+    /* Raked left-to-right so the veil is heaviest under the copy and thins out
+       over the artwork's right-hand side, which carries the globe. */
+    linear-gradient(
+      100deg,
+      rgba(8, 10, 16, 0.93) 0%,
+      rgba(8, 10, 16, 0.78) 34%,
+      rgba(8, 10, 16, 0.42) 66%,
+      rgba(8, 10, 16, 0.18) 100%
+    ),
+    url("/banner.png") center / cover no-repeat,
+    radial-gradient(120% 90% at 78% 105%, rgba(57, 135, 229, 0.30) 0%, rgba(24, 79, 149, 0.18) 28%, rgba(13, 13, 13, 0) 62%),
+    radial-gradient(90% 70% at 85% 118%, #0d366b 0%, rgba(13, 13, 13, 0) 55%),
+    linear-gradient(180deg, #161615 0%, #101010 100%);
+}
+
+/*
+ * The artwork is a wide 2.5:1 plate. `cover` keeps it undistorted at every
+ * width, but on a narrow viewport that crops to a slim central column, so the
+ * veil is eased off there — at that crop the frame is nearly flat navy already
+ * and the full-strength veil just reads as mud.
+ */
+@media (max-width: 640px) {
+  .hero-banner {
+    background:
+      linear-gradient(
+        180deg,
+        rgba(8, 10, 16, 0.82) 0%,
+        rgba(8, 10, 16, 0.66) 55%,
+        rgba(8, 10, 16, 0.5) 100%
+      ),
+      url("/banner.png") center / cover no-repeat,
+      linear-gradient(180deg, #161615 0%, #101010 100%);
+  }
+}
+
 .hero-glow {
   position: absolute;
   inset-inline: 0;

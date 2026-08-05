@@ -1,9 +1,24 @@
 import Link from "next/link";
 import { fmtPct } from "@/lib/format";
 
-export function Delta({ v }: { v: number | null | undefined }) {
+/**
+ * A signed percentage, coloured by direction.
+ *
+ * `notation` picks how the direction is written, not what it is: "arrow" is the
+ * dense table form (a 9px glyph reads as a tick beside 12px text), "sign" is the
+ * form that holds up at display sizes, where a triangle that small next to a
+ * 26px number just looks like grit. Same number either way.
+ */
+export function Delta({
+  v,
+  notation = "arrow",
+}: {
+  v: number | null | undefined;
+  notation?: "arrow" | "sign";
+}) {
   if (v == null || !Number.isFinite(v)) return <span className="text-muted">—</span>;
   const cls = v > 0 ? "text-good" : v < 0 ? "text-bad" : "text-ink2";
+  if (notation === "sign") return <span className={`num ${cls}`}>{fmtPct(v)}</span>;
   const arrow = v > 0 ? "▲" : v < 0 ? "▼" : "";
   return (
     <span className={`num ${cls}`}>
