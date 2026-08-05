@@ -1,22 +1,23 @@
 import type { ProjectDetail } from "@/lib/queries";
 import { DAY, changeVsAgo } from "@/lib/series";
 import { fmtUsd, timeAgo } from "@/lib/format";
-import {
-  IconBadge, Sparkline, DeltaChip, MeterBar, ScaleMarker, type IconName,
-} from "./viz";
+import { Sparkline, DeltaChip, MeterBar, ScaleMarker } from "./viz";
 
+/**
+ * A label sat beside a tinted icon here, six different glyphs for six tiles.
+ * They encoded nothing — the label already said which measure it was — and
+ * they were the last thing making this card look unlike the metric grids
+ * beside it, which carry a plain label and no ornament.
+ */
 function Tile({
-  icon, color, label, value, sub, children,
+  label, value, sub, children,
 }: {
-  icon: IconName; color: string; label: string; value: string;
+  label: string; value: string;
   sub?: string; children?: React.ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-line bg-surface2/40 px-4 py-3.5">
-      <div className="flex items-center gap-2.5">
-        <IconBadge name={icon} color={color} />
-        <span className="text-[10.5px] uppercase tracking-[0.08em] text-muted">{label}</span>
-      </div>
+      <span className="text-[10.5px] uppercase tracking-[0.08em] text-muted">{label}</span>
       <div className="num mt-2 text-[22px] font-bold tracking-tight">{value}</div>
       {sub && <div className="mt-0.5 text-[11.5px] text-muted">{sub}</div>}
       {children && <div className="mt-2.5">{children}</div>}
@@ -33,7 +34,7 @@ function Tile({
  * actually span time. Liquidity has no candle equivalent and so has no series
  * until pool depth is archived per day.
  */
-export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
+export function MarketDepthPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number }) {
   const { project: p, latest, candles, quoteSource } = d;
 
   /**
@@ -56,7 +57,6 @@ export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
   // quote carries no volume — its v is 0 meaning "unknown", not "nothing
   // traded". Left in, it reads as a total collapse in volume every single day.
   const volSeries = candles.filter((c) => c.v > 0).map((c) => ({ ts: c.ts, v: c.v }));
-  const now = Math.floor(Date.now() / 1000);
 
   const turnover = latest?.vol24h && latest.liquidity_usd
     ? latest.vol24h / latest.liquidity_usd : null;
@@ -99,24 +99,24 @@ export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
 
       <div className="grid gap-3 px-5 py-4 md:grid-cols-2 xl:grid-cols-3">
         <Tile
-          icon="droplet" color="var(--accent)" label="Liquidity"
+          label="Liquidity"
           value={fmtUsd(latest?.liquidity_usd)} sub="pool depth, USD"
         />
 
         <Tile
-          icon="bars" color="#9b7ae0" label="24h Volume"
+          label="24h Volume"
           value={fmtUsd(latest?.vol24h)}
           sub={noVolumeNote ?? "traded, USD"}
         >
           <DeltaChip
-            pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, now)}
+            pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, nowSec)}
             period="7d"
             reason={latest?.vol24h == null ? "no live volume to compare" : undefined}
           />
         </Tile>
 
         <Tile
-          icon="target" color="var(--good)" label="Volume / Depth"
+          label="Volume / Depth"
           value={turnover != null ? `${turnover.toFixed(2)}×` : "—"}
           // Turnover divides volume by depth, so it goes with its numerator.
           sub={turnover == null && noVolumeNote ? "needs 24h volume — " + noVolumeNote : "turnover ratio"}
@@ -134,27 +134,27 @@ export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
         </Tile>
 
         <Tile
-          icon="pie" color="#e08a3c" label="Market Cap"
+          label="Market Cap"
           value={fmtUsd(latest?.mcap)} sub="circulating supply"
         >
           <Sparkline values={mcapSeries.map((s) => s.v)} color="#e08a3c" />
           <div className="mt-1.5">
-            <DeltaChip pct={changeVsAgo(latest?.mcap, mcapSeries, 7 * DAY, now)} period="7d" />
+            <DeltaChip pct={changeVsAgo(latest?.mcap, mcapSeries, 7 * DAY, nowSec)} period="7d" />
           </div>
         </Tile>
 
         <Tile
-          icon="layers" color="var(--accent)" label="FDV"
+          label="FDV"
           value={fmtUsd(latest?.fdv)} sub="total supply"
         >
           <Sparkline values={fdvSeries.map((s) => s.v)} color="var(--accent)" />
           <div className="mt-1.5">
-            <DeltaChip pct={changeVsAgo(latest?.fdv, fdvSeries, 7 * DAY, now)} period="7d" />
+            <DeltaChip pct={changeVsAgo(latest?.fdv, fdvSeries, 7 * DAY, nowSec)} period="7d" />
           </div>
         </Tile>
 
         <Tile
-          icon="percent" color="var(--warn)" label="Tradeable Float"
+          label="Tradeable Float"
           value={floatPct != null ? `${floatPct.toFixed(0)}%` : "—"} sub="of total supply"
         >
           <MeterBar
