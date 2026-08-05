@@ -14,7 +14,7 @@ import {
   timeAgo,
   shortAddr,
 } from "@/lib/format";
-import { BarList, Delta, StatusBadge } from "./ui";
+import { Delta, StatusBadge } from "./ui";
 import { MoreRows } from "./MoreRows";
 
 /** Shown wherever a section needs data we cannot obtain from public sources. */
@@ -525,63 +525,6 @@ function SupplyAllocation({ p }: { p: ProjectDetail["project"] }) {
   );
 }
 
-/**
- * The top holders as bars, because the table buries the shape of the thing: one
- * wallet at 50% and nine under 6% is a different asset from ten wallets at 5%,
- * and that is visible in two seconds here and not at all in a column of numbers.
- *
- * Bars scale to the largest holder, not to 100 — on a normal distribution every
- * bar would otherwise be a sliver. The percentage rides each bar's tip so the
- * absolute value is never trapped in the geometry.
- */
-function ConcentrationChart({
-  holders,
-}: {
-  holders: ProjectDetail["topHolders"];
-}) {
-  const top = holders.filter((h) => h.pct != null).slice(0, 10);
-  if (top.length < 2) return null;
-
-  // A labelled account is infrastructure — a pool holding 3% is not a whale.
-  // Splitting them out stops the chart reading as concentration it isn't.
-  const anyVenue = top.some((h) => h.label);
-
-  return (
-    <SectionCard
-      title="Concentration"
-      right={
-        anyVenue ? (
-          <span className="flex items-center gap-3 text-[11px] text-muted">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: "var(--accent)" }} />
-              Wallet
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: "var(--series-none)" }} />
-              Pool / venue
-            </span>
-          </span>
-        ) : undefined
-      }
-    >
-      <BarList
-        items={top.map((h) => {
-          const owner = h.owner ?? h.address;
-          return {
-            key: String(h.rank),
-            label: h.label ?? shortAddr(owner),
-            value: h.pct,
-            display: `${h.pct.toFixed(2)}%`,
-            muted: !!h.label,
-            title: owner,
-            href: `/wallet/${owner}`,
-          };
-        })}
-      />
-    </SectionCard>
-  );
-}
-
 export function HoldersPanel({
   d,
   crossCounts,
@@ -694,7 +637,6 @@ export function HoldersPanel({
       </SectionCard>
 
       <SupplyAllocation p={p} />
-      <ConcentrationChart holders={topHolders} />
 
       <SectionCard title="Top Holders">
         {topHolders.length === 0 ? (
