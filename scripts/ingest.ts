@@ -73,6 +73,9 @@ async function main() {
       liquidity_tokens: s.liquidity ?? undefined,
       launch_address: s.launchAddress ?? undefined,
       treasury_address: p.treasury_address ?? s.daoAddress ?? undefined,
+      team_address: s.teamAddress ?? undefined,
+      amm_vault_address: s.ammVaultAddress ?? undefined,
+      lp_pool_address: s.lpPoolAddress ?? undefined,
     });
     const lockedPct = s.teamPackage && s.totalSupply ? (s.teamPackage / s.totalSupply) * 100 : 0;
     console.log(
@@ -278,11 +281,18 @@ async function main() {
         const pct = supply ? (acc.uiAmount / supply) * 100 : null;
         if (rank <= 10 && pct) top10 += pct;
         const known = owner ? KNOWN_WALLETS[owner] : null;
+        // Match on the token account as well as its owner: the allocation
+        // vaults are token accounts, so an owner-only check misses them.
+        const isRole = (addr: string | null) =>
+          !!addr && (acc.address === addr || owner === addr);
         const label =
           known?.label ??
-          (owner && owner === p.treasury_address ? "DAO Treasury" : null) ??
-          (acc.address === p.pool_address || owner === p.pool_address ? "Liquidity Pool" : null) ??
-          (owner && owner === p.launch_address ? "Launch Vault" : null);
+          (isRole(p.treasury_address) ? "DAO Treasury" : null) ??
+          (isRole(p.team_address) ? "Team Package" : null) ??
+          (isRole(p.amm_vault_address) ? "Futarchy AMM" : null) ??
+          (isRole(p.lp_pool_address) ? "Meteora LP" : null) ??
+          (isRole(p.pool_address) ? "Liquidity Pool" : null) ??
+          (isRole(p.launch_address) ? "Launch Vault" : null);
         insert.run(p.id, rank, acc.address, owner, acc.uiAmount, pct, label, now());
         rank++;
       }

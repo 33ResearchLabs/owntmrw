@@ -1,7 +1,8 @@
 import type { Project } from "@/lib/db";
 import type { HealthScore } from "@/lib/analytics";
 import { scoreColor } from "@/lib/analytics";
-import { fmtUsd, fmtNum, fmtDate, shortAddr } from "@/lib/format";
+import { raisePriceOf } from "@/lib/queries";
+import { fmtUsd, fmtPrice, fmtNum, fmtDate, shortAddr } from "@/lib/format";
 
 /**
  * The project's identity card: what it is, who runs it, when it launched and
@@ -22,7 +23,8 @@ export function ProjectFacts({
   if (p.raise_amount_usd != null) {
     rows.push(["Raised", p.raise_amount_usd === 0 ? "$0 (refunded)" : fmtUsd(p.raise_amount_usd)]);
   }
-  if (p.raise_price != null) rows.push(["Raise price", fmtUsd(p.raise_price, { compact: false })]);
+  const rp = raisePriceOf(p);
+  if (rp) rows.push(["Raise price", `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`]);
   if (p.raise_contributors != null) rows.push(["Contributors", fmtNum(p.raise_contributors)]);
   if (treasuryValue != null) {
     rows.push(["Treasury", treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)]);

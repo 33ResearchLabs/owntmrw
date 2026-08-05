@@ -39,11 +39,12 @@ export default async function ScreenerPage() {
             image_url: r.image_url, category: r.category,
             price_usd: r.price_usd, mcap: r.mcap, fdv: r.fdv,
             liquidity_usd: r.liquidity_usd, vol24h: r.vol24h, change_24h: r.change_24h,
-            raise_amount_usd: r.raise_amount_usd, roi_since_raise: r.roi_since_raise,
+            raise_amount_usd: r.raise_amount_usd, raise_price: r.raise_price,
+            raise_price_derived: r.raise_price_derived,
+            roi_since_raise: r.roi_since_raise,
             ath_return: r.ath_return, from_ath: r.from_ath, treasury_usd: r.treasury_usd,
-            holder_count: r.holder_count, holder_change_7d: r.holder_change_7d,
+            holder_count: r.holder_count,
             gh_stars: r.gh_stars, gh_last_push: r.gh_last_push,
-            proposal_count: r.proposal_count,
           }))}
         />
       )}

@@ -3,18 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Delta, Logo, StatusBadge } from "./ui";
-import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
+import { fmtUsd, fmtPrice, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 
 export interface ScreenerRowDTO {
   slug: string; name: string; symbol: string | null; status: string | null;
   image_url: string | null; category: string | null;
   price_usd: number | null; mcap: number | null; fdv: number | null;
   liquidity_usd: number | null; vol24h: number | null; change_24h: number | null;
-  raise_amount_usd: number | null; roi_since_raise: number | null; ath_return: number | null;
+  raise_amount_usd: number | null; raise_price: number | null; raise_price_derived: boolean;
+  roi_since_raise: number | null; ath_return: number | null;
   from_ath: number | null;
   treasury_usd: number | null;
-  holder_count: number | null; holder_change_7d: number | null;
-  gh_stars: number | null; gh_last_push: number | null; proposal_count: number;
+  holder_count: number | null;
+  gh_stars: number | null; gh_last_push: number | null;
 }
 
 type SortKey = keyof ScreenerRowDTO;
@@ -87,13 +88,14 @@ const COLS: { key: SortKey; label: string; align?: "right" }[] = [
   { key: "liquidity_usd", label: "Liquidity", align: "right" },
   { key: "vol24h", label: "Vol 24h", align: "right" },
   { key: "raise_amount_usd", label: "Raised", align: "right" },
+  // Sits between the amount and the return because it is the baseline the
+  // return is measured from — without it, ROI is a percentage of nothing visible.
+  { key: "raise_price", label: "Raise Price", align: "right" },
   { key: "roi_since_raise", label: "ROI vs Raise", align: "right" },
   { key: "ath_return", label: "ATH Return", align: "right" },
   { key: "from_ath", label: "From ATH", align: "right" },
   { key: "treasury_usd", label: "Treasury", align: "right" },
   { key: "holder_count", label: "Holders", align: "right" },
-  { key: "holder_change_7d", label: "Holders 7d", align: "right" },
-  { key: "proposal_count", label: "Proposals", align: "right" },
   { key: "gh_stars", label: "GH ★", align: "right" },
   { key: "gh_last_push", label: "Last Commit", align: "right" },
 ];
@@ -180,7 +182,7 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
                   </Link>
                 </td>
                 <td><StatusBadge status={r.status} /></td>
-                <td className="num text-right">{fmtUsd(r.price_usd)}</td>
+                <td className="num text-right">{fmtPrice(r.price_usd)}</td>
                 <td className="text-right"><Delta v={r.change_24h} /></td>
                 <td className="num text-right">{fmtUsd(r.mcap)}</td>
                 <td className="num text-right">{fmtUsd(r.liquidity_usd)}</td>
@@ -189,6 +191,15 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
                   {r.raise_amount_usd === 0
                     ? <span className="text-muted" title="Raise failed to reach its minimum; all contributions refunded">$0</span>
                     : fmtUsd(r.raise_amount_usd)}
+                </td>
+                <td
+                  className="num text-right text-ink2"
+                  title={r.raise_price_derived
+                    ? "Derived: accepted raise ÷ 10,000,000 tokens sold, per MetaDAO's uniform-price sale"
+                    : undefined}
+                >
+                  {r.raise_price_derived && <span className="text-faint">~</span>}
+                  {fmtPrice(r.raise_price)}
                 </td>
                 <td className="text-right"><Delta v={r.roi_since_raise} /></td>
                 <td className="num text-right text-ink2">{fmtPct(r.ath_return)}</td>
@@ -199,8 +210,6 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
                     : fmtUsd(r.treasury_usd)}
                 </td>
                 <td className="num text-right">{fmtNum(r.holder_count)}</td>
-                <td className="text-right"><Delta v={r.holder_change_7d} /></td>
-                <td className="num text-right">{r.proposal_count || "—"}</td>
                 <td className="num text-right">{fmtNum(r.gh_stars)}</td>
                 <td className="num text-right text-ink2">{timeAgo(r.gh_last_push)}</td>
               </tr>

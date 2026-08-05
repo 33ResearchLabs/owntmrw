@@ -59,6 +59,9 @@ function migrate(d: Database.Database) {
     team_package REAL,         -- locked team performance package
     liquidity_tokens REAL,     -- tokens seeded into AMM + LP
     launch_address TEXT,
+    team_address TEXT,         -- vault holding team_package
+    amm_vault_address TEXT,    -- futarchy AMM liquidity vault
+    lp_pool_address TEXT,      -- MetaDAO's Meteora pool
     source TEXT,               -- where we discovered it
     updated_ts INTEGER
   );
@@ -205,6 +208,11 @@ function migrate(d: Database.Database) {
     ["raise_committed_usd", "REAL"],
     ["raise_fdv_usd", "REAL"],
     ["raise_track", "TEXT"],
+    // The allocation vaults. MetaDAO returned these all along; reading only the
+    // amounts left the vault holding half a launch's supply unidentifiable.
+    ["team_address", "TEXT"],
+    ["amm_vault_address", "TEXT"],
+    ["lp_pool_address", "TEXT"],
   ]);
 
   // The GitHub snapshot began as four headline counters; the development view
@@ -254,6 +262,11 @@ export interface Project {
   total_supply: number | null; circulating_supply: number | null;
   team_package: number | null; liquidity_tokens: number | null;
   launch_address: string | null;
+  /** Vault holding team_package — the largest holder of most launches. */
+  team_address: string | null;
+  /** Vaults behind liquidity_tokens, from MetaDAO rather than an aggregator. */
+  amm_vault_address: string | null;
+  lp_pool_address: string | null;
   raise_note: string | null; raise_source_url: string | null;
   raise_committed_usd: number | null; raise_fdv_usd: number | null;
   raise_track: string | null;
@@ -270,6 +283,7 @@ export function upsertProject(p: Partial<Project> & { slug: string; name: string
     "launch_ts","raise_start_ts","raise_end_ts","raise_amount_usd","raise_goal_usd",
     "raise_contributors","raise_price","initial_supply",
     "total_supply","circulating_supply","team_package","liquidity_tokens","launch_address",
+    "team_address","amm_vault_address","lp_pool_address",
     "raise_note","raise_source_url","raise_committed_usd","raise_fdv_usd","raise_track","source",
   ] as const;
   if (existing) {
