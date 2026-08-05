@@ -32,6 +32,12 @@
   --bad: #d03b3b;
   --warn: #fab219;
   --serious: #ec835a;
+
+  /* Chart series. Slot 1 is the accent above; slot 2 is its validated partner
+     (CVD ΔE 26.8 against it on this surface). --series-none is the neutral for
+     a segment that means "unattributed", which is absence, not an entity. */
+  --series-2: #d95926;
+  --series-none: #55554e;
 }
 
 @theme inline {

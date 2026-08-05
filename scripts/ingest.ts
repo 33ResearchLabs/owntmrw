@@ -11,7 +11,7 @@
  * Usage: npm run ingest            (full run)
  *        npm run ingest -- --fast  (skip candles/holders, prices only)
  */
-import { db, upsertProject, allProjects } from "../src/lib/db";
+import { db, upsertProject, allProjects, recordTreasurySnapshot } from "../src/lib/db";
 import { discoverProjects, fetchSupply } from "../src/lib/sources/metadao";
 import { fetchMarketHistory } from "../src/lib/sources/marketdata";
 import { bestPairForMint, socialsFromPair } from "../src/lib/sources/dexscreener";
@@ -40,15 +40,17 @@ async function main() {
   // 1. discovery
   console.log("[1/5] discovering projects…");
   const discovered = await discoverProjects();
+  let treasuryMoves = 0;
   for (const p of discovered) {
     const id = upsertProject(p);
-    if (p.treasury_value_usd != null) {
-      d.prepare(
-        "INSERT OR REPLACE INTO treasury_snapshots (project_id, ts, value_usd) VALUES (?,?,?)"
-      ).run(id, now(), p.treasury_value_usd);
+    if (p.treasury_value_usd != null && recordTreasurySnapshot(id, now(), p.treasury_value_usd)) {
+      treasuryMoves++;
     }
   }
-  console.log(`      ${discovered.length} projects from discovery, ${allProjects().length} total in db`);
+  console.log(
+    `      ${discovered.length} projects from discovery, ${allProjects().length} total in db` +
+    `, ${treasuryMoves} treasury balance${treasuryMoves === 1 ? "" : "s"} moved`
+  );
 
   const projects = allProjects();
 
@@ -363,7 +365,9 @@ async function main() {
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
       `).run(
         p.id, now(), r.score, r.scoreNormalised, r.rugged ? 1 : 0,
-        r.mintAuthorityEnabled ? 1 : 0, r.freezeAuthorityEnabled ? 1 : 0,
+        // Null through, never coerced: an unread authority is not a revoked one.
+        r.mintAuthorityEnabled == null ? null : r.mintAuthorityEnabled ? 1 : 0,
+        r.freezeAuthorityEnabled == null ? null : r.freezeAuthorityEnabled ? 1 : 0,
         r.lpLockedPct, r.totalHolders, r.totalLpProviders,
         r.risks.length ? JSON.stringify(r.risks) : null
       );

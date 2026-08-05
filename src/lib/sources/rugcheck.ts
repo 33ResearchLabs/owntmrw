@@ -39,8 +39,13 @@ export interface RugReport {
   /** 0-100, higher is safer. RugCheck's own normalisation. */
   scoreNormalised: number | null;
   rugged: boolean;
-  mintAuthorityEnabled: boolean;
-  freezeAuthorityEnabled: boolean;
+  /**
+   * true = an authority address is set, false = explicitly revoked, null = the
+   * report did not carry the field. Null must stay null: reporting "revoked"
+   * for a token we never checked is a safety claim we cannot support.
+   */
+  mintAuthorityEnabled: boolean | null;
+  freezeAuthorityEnabled: boolean | null;
   lpLockedPct: number | null;
   totalHolders: number | null;
   totalLpProviders: number | null;
@@ -57,6 +62,8 @@ interface RawReport {
   rugged?: boolean;
   mintAuthority?: unknown;
   freezeAuthority?: unknown;
+  /** The SPL mint account. This — not the top level — carries the authorities. */
+  token?: { mintAuthority?: unknown; freezeAuthority?: unknown };
   totalHolders?: number;
   totalLPProviders?: number;
   risks?: { name?: string; description?: string; level?: string; score?: number }[];
@@ -65,6 +72,22 @@ interface RawReport {
   }[];
   knownAccounts?: Record<string, { name?: string; type?: string }>;
   markets?: { lp?: { lpLockedPct?: number } }[];
+}
+
+/**
+ * Is a mint or freeze authority still held?
+ *
+ * The authority is the address under `token`; the top-level field of the same
+ * name is present but always null in this API version, so reading it reported
+ * every token as revoked — including ones whose own risk flags said the mint
+ * authority was live. Prefer `token`, fall back to the top level, and return
+ * null when neither is present rather than defaulting to the safe-sounding
+ * answer. An empty string is a revoked authority, not an address.
+ */
+function authorityEnabled(fromToken: unknown, fromTop: unknown): boolean | null {
+  const v = fromToken !== undefined ? fromToken : fromTop;
+  if (v === undefined) return null;
+  return v !== null && v !== "";
 }
 
 export async function tokenReport(mint: string): Promise<RugReport | null> {
@@ -102,9 +125,8 @@ export async function tokenReport(mint: string): Promise<RugReport | null> {
     score: raw.score ?? null,
     scoreNormalised: raw.score_normalised ?? null,
     rugged: !!raw.rugged,
-    // Both authorities are objects when set and null when revoked.
-    mintAuthorityEnabled: raw.mintAuthority != null,
-    freezeAuthorityEnabled: raw.freezeAuthority != null,
+    mintAuthorityEnabled: authorityEnabled(raw.token?.mintAuthority, raw.mintAuthority),
+    freezeAuthorityEnabled: authorityEnabled(raw.token?.freezeAuthority, raw.freezeAuthority),
     lpLockedPct: raw.markets?.[0]?.lp?.lpLockedPct ?? null,
     totalHolders: raw.totalHolders ?? null,
     totalLpProviders: raw.totalLPProviders ?? null,
