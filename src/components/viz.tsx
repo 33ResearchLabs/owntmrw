@@ -110,23 +110,51 @@ export function Sparkline({
   );
 }
 
-/** Discrete bars — for volume, where each period is its own quantity. */
+/**
+ * Discrete bars — for volume, where each period is its own quantity.
+ *
+ * Two things this has to survive that a naive bar chart does not. A year of
+ * daily candles is more bars than the tile has pixels, so only the most recent
+ * `maxBars` are drawn and each is allowed to shrink below a pixel rather than
+ * holding a minimum width and pushing the chart out of its container. And
+ * volume is violently skewed — one launch day can be fifty times the median —
+ * so bars are scaled to the 95th percentile instead of the maximum. Anything
+ * above it clips at full height and is drawn at full opacity so the outlier
+ * still reads as an outlier rather than quietly setting the scale for
+ * everything else.
+ */
 export function MiniBars({
-  values, height = 34, color = "var(--accent)", label = "needs more history",
+  values, height = 34, color = "var(--accent)", label = "needs more history", maxBars = 60,
 }: {
-  values: number[]; height?: number; color?: string; label?: string;
+  values: number[]; height?: number; color?: string; label?: string; maxBars?: number;
 }) {
-  const pts = values.filter((v) => Number.isFinite(v));
-  if (pts.length < MIN_SERIES_POINTS) return <EmptySeries height={height} label={label} />;
+  const all = values.filter((v) => Number.isFinite(v));
+  if (all.length < MIN_SERIES_POINTS) return <EmptySeries height={height} label={label} />;
 
-  const max = Math.max(...pts) || 1;
+  const pts = all.slice(-maxBars);
+  const sorted = [...pts].sort((a, b) => a - b);
+  const scale = sorted[Math.floor(sorted.length * 0.95)] || Math.max(...pts) || 1;
+  const clipped = pts.filter((v) => v > scale).length;
+
   return (
-    <div className="flex items-end gap-px" style={{ height }}>
+    <div
+      className="flex items-end gap-px overflow-hidden"
+      style={{ height }}
+      title={
+        `last ${pts.length} of ${all.length} periods` +
+        (clipped ? ` · ${clipped} above the 95th-percentile scale` : "")
+      }
+    >
       {pts.map((v, i) => (
         <div
           key={i}
-          className="min-w-px flex-1 rounded-t-[1px]"
-          style={{ height: `${Math.max(6, (v / max) * 100)}%`, background: color, opacity: 0.85 }}
+          className="flex-1 rounded-t-[1px]"
+          style={{
+            height: `${Math.min(100, (v / scale) * 100)}%`,
+            minHeight: 1,
+            background: color,
+            opacity: v > scale ? 1 : 0.7,
+          }}
         />
       ))}
     </div>

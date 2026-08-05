@@ -8,24 +8,37 @@ import {
 const DAY = 86400;
 
 /**
- * Change across a window, but only when the series genuinely covers it.
+ * Change from a window ago to the figure the tile is actually showing.
  *
- * Null unless the series both spans the window and carries enough points to be
- * a series at all. Without the span check the two readings furthest apart get
- * compared and labelled a week; without the point check a tile can show
- * "needs more history" beside a confident percentage.
+ * `current` is the headline value, not the last point in the series. The two
+ * are different things: the headline is a live quote while the series is
+ * archived candles, and taking the series' own last point as "now" produced a
+ * +2976% under a headline that had not moved 30× — it was measuring a
+ * week-old candle against an older one and stamping it beneath a live number.
+ *
+ * The lookback is anchored to the clock rather than to the end of the series,
+ * and must land within a fifth of the window of the date it claims. A series
+ * that has stopped updating therefore stops producing deltas instead of
+ * comparing whatever two points it happens to still hold.
  */
-function changeOver(
+function changeVsAgo(
+  current: number | null | undefined,
   series: { ts: number; v: number }[],
-  seconds: number
+  windowSec: number,
+  nowSec: number
 ): number | null {
+  if (current == null || !Number.isFinite(current)) return null;
   if (series.length < MIN_SERIES_POINTS) return null;
-  const last = series[series.length - 1];
-  const cutoff = last.ts - seconds;
-  if (series[0].ts > cutoff) return null; // series starts inside the window
-  const before = [...series].reverse().find((p) => p.ts <= cutoff);
-  if (!before || !before.v) return null;
-  return ((last.v - before.v) / before.v) * 100;
+
+  const target = nowSec - windowSec;
+  const tolerance = windowSec * 0.2;
+  let best: { ts: number; v: number } | null = null;
+  for (const p of series) {
+    if (Math.abs(p.ts - target) > tolerance) continue;
+    if (!best || Math.abs(p.ts - target) < Math.abs(best.ts - target)) best = p;
+  }
+  if (!best || !best.v) return null;
+  return ((current - best.v) / best.v) * 100;
 }
 
 function Tile({
@@ -68,6 +81,7 @@ export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
   // quote carries no volume — its v is 0 meaning "unknown", not "nothing
   // traded". Left in, it reads as a total collapse in volume every single day.
   const volSeries = candles.filter((c) => c.v > 0).map((c) => ({ ts: c.ts, v: c.v }));
+  const now = Math.floor(Date.now() / 1000);
 
   const turnover = latest?.vol24h && latest.liquidity_usd
     ? latest.vol24h / latest.liquidity_usd : null;
@@ -124,7 +138,7 @@ export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
         >
           <MiniBars values={volSeries.map((s) => s.v)} color="#9b7ae0" />
           <div className="mt-1.5">
-            <DeltaChip pct={changeOver(volSeries, 7 * DAY)} period="7d" />
+            <DeltaChip pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, now)} period="7d" />
           </div>
         </Tile>
 
@@ -150,7 +164,7 @@ export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
         >
           <Sparkline values={mcapSeries.map((s) => s.v)} color="#e08a3c" />
           <div className="mt-1.5">
-            <DeltaChip pct={changeOver(mcapSeries, 7 * DAY)} period="7d" />
+            <DeltaChip pct={changeVsAgo(latest?.mcap, mcapSeries, 7 * DAY, now)} period="7d" />
           </div>
         </Tile>
 
@@ -160,7 +174,7 @@ export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
         >
           <Sparkline values={fdvSeries.map((s) => s.v)} color="var(--accent)" />
           <div className="mt-1.5">
-            <DeltaChip pct={changeOver(fdvSeries, 7 * DAY)} period="7d" />
+            <DeltaChip pct={changeVsAgo(latest?.fdv, fdvSeries, 7 * DAY, now)} period="7d" />
           </div>
         </Tile>
 

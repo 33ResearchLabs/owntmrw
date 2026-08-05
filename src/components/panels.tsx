@@ -15,6 +15,7 @@ import {
   shortAddr,
 } from "@/lib/format";
 import { BarList, Delta, StatusBadge } from "./ui";
+import { MoreRows } from "./MoreRows";
 
 /** Shown wherever a section needs data we cannot obtain from public sources. */
 export function DataGap({
@@ -309,6 +310,9 @@ export function RiskPanel({
 
 // --------------------------------------------------------------- listings
 
+/** Venues shown before the tail is collapsed. */
+const LISTINGS_VISIBLE = 5;
+
 /**
  * Where the token actually trades. Centralised venues are called out because a
  * CEX listing is a materially different fact from another AMM pool appearing.
@@ -332,6 +336,43 @@ export function ListingsPanel({
   }
   const cex = listings.filter((l) => !l.is_dex);
   const totalVol = listings.reduce((s, l) => s + (l.volume_usd ?? 0), 0);
+
+  // Listings arrive ordered by volume, so the first five are the venues that
+  // actually matter; the tail is usually dust pools worth a few dollars a day.
+  const row = (l: ProjectDetail["listings"][number]) => (
+    <tr key={`${l.exchange}|${l.pair}`}>
+      <td className="font-medium">
+        {l.url ? (
+          <a href={l.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent">
+            {l.exchange}
+          </a>
+        ) : (
+          l.exchange
+        )}
+      </td>
+      <td className="num text-ink2">{l.pair}</td>
+      <td>
+        <span
+          className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
+            l.is_dex ? "border-line text-muted" : "border-accent/40 text-accent"
+          }`}
+        >
+          {l.is_dex ? "DEX" : "CEX"}
+        </span>
+      </td>
+      <td className="num text-right">
+        {l.volume_usd != null ? fmtUsd(l.volume_usd) : "—"}
+      </td>
+      <td className="num text-right text-muted">
+        {totalVol > 0 && l.volume_usd != null
+          ? `${((l.volume_usd / totalVol) * 100).toFixed(1)}%`
+          : "—"}
+      </td>
+    </tr>
+  );
+  const shown = listings.slice(0, LISTINGS_VISIBLE);
+  const rest = listings.slice(LISTINGS_VISIBLE);
+
   return (
     <SectionCard
       title="Exchange Listings"
@@ -359,44 +400,10 @@ export function ListingsPanel({
             </tr>
           </thead>
           <tbody>
-            {listings.map((l) => (
-              <tr key={`${l.exchange}|${l.pair}`}>
-                <td className="font-medium">
-                  {l.url ? (
-                    <a
-                      href={l.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:text-accent"
-                    >
-                      {l.exchange}
-                    </a>
-                  ) : (
-                    l.exchange
-                  )}
-                </td>
-                <td className="num text-ink2">{l.pair}</td>
-                <td>
-                  <span
-                    className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
-                      l.is_dex
-                        ? "border-line text-muted"
-                        : "border-accent/40 text-accent"
-                    }`}
-                  >
-                    {l.is_dex ? "DEX" : "CEX"}
-                  </span>
-                </td>
-                <td className="num text-right">
-                  {l.volume_usd != null ? fmtUsd(l.volume_usd) : "—"}
-                </td>
-                <td className="num text-right text-muted">
-                  {totalVol > 0 && l.volume_usd != null
-                    ? `${((l.volume_usd / totalVol) * 100).toFixed(1)}%`
-                    : "—"}
-                </td>
-              </tr>
-            ))}
+            {shown.map(row)}
+            <MoreRows count={rest.length} colSpan={5} noun="venues">
+              {rest.map(row)}
+            </MoreRows>
           </tbody>
         </table>
       </div>
