@@ -108,8 +108,18 @@ export interface SupplyInfo {
   circulatingSupply: number | null;
   /** Tokens locked in the team performance package (vesting, not circulating). */
   teamPackage: number | null;
+  /**
+   * The vault holding that package. It is the single largest holder of most
+   * launches, so without it the terminal's top holder is an unidentified whale
+   * sitting on half the supply — which is a locked allocation, not a position.
+   */
+  teamAddress: string | null;
   /** Tokens seeded into the futarchy AMM + Meteora LP. */
   liquidity: number | null;
+  /** Vault behind the futarchy AMM's share of that liquidity. */
+  ammVaultAddress: string | null;
+  /** MetaDAO's own Meteora pool, which need not be the venue DexScreener ranks first. */
+  lpPoolAddress: string | null;
   daoAddress: string | null;
   launchAddress: string | null;
   version: string | null;
@@ -147,7 +157,10 @@ export async function fetchSupply(mint: string): Promise<SupplyInfo | null> {
     totalSupply: num(data.data.totalSupply),
     circulatingSupply: num(data.data.circulatingSupply),
     teamPackage: num(entry("teamPerformancePackage")?.amount),
+    teamAddress: entry("teamPerformancePackage")?.address ?? null,
     liquidity,
+    ammVaultAddress: entry("futarchyAmmLiquidity")?.vaultAddress ?? null,
+    lpPoolAddress: entry("meteoraLpLiquidity")?.poolAddress ?? null,
     daoAddress: entry("daoAddress")?.address ?? (typeof alloc.daoAddress === "string" ? alloc.daoAddress : null),
     launchAddress: entry("launchAddress")?.address ?? (typeof alloc.launchAddress === "string" ? alloc.launchAddress : null),
     version: typeof alloc.version === "string" ? alloc.version : null,

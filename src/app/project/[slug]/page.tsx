@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import {
   projectDetail, priceIsReliable, MIN_LIQUIDITY_USD, crossProjectHolderCounts,
-  parseLanguages, parseCodeFrequency, parseRisks,
+  parseLanguages, parseCodeFrequency, parseRisks, raisePriceOf,
 } from "@/lib/queries";
 import { healthScore, insights, developerScore } from "@/lib/analytics";
 import { DevelopmentPanel } from "@/components/Development";
@@ -17,8 +17,9 @@ import {
 import { TradeTerminal } from "@/components/TradeTerminal";
 import { PortfolioCard } from "@/components/PortfolioCard";
 import { ProjectBrief } from "@/components/ProjectBrief";
+import { MarketDepthPanel } from "@/components/MarketDepth";
 import { Delta, Logo, StatTile, StatusBadge } from "@/components/ui";
-import { fmtUsd, fmtNum, fmtPct, fmtDate, timeAgo, shortAddr } from "@/lib/format";
+import { fmtUsd, fmtPrice, fmtNum, fmtPct, fmtDate, timeAgo, shortAddr } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +39,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   } = d;
 
   const tradable = priceIsReliable(latest?.liquidity_usd);
-  const roi = p.raise_price && latest?.price_usd && tradable
-    ? ((latest.price_usd - p.raise_price) / p.raise_price) * 100 : null;
-  const athReturn = p.raise_price && ath && tradable ? ((ath - p.raise_price) / p.raise_price) * 100 : null;
+  const rp = raisePriceOf(p);
+  const roi = rp && latest?.price_usd && tradable
+    ? ((latest.price_usd - rp.usd) / rp.usd) * 100 : null;
+  const athReturn = rp && ath && tradable ? ((ath - rp.usd) / rp.usd) * 100 : null;
   const fromAth = ath && latest?.price_usd && tradable ? ((latest.price_usd - ath) / ath) * 100 : null;
   const daysToAth = athTs && (p.raise_end_ts || p.launch_ts)
     ? Math.max(0, Math.round((athTs - (p.raise_end_ts ?? p.launch_ts!)) / 86400)) : null;
@@ -77,7 +79,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
         </h2>
         <span className="text-[11px] text-muted">quoted in USD</span>
       </div>
-      <PriceChart candles={candles} events={chartEvents} slug={slug} />
+      <PriceChart
+        candles={candles} events={chartEvents} slug={slug}
+        circulatingSupply={p.circulating_supply}
+      />
     </section>
   );
 
@@ -112,7 +117,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       <RiskPanel risk={d.risk} flags={parseRisks(d.risk)} />
       <ListingsPanel listings={d.listings} />
       <CompareRaisePanel d={d} />
-      {(p.raise_amount_usd != null || p.raise_price != null || p.circulating_supply != null || p.raise_note != null) && (
+      {(p.raise_amount_usd != null || rp != null || p.circulating_supply != null || p.raise_note != null) && (
         <SectionCard
           title="Raise & Supply"
           right={
@@ -144,7 +149,11 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
                 ? `${oversubscribed < 10 ? oversubscribed.toFixed(1) : Math.round(oversubscribed)}× oversubscribed · ${refunded!.toFixed(0)}% refunded`
                 : undefined}
             />
-            <Metric label="Raise Price" value={p.raise_price != null ? fmtUsd(p.raise_price, { compact: false }) : "—"} />
+            <Metric
+              label="Raise Price"
+              value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : "—"}
+              sub={rp?.derived ? "derived: raise ÷ 10M tokens sold" : undefined}
+            />
             <Metric label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
             <Metric label="Contributors" value={fmtNum(p.raise_contributors)} />
             <Metric
@@ -258,7 +267,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
         />
         <StatTile
           label="ROI vs Raise" value={<Delta v={roi} />}
-          sub={p.raise_price != null ? `from ${fmtUsd(p.raise_price, { compact: false })}` : "raise price unknown"}
+          sub={rp ? `from ${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : "raise price unknown"}
         />
         <StatTile
           label="From ATH" value={<Delta v={fromAth} />}
@@ -274,24 +283,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           {chartBlock}
-          <SectionCard title="Market Depth & Risk">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-3">
-              <Metric label="Liquidity" value={fmtUsd(latest?.liquidity_usd)} sub="pool depth, USD" />
-              <Metric label="24h Volume" value={fmtUsd(latest?.vol24h)} />
-              <Metric
-                label="Volume / Depth"
-                value={latest?.vol24h && latest.liquidity_usd ? `${(latest.vol24h / latest.liquidity_usd).toFixed(2)}×` : "—"}
-                sub="turnover ratio"
-              />
-              <Metric label="Market Cap" value={fmtUsd(latest?.mcap)} sub="circulating supply" />
-              <Metric label="FDV" value={fmtUsd(latest?.fdv)} sub="total supply" />
-              <Metric
-                label="Tradeable Float"
-                value={p.circulating_supply && p.total_supply ? `${((p.circulating_supply / p.total_supply) * 100).toFixed(0)}%` : "—"}
-                sub="of total supply"
-              />
-            </div>
-          </SectionCard>
+          <MarketDepthPanel d={d} />
         </div>
         <div id="trade" className="scroll-mt-20">
           <div className="card sticky top-[76px] overflow-hidden">

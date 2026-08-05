@@ -1,6 +1,6 @@
-import type { ProjectDetail } from "./queries";
+import { raisePriceOf, type ProjectDetail } from "./queries";
 import { healthScore } from "./analytics";
-import { fmtUsd, fmtNum, fmtPct } from "./format";
+import { fmtUsd, fmtPrice, fmtNum, fmtPct } from "./format";
 
 /**
  * An investment memo assembled from measured facts. Each bullet cites the
@@ -29,7 +29,8 @@ export function buildMemo(d: ProjectDetail): Memo {
   const ath = candles.length ? Math.max(...candles.map((c) => c.h)) : null;
   const cur = latest?.price_usd ?? (candles.length ? candles[candles.length - 1].c : null);
   const fromAth = ath && cur ? ((cur - ath) / ath) * 100 : null;
-  const roi = p.raise_price && cur ? ((cur - p.raise_price) / p.raise_price) * 100 : null;
+  const rp = raisePriceOf(p);
+  const roi = rp && cur ? ((cur - rp.usd) / rp.usd) * 100 : null;
   const holders = holderHistory.filter((h) => h.holder_count != null);
   const holderCount = holders.length ? holders[holders.length - 1].holder_count : null;
   const holderPct = holders.length >= 2 && holders[0].holder_count
@@ -45,7 +46,7 @@ export function buildMemo(d: ProjectDetail): Memo {
   parts.push(
     `${p.name}${p.symbol ? ` (${p.symbol})` : ""} is a ${p.category ?? "MetaDAO ecosystem"} project` +
     (p.raise_amount_usd != null && p.raise_amount_usd > 0
-      ? ` that raised ${fmtUsd(p.raise_amount_usd)}${p.raise_price ? ` at ${fmtUsd(p.raise_price, { compact: false })} per token` : ""}`
+      ? ` that raised ${fmtUsd(p.raise_amount_usd)}${rp ? ` at ${rp.derived ? "about " : ""}${fmtPrice(rp.usd)} per token` : ""}`
       : p.raise_note ? "" : " on the MetaDAO launchpad") + "."
   );
   if (latest?.mcap) {

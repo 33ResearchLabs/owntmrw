@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ProjectDetail, RiskFlag } from "@/lib/queries";
+import { raisePriceOf, type ProjectDetail, type RiskFlag } from "@/lib/queries";
 import type { Insight } from "@/lib/analytics";
 import type { Memo } from "@/lib/research";
 import { entityColor } from "@/lib/sources/wallets";
@@ -8,12 +8,13 @@ import {
   fmtUsd,
   fmtNum,
   fmtPct,
+  fmtPrice,
   fmtDate,
   fmtDuration,
   timeAgo,
   shortAddr,
 } from "@/lib/format";
-import { Delta, StatusBadge } from "./ui";
+import { BarList, Delta, StatusBadge } from "./ui";
 
 /** Shown wherever a section needs data we cannot obtain from public sources. */
 export function DataGap({
@@ -534,7 +535,6 @@ function ConcentrationChart({
   const top = holders.filter((h) => h.pct != null).slice(0, 10);
   if (top.length < 2) return null;
 
-  const max = Math.max(...top.map((h) => h.pct));
   // A labelled account is infrastructure — a pool holding 3% is not a whale.
   // Splitting them out stops the chart reading as concentration it isn't.
   const anyVenue = top.some((h) => h.label);
@@ -557,33 +557,20 @@ function ConcentrationChart({
         ) : undefined
       }
     >
-      <div className="space-y-1.5 px-4 py-4">
-        {top.map((h) => {
+      <BarList
+        items={top.map((h) => {
           const owner = h.owner ?? h.address;
-          return (
-            <div key={h.rank} className="flex items-center gap-3">
-              <span className="num w-[150px] shrink-0 truncate text-[12px] text-ink2" title={owner}>
-                {h.label ?? shortAddr(owner)}
-              </span>
-              {/* The bar keeps its own track so every row shares one plot
-                  width, and the value sits in a column outside it — a tip
-                  label on the longest bar would otherwise run at the card edge. */}
-              <div className="min-w-0 flex-1">
-                <div
-                  className="h-2.5 rounded-r-sm"
-                  style={{
-                    width: `${Math.max(1, (h.pct / max) * 100)}%`,
-                    background: h.label ? "var(--series-none)" : "var(--accent)",
-                  }}
-                />
-              </div>
-              <span className="num w-14 shrink-0 text-right text-[12px] font-medium">
-                {h.pct.toFixed(2)}%
-              </span>
-            </div>
-          );
+          return {
+            key: String(h.rank),
+            label: h.label ?? shortAddr(owner),
+            value: h.pct,
+            display: `${h.pct.toFixed(2)}%`,
+            muted: !!h.label,
+            title: owner,
+            href: `/wallet/${owner}`,
+          };
         })}
-      </div>
+      />
     </SectionCard>
   );
 }
@@ -736,8 +723,12 @@ export function HoldersPanel({
                     treasuryAddress: p.treasury_address,
                     launchAddress: p.launch_address,
                     poolAddress: p.pool_address,
+                    teamAddress: p.team_address,
+                    ammVaultAddress: p.amm_vault_address,
+                    lpPoolAddress: p.lp_pool_address,
                     projectCount: crossCounts?.get(owner),
                     pct: h.pct,
+                    venueLabel: h.label,
                   });
                   const org =
                     verdict ??
@@ -1016,12 +1007,10 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
     treasuryValue,
   } = d;
   const cur = latest?.price_usd ?? null;
-  const roi =
-    p.raise_price && cur ? ((cur - p.raise_price) / p.raise_price) * 100 : null;
-  const athRet =
-    p.raise_price && ath ? ((ath - p.raise_price) / p.raise_price) * 100 : null;
-  const atlRet =
-    p.raise_price && atl ? ((atl - p.raise_price) / p.raise_price) * 100 : null;
+  const rp = raisePriceOf(p);
+  const roi = rp && cur ? ((cur - rp.usd) / rp.usd) * 100 : null;
+  const athRet = rp && ath ? ((ath - rp.usd) / rp.usd) * 100 : null;
+  const atlRet = rp && atl ? ((atl - rp.usd) / rp.usd) * 100 : null;
   const drawdown = ath && cur ? ((cur - ath) / ath) * 100 : null;
   const start =
     p.raise_end_ts ?? p.launch_ts ?? (candles.length ? candles[0].ts : null);
@@ -1049,13 +1038,10 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
       <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
         <Metric
           label="Raise Price"
-          value={
-            p.raise_price != null
-              ? fmtUsd(p.raise_price, { compact: false })
-              : "—"
-          }
+          value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : "—"}
+          sub={rp?.derived ? "derived: raise ÷ 10M sold" : undefined}
         />
-        <Metric label="Current Price" value={fmtUsd(cur, { compact: false })} />
+        <Metric label="Current Price" value={fmtPrice(cur)} />
         <Metric label="ROI Since Raise" value={<Delta v={roi} />} />
         <Metric
           label="Current Drawdown"

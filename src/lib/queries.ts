@@ -1,28 +1,63 @@
 import { db, Project, sameBalance } from "./db";
 import { applyQuote, liveQuotes } from "./live";
+import { ICO_TOKENS_SOLD } from "./sources/raises";
 
 export interface ScreenerRow extends Project {
   price_usd: number | null; mcap: number | null; fdv: number | null;
   liquidity_usd: number | null; vol24h: number | null;
   change_24h: number | null;
+  /** Reconstructed from the raise rather than recorded — surface it as such. */
+  raise_price_derived: boolean;
   roi_since_raise: number | null;   // % vs raise price
   ath_return: number | null;        // % from raise price to ATH (peak return a raise buyer saw)
   from_ath: number | null;          // % current price vs ATH (drawdown)
   ath: number | null;
   treasury_usd: number | null;
   holder_count: number | null;
-  holder_change_7d: number | null;
   gh_stars: number | null;
   gh_last_push: number | null;
-  proposal_count: number;
 }
 
 /**
  * Price per token at the raise, or null when unknown. Never derived from a
  * guess — the ICO price comes from the raise registry.
  */
-export function raisePrice(p: Pick<Project, "raise_price">): number | null {
-  return p.raise_price && p.raise_price > 0 ? p.raise_price : null;
+export interface RaisePrice {
+  usd: number;
+  /** True when computed from the raise rather than read from the registry. */
+  derived: boolean;
+}
+
+/**
+ * Only these tracks are launchpad sales. MetaDAO's own token was a private
+ * round led by Paradigm, and it carries no track for exactly that reason —
+ * dividing its $2.2M by a token count it never sold would invent a price.
+ */
+const LAUNCHPAD_TRACKS = new Set(["curated", "permissionless"]);
+
+/**
+ * The per-token price paid at the raise, recorded or reconstructed.
+ *
+ * docs.metadao.fi/how-launches-work/sale specifies that every launchpad ICO
+ * sells exactly ICO_TOKENS_SOLD tokens at a uniform price, so the price is
+ * fully determined by the accepted amount. Checked against every project that
+ * records both: 13 of 13 match to the cent, across both tracks, with no
+ * exceptions — which is why the fallback is safe to apply and why it is still
+ * flagged as derived wherever it is shown.
+ */
+export function raisePriceOf(
+  p: Pick<Project, "raise_price" | "raise_amount_usd" | "raise_track">
+): RaisePrice | null {
+  if (p.raise_price && p.raise_price > 0) return { usd: p.raise_price, derived: false };
+  if (!p.raise_track || !LAUNCHPAD_TRACKS.has(p.raise_track)) return null;
+  if (!p.raise_amount_usd || p.raise_amount_usd <= 0) return null;
+  return { usd: p.raise_amount_usd / ICO_TOKENS_SOLD, derived: true };
+}
+
+export function raisePrice(
+  p: Pick<Project, "raise_price" | "raise_amount_usd" | "raise_track">
+): number | null {
+  return raisePriceOf(p)?.usd ?? null;
 }
 
 /**
@@ -41,20 +76,16 @@ export function priceIsReliable(liquidityUsd: number | null | undefined): boolea
  * so every caller goes through `screenerRows`, which overlays live quotes
  * before the return metrics are computed from them.
  */
-function screenerSnapshot(): (ScreenerRow & { ath: number | null; holders_7d_ago: number | null })[] {
+function screenerSnapshot(): (ScreenerRow & { ath: number | null })[] {
   const d = db();
   const rows = d.prepare(`
     SELECT p.*,
       ps.price_usd, ps.mcap, ps.fdv, ps.liquidity_usd, ps.vol24h, ps.change_24h,
       hs.holder_count,
       gh.stars AS gh_stars, gh.last_push_ts AS gh_last_push,
-      (SELECT COUNT(*) FROM proposals pr WHERE pr.project_id = p.id) AS proposal_count,
       (SELECT MAX(c.h) FROM candles c WHERE c.project_id = p.id) AS ath,
       (SELECT ts2.value_usd FROM treasury_snapshots ts2
-        WHERE ts2.project_id = p.id ORDER BY ts2.ts DESC LIMIT 1) AS treasury_usd,
-      (SELECT hs2.holder_count FROM holder_snapshots hs2
-        WHERE hs2.project_id = p.id AND hs2.ts <= unixepoch() - 7*86400
-        ORDER BY hs2.ts DESC LIMIT 1) AS holders_7d_ago
+        WHERE ts2.project_id = p.id ORDER BY ts2.ts DESC LIMIT 1) AS treasury_usd
     FROM projects p
     LEFT JOIN price_snapshots ps ON ps.project_id = p.id
       AND ps.ts = (SELECT MAX(ts) FROM price_snapshots WHERE project_id = p.id)
@@ -63,24 +94,29 @@ function screenerSnapshot(): (ScreenerRow & { ath: number | null; holders_7d_ago
     LEFT JOIN github_snapshots gh ON gh.project_id = p.id
       AND gh.ts = (SELECT MAX(ts) FROM github_snapshots WHERE project_id = p.id)
     ORDER BY ps.mcap DESC NULLS LAST, p.name
-  `).all() as (ScreenerRow & { ath: number | null; holders_7d_ago: number | null })[];
+  `).all() as (ScreenerRow & { ath: number | null })[];
   return rows;
 }
 
 /** Derived return metrics, computed from whichever price the row now carries. */
-function withReturns(
-  r: ScreenerRow & { ath: number | null; holders_7d_ago: number | null }
-): ScreenerRow {
-  const rp = raisePrice(r);
+function withReturns(r: ScreenerRow & { ath: number | null }): ScreenerRow {
+  const resolved = raisePriceOf(r);
+  const rp = resolved?.usd ?? null;
   // Returns are only meaningful against a price the market can actually
   // support; a few thousand dollars of liquidity is not a real quote.
   const tradable = priceIsReliable(r.liquidity_usd);
   const roi = rp && r.price_usd && tradable ? ((r.price_usd - rp) / rp) * 100 : null;
   const athRet = rp && r.ath && tradable ? ((r.ath - rp) / rp) * 100 : null;
   const fromAth = r.ath && r.price_usd && tradable ? ((r.price_usd - r.ath) / r.ath) * 100 : null;
-  const hchg = r.holder_count != null && r.holders_7d_ago
-    ? ((r.holder_count - r.holders_7d_ago) / r.holders_7d_ago) * 100 : null;
-  return { ...r, roi_since_raise: roi, ath_return: athRet, from_ath: fromAth, holder_change_7d: hchg };
+  // raise_price on the row is the resolved figure, so every screener consumer
+  // sees the same number the returns were computed from; the flag beside it
+  // says whether it was recorded or reconstructed.
+  return {
+    ...r,
+    raise_price: rp,
+    raise_price_derived: resolved?.derived ?? false,
+    roi_since_raise: roi, ath_return: athRet, from_ath: fromAth,
+  };
 }
 
 export async function screenerRows(): Promise<ScreenerRow[]> {

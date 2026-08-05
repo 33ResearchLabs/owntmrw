@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { fmtPct } from "@/lib/format";
 
 export function Delta({ v }: { v: number | null | undefined }) {
@@ -39,6 +40,64 @@ export function StatTile({ label, value, sub }: { label: string; value: React.Re
       <div className="text-[11px] uppercase tracking-[0.08em] text-muted">{label}</div>
       <div className="num mt-1 text-[19px] font-semibold leading-tight">{value}</div>
       {sub != null && <div className="mt-0.5 text-[12px] text-ink2">{sub}</div>}
+    </div>
+  );
+}
+
+export interface BarItem {
+  key: string;
+  label: React.ReactNode;
+  /** Drives bar length. Bars scale to the largest item, not to a fixed ceiling. */
+  value: number;
+  /** The value as the reader should see it — the bar never has to be measured. */
+  display: string;
+  /** Renders in the de-emphasis grey: present in the data, but not the subject. */
+  muted?: boolean;
+  title?: string;
+  href?: string;
+}
+
+/**
+ * A ranked horizontal bar list.
+ *
+ * Bars scale to the largest item because these distributions are long-tailed —
+ * against a fixed 0-100 the tail is a row of invisible slivers. The value gets
+ * its own aligned column rather than a tip label, so the longest bar cannot
+ * push its number off the card edge and the numbers read as a column.
+ */
+export function BarList({ items, labelWidth = 150 }: { items: BarItem[]; labelWidth?: number }) {
+  const max = Math.max(...items.map((i) => i.value), 0);
+  if (!items.length || max <= 0) return null;
+
+  return (
+    <div className="space-y-1.5 px-4 py-4">
+      {items.map((i) => (
+        <div key={i.key} className="flex items-center gap-3">
+          <span
+            className="num shrink-0 truncate text-[12px] text-ink2"
+            style={{ width: labelWidth }}
+            title={i.title}
+          >
+            {i.href ? (
+              <Link href={i.href} className="hover:text-accent">{i.label}</Link>
+            ) : (
+              i.label
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div
+              className="h-2.5 rounded-r-sm"
+              style={{
+                width: `${Math.max(1, (i.value / max) * 100)}%`,
+                background: i.muted ? "var(--series-none)" : "var(--accent)",
+              }}
+            />
+          </div>
+          <span className="num w-14 shrink-0 text-right text-[12px] font-medium">
+            {i.display}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

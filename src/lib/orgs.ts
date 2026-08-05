@@ -38,13 +38,27 @@ export interface ClassifyInput {
   treasuryAddress?: string | null;
   launchAddress?: string | null;
   poolAddress?: string | null;
+  /** Vault holding the team performance package. */
+  teamAddress?: string | null;
+  /** Liquidity vaults MetaDAO names, distinct from the venue an aggregator ranks. */
+  ammVaultAddress?: string | null;
+  lpPoolAddress?: string | null;
   /** How many distinct MetaDAO projects list this wallet as a top holder. */
   projectCount?: number;
   /** Owner program of the account, when known (jsonParsed getAccountInfo). */
   ownerProgram?: string | null;
   /** Share of supply held, 0-100. */
   pct?: number | null;
+  /**
+   * Label RugCheck's known-accounts registry puts on this account, e.g.
+   * "Meteora DAMM v2 Pool". A third-party identification of the same kind as
+   * KNOWN_WALLETS, and ranked with it.
+   */
+  venueLabel?: string | null;
 }
+
+/** Pool naming as it actually arrives: "… DAMM v2 Pool", "… DLMM Pool", "AMM". */
+const POOL_NAME = /\b(pool|amm|dlmm|damm|vault|liquidity)\b/i;
 
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 const TOKEN_PROGRAMS = new Set([
@@ -79,6 +93,30 @@ export function classifyWallet(input: ClassifyInput): OrgVerdict | null {
         reason: "This is the AMM pool holding the token's tradeable liquidity, not an investor.",
       };
     }
+    // Checked after the pool roles but before any heuristic: this vault is the
+    // biggest holder of most launches, and left unmatched it reads as a whale
+    // quietly sitting on half the supply rather than the locked allocation it is.
+    if (input.teamAddress && a === input.teamAddress) {
+      return {
+        label: "Team Package", type: "Team", isOrganisation: true,
+        confidence: "confirmed",
+        reason: "This is the team performance package vault — a locked allocation held on the team's behalf, not a position someone bought.",
+      };
+    }
+    if (input.ammVaultAddress && a === input.ammVaultAddress) {
+      return {
+        label: "Futarchy AMM", type: "Liquidity Pool", isOrganisation: true,
+        confidence: "confirmed",
+        reason: "This is the futarchy AMM's liquidity vault, per MetaDAO's own allocation data.",
+      };
+    }
+    if (input.lpPoolAddress && a === input.lpPoolAddress) {
+      return {
+        label: "Meteora LP", type: "Liquidity Pool", isOrganisation: true,
+        confidence: "confirmed",
+        reason: "This is the Meteora pool seeded at launch, per MetaDAO's own allocation data.",
+      };
+    }
   }
 
   // 2. documented third-party address
@@ -90,6 +128,23 @@ export function classifyWallet(input: ClassifyInput): OrgVerdict | null {
         reason: `${known.label} is a documented ${known.type.toLowerCase()} address.`,
       };
     }
+  }
+
+  // 2b. third-party identification carried on the holder row itself. This must
+  // outrank the cross-project rule below: an AMM pool program is a top holder
+  // of every project it makes a market for, so counting projects alone reads
+  // shared infrastructure as one fund accumulating across the whole launchpad.
+  if (input.venueLabel) {
+    const isPool = POOL_NAME.test(input.venueLabel);
+    return {
+      label: input.venueLabel,
+      type: isPool ? "Liquidity Pool" : "Protocol",
+      isOrganisation: true,
+      confidence: "confirmed",
+      reason: `RugCheck identifies this account as ${input.venueLabel} — ${
+        isPool ? "tradeable liquidity, not an investor position" : "a protocol account rather than a personal wallet"
+      }.`,
+    };
   }
 
   // 3. same wallet is a large holder across multiple projects

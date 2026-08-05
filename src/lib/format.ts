@@ -10,6 +10,24 @@ export function fmtUsd(n: number | null | undefined, opts: { compact?: boolean }
   return `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * A per-token price. Distinct from fmtUsd because token prices live below a
+ * dollar, where two decimals is destructive: it renders a $0.025 raise beside a
+ * $0.0447 quote as "$0.03" and "$0.04", a 33% gain where the real one is 79%.
+ * Three significant figures below $1 keeps the comparison honest.
+ */
+export function fmtPrice(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  if (n === 0) return "$0";
+  const abs = Math.abs(n);
+  if (abs >= 1000) return fmtUsd(n);
+  if (abs >= 1) return `$${n.toFixed(2)}`;
+  // Trim the trailing zeros toPrecision leaves, but never below cents.
+  const trimmed = String(Number(n.toPrecision(3)));
+  const decimals = trimmed.split(".")[1]?.length ?? 0;
+  return `$${decimals < 2 ? n.toFixed(2) : trimmed}`;
+}
+
 export function fmtNum(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return "—";
   const abs = Math.abs(n);
