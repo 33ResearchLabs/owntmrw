@@ -1,5 +1,5 @@
 import { db, Project, sameBalance } from "./db";
-import { applyQuote, liveQuotes } from "./live";
+import { applyQuote, liveQuotes, liveTreasury } from "./live";
 import { ICO_TOKENS_SOLD } from "./sources/raises";
 
 export interface ScreenerRow extends Project {
@@ -120,15 +120,18 @@ function withReturns(r: ScreenerRow & { ath: number | null }): ScreenerRow {
 }
 
 export async function screenerRows(): Promise<ScreenerRow[]> {
-  const quotes = await liveQuotes();
+  const [quotes, treasury] = await Promise.all([liveQuotes(), liveTreasury()]);
   return screenerSnapshot().map((r) => {
     const live = applyQuote(r, r.mint ? quotes.get(r.mint) : undefined);
+    // Treasury is read live for the same reason price is: the snapshot is only
+    // as fresh as the last ingest, and a DAO spends in between.
+    const treasury_usd = (r.mint ? treasury.get(r.mint) : undefined) ?? r.treasury_usd;
     // ATH is a running peak, so a live price above the last stored candle is
     // the new high — otherwise a token at a fresh high reads as "-0.0% from ATH"
     // only after the next ingest.
     const ath = live.price_usd != null && (live.ath == null || live.price_usd > live.ath)
       ? live.price_usd : live.ath;
-    return withReturns({ ...live, ath });
+    return withReturns({ ...live, ath, treasury_usd });
   });
 }
 
@@ -232,7 +235,9 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
     "SELECT price_usd, mcap, fdv, liquidity_usd, vol24h, change_24h FROM price_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1"
   ).get(id) as ProjectDetail["latest"];
   // Everything below is archival and reads from the store; the quote is not.
-  const quote = project.mint ? (await liveQuotes()).get(project.mint) : undefined;
+  const [quotes, treasuryLive] = await Promise.all([liveQuotes(), liveTreasury()]);
+  const quote = project.mint ? quotes.get(project.mint) : undefined;
+  const liveTreasuryUsd = project.mint ? treasuryLive.get(project.mint) : undefined;
   const latest = stored
     ? applyQuote(stored, quote)
     : quote
@@ -341,7 +346,10 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   return {
     project, latest, quoteSource: quote?.source ?? null,
     candles, events, topHolders, holderHistory, proposals, github, observations,
-    treasuryValue: treasury?.value_usd ?? null, treasuryHistory, treasuryLastRead,
+    // Live where the feed has it, the archived snapshot otherwise. Without
+    // this, treasury/market-cap divided a six-day-old balance by a live cap.
+    treasuryValue: liveTreasuryUsd ?? treasury?.value_usd ?? null,
+    treasuryHistory, treasuryLastRead,
     news, releases, listings, risk,
     ath, atl, athTs,
   };

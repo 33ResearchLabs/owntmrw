@@ -319,7 +319,9 @@ async function main() {
       // A broken lookup must not be read as "delisted" — leave the row alone.
       if (failed) { console.log(`      ${p.name}: lookup failed, keeping stored venues`); continue; }
 
-      const cg = cgId ? (await coinListings(cgId)) ?? [] : [];
+      const cg = cgId
+        ? (await coinListings(cgId, { mint: p.mint, symbol: p.symbol })) ?? []
+        : [];
       const pools = (await poolListings(p.mint)) ?? [];
 
       const byKey = new Map<string, {

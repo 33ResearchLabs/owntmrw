@@ -103,6 +103,29 @@ export async function fetchTickers(): Promise<Ticker[]> {
   return Array.isArray(data) ? data : [];
 }
 
+/**
+ * Mint → USDC held in that project's DAO vault, from the same feed discovery
+ * reads. Separate from fetchTickers because that one sleeps afterwards to pace
+ * the ingest loop, and this runs on the request path.
+ *
+ * Treasury is the one archival figure that moves on its own: a DAO spends
+ * between ingest runs, so a stored snapshot goes wrong quietly. Reading it live
+ * costs nothing extra — the number is already on a feed we call.
+ */
+export async function treasuryAum(): Promise<Map<string, number>> {
+  const data = await getJSON<Ticker[]>(`${MARKET_API}/api/tickers`, {
+    headers: { "user-agent": BROWSER_UA },
+    retries: 1,
+    timeoutMs: 9000,
+  });
+  const out = new Map<string, number>();
+  for (const t of data ?? []) {
+    const v = Number(t.treasury_usdc_aum);
+    if (t.base_currency && Number.isFinite(v)) out.set(t.base_currency, v);
+  }
+  return out;
+}
+
 export interface SupplyInfo {
   totalSupply: number | null;
   circulatingSupply: number | null;

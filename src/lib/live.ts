@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { pairsForMints } from "./sources/dexscreener";
 import { jupPrices } from "./sources/jupiter";
+import { treasuryAum } from "./sources/metadao";
 import { capFromSupply, isUndistributed } from "./quote";
 
 /**
@@ -122,6 +123,46 @@ export async function liveQuotes(): Promise<Map<string, LiveQuote>> {
     });
 
   return inflight;
+}
+
+/**
+ * DAO treasury balances, cached like the quotes.
+ *
+ * A stored snapshot of a treasury is wrong the moment the DAO spends, and
+ * nothing about the page says so — the figure just quietly drifts. Worse, the
+ * treasury/market-cap ratio divided a stale numerator by a live denominator,
+ * mixing two timeframes in one number. A longer window than the price cache is
+ * fine: vault balances move on governance time, not market time.
+ */
+const TREASURY_FRESH_MS = 120_000;
+
+let treasuryCached: { at: number; map: Map<string, number>; ok: boolean } | null = null;
+let treasuryInflight: Promise<Map<string, number>> | null = null;
+
+export async function liveTreasury(): Promise<Map<string, number>> {
+  const now = Date.now();
+  const ttl = treasuryCached?.ok ? TREASURY_FRESH_MS : BACKOFF_MS;
+  if (treasuryCached && now - treasuryCached.at < ttl) return treasuryCached.map;
+  if (treasuryInflight) return treasuryInflight;
+
+  treasuryInflight = treasuryAum()
+    .then((map) => {
+      // Empty means the feed failed; hold the last good map rather than
+      // blanking every treasury on the site.
+      const ok = map.size > 0;
+      const merged = ok ? map : treasuryCached?.map ?? map;
+      treasuryCached = { at: Date.now(), map: merged, ok };
+      return merged;
+    })
+    .catch(() => {
+      treasuryCached = { at: Date.now(), map: treasuryCached?.map ?? new Map(), ok: false };
+      return treasuryCached.map;
+    })
+    .finally(() => {
+      treasuryInflight = null;
+    });
+
+  return treasuryInflight;
 }
 
 /** When the served quotes were fetched, for the freshness indicator. */
