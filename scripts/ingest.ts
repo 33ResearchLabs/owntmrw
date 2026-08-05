@@ -11,7 +11,7 @@
  * Usage: npm run ingest            (full run)
  *        npm run ingest -- --fast  (skip candles/holders, prices only)
  */
-import { db, upsertProject, allProjects, recordTreasurySnapshot } from "../src/lib/db";
+import { db, upsertProject, allProjects, recordTreasurySnapshot, recordStructuralEvent } from "../src/lib/db";
 import { discoverProjects, fetchSupply } from "../src/lib/sources/metadao";
 import { fetchMarketHistory } from "../src/lib/sources/marketdata";
 import { bestPairForMint, socialsFromPair } from "../src/lib/sources/dexscreener";
@@ -482,10 +482,17 @@ async function main() {
       }
     }
 
-    // structural events
-    const insEv = d.prepare("INSERT OR IGNORE INTO events (project_id, ts, type, title, detail, url) VALUES (?,?,?,?,?,?)");
-    if (p.raise_end_ts) insEv.run(p.id, p.raise_end_ts, "raise_closed", "Raise closed", p.raise_amount_usd ? `$${Math.round(p.raise_amount_usd).toLocaleString()} raised` : null, null);
-    if (p.launch_ts) insEv.run(p.id, p.launch_ts, "token_launch", "Token trading began", null, null);
+    // Structural events replace rather than append: a corrected raise date must
+    // move the entry, not add a second one beside the superseded reading.
+    if (p.raise_end_ts) {
+      recordStructuralEvent(
+        p.id, p.raise_end_ts, "raise_closed", "Raise closed",
+        p.raise_amount_usd ? `$${Math.round(p.raise_amount_usd).toLocaleString()} raised` : null
+      );
+    }
+    if (p.launch_ts) {
+      recordStructuralEvent(p.id, p.launch_ts, "token_launch", "Token trading began", null);
+    }
   }
 
   // 6. press coverage, from two complementary directions:
