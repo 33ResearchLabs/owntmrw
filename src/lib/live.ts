@@ -2,7 +2,7 @@ import { db } from "./db";
 import { pairsForMints } from "./sources/dexscreener";
 import { jupPrices } from "./sources/jupiter";
 import { treasuryAum } from "./sources/metadao";
-import { capFromSupply, isUndistributed } from "./quote";
+import { capFromSupply, marketCap } from "./quote";
 
 /**
  * Live market quotes, fetched at request time.
@@ -65,7 +65,7 @@ async function refresh(): Promise<Map<string, LiveQuote>> {
     const t = supply.get(mint);
     out.set(mint, {
       price_usd: price,
-      mcap: capFromSupply(price, t?.circulating_supply, pair.marketCap),
+      mcap: marketCap(price, t?.circulating_supply, pair.marketCap),
       fdv: capFromSupply(price, t?.total_supply, pair.fdv),
       liquidity_usd: pair.liquidity?.usd ?? null,
       vol24h: pair.volume?.h24 ?? null,
@@ -84,9 +84,7 @@ async function refresh(): Promise<Map<string, LiveQuote>> {
       const t = supply.get(mint);
       out.set(mint, {
         price_usd: price,
-        mcap: isUndistributed(t?.circulating_supply)
-          ? null
-          : capFromSupply(price, t?.circulating_supply, null),
+        mcap: marketCap(price, t?.circulating_supply, null),
         fdv: capFromSupply(price, t?.total_supply, null),
         liquidity_usd: null,
         vol24h: null,

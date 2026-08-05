@@ -61,6 +61,30 @@ export function raisePrice(
 }
 
 /**
+ * When the token actually started trading — the baseline for anything measured
+ * "since launch", days-to-ATH above all.
+ *
+ * Not raise_end_ts. For a launchpad sale the raise closes and trading opens the
+ * same week, so the two were interchangeable; for MetaDAO they are seventeen
+ * months apart, because its raise was a private round in Aug 2024 and the token
+ * did not trade until Oct 2025. Counting from the raise reported "ATH in 521d"
+ * when the token had existed for 87.
+ *
+ * The earliest of the recorded launch and the first candle, because either can
+ * be the earlier evidence: a launch date can predate any indexed pool, and a
+ * pool can predate a launch date that was recorded later or loosely. Falls back
+ * to the raise only when there is no evidence of trading at all.
+ */
+export function tradingStart(
+  p: Pick<Project, "launch_ts" | "raise_end_ts">,
+  candles: { ts: number }[]
+): number | null {
+  const seen = [p.launch_ts, candles.length ? candles[0].ts : null]
+    .filter((t): t is number => t != null);
+  return seen.length ? Math.min(...seen) : p.raise_end_ts ?? null;
+}
+
+/**
  * Minimum pool depth for a quoted price to be treated as a real market price.
  * Below this, a handful of dollars moves the price arbitrarily, so returns
  * computed against it would be noise presented as fact.

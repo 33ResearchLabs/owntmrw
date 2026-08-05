@@ -28,3 +28,24 @@ export function capFromSupply(
 export function isUndistributed(circulatingSupply: number | null | undefined): boolean {
   return (circulatingSupply ?? 0) < 1;
 }
+
+/**
+ * The market cap to publish, or null when there is honestly no such number.
+ *
+ * Both quote paths must go through this. The undistributed guard used to sit on
+ * the Jupiter branch only, so a token DexScreener happened to price skipped it
+ * and fell through to the venue's own figure — Ranger, whose circulating supply
+ * is zero, was published at a $1,428 market cap against a $112,595 FDV.
+ *
+ * A supply of null means "we do not know", which is not the same as zero: the
+ * venue's reported cap is still the best available answer there, so only a
+ * known-and-undistributed supply withholds one.
+ */
+export function marketCap(
+  price: number | null,
+  circulating: number | null | undefined,
+  reported: number | null | undefined
+): number | null {
+  if (circulating != null && isUndistributed(circulating)) return null;
+  return capFromSupply(price, circulating, reported);
+}

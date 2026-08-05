@@ -26,7 +26,7 @@ import { raiseFor, refundRate } from "../src/lib/sources/raises";
 import { sleep } from "../src/lib/sources/http";
 import { discoverFeed, fetchFeed, githubFeeds } from "../src/lib/sources/feeds";
 import { KNOWN_WALLETS } from "../src/lib/sources/wallets";
-import { capFromSupply, isUndistributed } from "../src/lib/quote";
+import { capFromSupply, marketCap } from "../src/lib/quote";
 
 const FAST = process.argv.includes("--fast");
 const now = () => Math.floor(Date.now() / 1000);
@@ -135,7 +135,7 @@ async function main() {
         launch_ts: p.launch_ts ?? (pair.pairCreatedAt ? Math.floor(pair.pairCreatedAt / 1000) : undefined),
       });
       const price = Number(pair.priceUsd) || null;
-      const mcap = capFromSupply(price, p.circulating_supply, pair.marketCap);
+      const mcap = marketCap(price, p.circulating_supply, pair.marketCap);
       const fdv = capFromSupply(price, p.total_supply, pair.fdv);
       d.prepare(`
         INSERT OR REPLACE INTO price_snapshots
@@ -156,9 +156,7 @@ async function main() {
       if (price != null || tok) {
         // Jupiter's own mcap is as meaningless as ours for a token that has not
         // distributed yet, so report none instead of a figure like "$768".
-        const mcap = isUndistributed(p.circulating_supply)
-          ? null
-          : capFromSupply(price, p.circulating_supply, tok?.mcap);
+        const mcap = marketCap(price, p.circulating_supply, tok?.mcap);
         const fdv = capFromSupply(price, p.total_supply, tok?.fdv);
         d.prepare(`
           INSERT OR REPLACE INTO price_snapshots
@@ -220,6 +218,15 @@ async function main() {
         for (const c of candles) ins.run(p.id, c.ts, c.o, c.h, c.l, c.c, c.v);
       });
       tx();
+
+      // Tokens whose first pool predates DexScreener's record carry no
+      // pairCreatedAt, so they had no launch date at all. The first candle is
+      // direct evidence of the day trading started — only used as a fallback,
+      // never over a date a source actually reported.
+      if (!p.launch_ts && candles.length) {
+        upsertProject({ slug: p.slug, name: p.name, launch_ts: candles[0].ts });
+      }
+
       const real = candles.filter((c) => c.h !== c.l).length;
       console.log(
         `      ${p.name}: ${candles.length} candles from ${ranked.length} pool(s), ${real} with real range`

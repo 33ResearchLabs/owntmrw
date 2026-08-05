@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { raisePriceOf, type ProjectDetail, type RiskFlag } from "@/lib/queries";
+import { raisePriceOf, tradingStart, type ProjectDetail, type RiskFlag } from "@/lib/queries";
 import type { Insight } from "@/lib/analytics";
 import type { Memo } from "@/lib/research";
 import { entityColor } from "@/lib/sources/wallets";
@@ -961,8 +961,7 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   const athRet = rp && ath ? ((ath - rp.usd) / rp.usd) * 100 : null;
   const atlRet = rp && atl ? ((atl - rp.usd) / rp.usd) * 100 : null;
   const drawdown = ath && cur ? ((cur - ath) / ath) * 100 : null;
-  const start =
-    p.raise_end_ts ?? p.launch_ts ?? (candles.length ? candles[0].ts : null);
+  const start = tradingStart(p, candles);
   const daysToAth =
     athTs && start ? Math.max(0, Math.round((athTs - start) / 86400)) : null;
   const hh = holderHistory.filter((h) => h.holder_count != null);

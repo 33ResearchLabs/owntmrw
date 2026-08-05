@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import {
   projectDetail, priceIsReliable, MIN_LIQUIDITY_USD, crossProjectHolderCounts,
-  parseLanguages, parseCodeFrequency, parseRisks, raisePriceOf,
+  parseLanguages, parseCodeFrequency, parseRisks, raisePriceOf, tradingStart,
 } from "@/lib/queries";
 import { healthScore, insights, developerScore } from "@/lib/analytics";
 import { DevelopmentPanel } from "@/components/Development";
@@ -44,8 +44,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     ? ((latest.price_usd - rp.usd) / rp.usd) * 100 : null;
   const athReturn = rp && ath && tradable ? ((ath - rp.usd) / rp.usd) * 100 : null;
   const fromAth = ath && latest?.price_usd && tradable ? ((latest.price_usd - ath) / ath) * 100 : null;
-  const daysToAth = athTs && (p.raise_end_ts || p.launch_ts)
-    ? Math.max(0, Math.round((athTs - (p.raise_end_ts ?? p.launch_ts!)) / 86400)) : null;
+  const tradingFrom = tradingStart(p, candles);
+  const daysToAth = athTs && tradingFrom
+    ? Math.max(0, Math.round((athTs - tradingFrom) / 86400)) : null;
   const latestHolders = holderHistory.length ? holderHistory[holderHistory.length - 1] : null;
   const refunded = p.raise_committed_usd && p.raise_amount_usd
     ? (1 - p.raise_amount_usd / p.raise_committed_usd) * 100 : null;
