@@ -77,7 +77,6 @@ export default async function WalletPage({ params }: { params: Promise<{ address
     teamAddress: has("Team Package") ? address : null,
     ammVaultAddress: has("Futarchy AMM") ? address : null,
     lpPoolAddress: has("Meteora LP") ? address : null,
-    projectCount: holdings.length,
     pct: largestPct || null,
     venueLabel,
   });

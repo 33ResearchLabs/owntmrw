@@ -3,7 +3,7 @@ import { raisePriceOf, tradingStart, type ProjectDetail, type RiskFlag } from "@
 import type { Insight } from "@/lib/analytics";
 import type { Memo } from "@/lib/research";
 import { entityColor } from "@/lib/sources/wallets";
-import { classifyWallet, confidenceColor } from "@/lib/orgs";
+import { classifyWallet, confidenceColor, holdingBand } from "@/lib/orgs";
 import {
   fmtUsd,
   fmtNum,
@@ -15,7 +15,9 @@ import {
   shortAddr,
 } from "@/lib/format";
 import { Delta, StatusBadge } from "./ui";
+import { DAY, changeVsAgo, deltaVsAgo } from "@/lib/series";
 import { MoreRows } from "./MoreRows";
+import { CopyButton } from "./CopyButton";
 
 /** Shown wherever a section needs data we cannot obtain from public sources. */
 export function DataGap({
@@ -65,6 +67,34 @@ export function Metric({
         {value}
       </div>
       {sub != null && <div className="mt-0.5 text-[11px] text-ink2">{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * A grid of metrics with the empty ones dropped.
+ *
+ * Panels used to render every tile unconditionally, so a token that never had a
+ * public sale showed seven dashes for figures that do not exist for it — which
+ * reads as a broken page rather than an inapplicable one. Same convention the
+ * project brief already follows: no data, no tile.
+ */
+export function MetricGrid({
+  tiles,
+}: {
+  tiles: (false | null | undefined | {
+    label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "good" | "bad";
+  })[];
+}) {
+  const shown = tiles.filter(Boolean) as {
+    label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "good" | "bad";
+  }[];
+  if (!shown.length) return null;
+  return (
+    <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
+      {shown.map((t) => (
+        <Metric key={t.label} label={t.label} value={t.value} sub={t.sub} tone={t.tone} />
+      ))}
     </div>
   );
 }
@@ -527,10 +557,8 @@ function SupplyAllocation({ p }: { p: ProjectDetail["project"] }) {
 
 export function HoldersPanel({
   d,
-  crossCounts,
 }: {
   d: ProjectDetail;
-  crossCounts?: Map<string, number>;
 }) {
   const { project: p, topHolders, holderHistory, latest } = d;
   const hh = holderHistory.filter((h) => h.holder_count != null);
@@ -540,15 +568,15 @@ export function HoldersPanel({
   const avgUsd =
     avgWallet && latest?.price_usd ? avgWallet * latest.price_usd : null;
 
-  const at = (daysAgo: number): number | null => {
-    const target = Math.floor(Date.now() / 1000) - daysAgo * 86400;
-    const prior = hh.filter((h) => h.ts <= target);
-    return prior.length ? prior[prior.length - 1].holder_count! : null;
-  };
-  const chg = (daysAgo: number) => {
-    const then = at(daysAgo);
-    return then != null && cur != null ? cur - then : null;
-  };
+  // Same lookback rule as the market tiles. This panel used to demand a
+  // snapshot at or before the exact instant, with no tolerance, so MetaDAO's
+  // oldest reading missed the seven-day mark by six and a half hours and Net 7d
+  // sat empty beside a volume tile happily reporting 7d change from the very
+  // same afternoon.
+  const now = Math.floor(Date.now() / 1000);
+  const series = hh.map((h) => ({ ts: h.ts, v: h.holder_count! }));
+  const pctChg = (days: number) => changeVsAgo(cur, series, days * DAY, now);
+  const chg = (days: number) => deltaVsAgo(cur, series, days * DAY, now);
   const t10 =
     [...holderHistory].reverse().find((h) => h.top10_pct != null)?.top10_pct ??
     null;
@@ -563,77 +591,41 @@ export function HoldersPanel({
           </span>
         }
       >
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
-          <Metric label="Total Holders" value={fmtNum(cur)} />
-          <Metric
-            label="Net 7d"
-            value={
-              chg(7) != null ? (
-                <Delta v={at(7) ? (chg(7)! / at(7)!) * 100 : null} />
-              ) : (
-                "—"
-              )
-            }
-            sub={
-              chg(7) != null
-                ? `${chg(7)! >= 0 ? "+" : ""}${fmtNum(chg(7))} wallets`
-                : "needs 7d of history"
-            }
+        <MetricGrid
+            tiles={[
+              cur != null && { label: "Total Holders", value: fmtNum(cur) },
+              // Kept even when empty: unlike the tiles below, these are metrics
+              // that will populate as snapshots accumulate, and the sub says so.
+              ...[7, 30].map((days) => ({
+                label: `Net ${days}d`,
+                value: pctChg(days) != null ? <Delta v={pctChg(days)} /> : "—",
+                sub: chg(days) != null
+                  ? `${chg(days)! >= 0 ? "+" : ""}${fmtNum(chg(days))} wallets`
+                  : `needs ${days}d of history`,
+              })),
+              avgWallet != null && {
+                label: "Avg Wallet", value: fmtNum(avgWallet),
+                sub: avgUsd ? `${fmtUsd(avgUsd)} at spot` : "supply ÷ holders",
+              },
+              t10 != null && {
+                label: "Top 10 Concentration", value: `${t10.toFixed(1)}%`,
+                tone: t10 > 60 ? ("bad" as const) : t10 < 35 ? ("good" as const) : undefined,
+              },
+              p.circulating_supply != null && {
+                label: "Circulating Supply", value: fmtNum(p.circulating_supply),
+                sub: p.total_supply ? `of ${fmtNum(p.total_supply)} total` : undefined,
+              },
+              p.team_package != null && {
+                label: "Locked (Team)", value: fmtNum(p.team_package),
+                sub: p.total_supply
+                  ? `${((p.team_package / p.total_supply) * 100).toFixed(0)}% of supply`
+                  : undefined,
+              },
+              cur && latest?.mcap ? {
+                label: "Market Cap / Holder", value: fmtUsd(latest.mcap / cur),
+              } : false,
+            ]}
           />
-          <Metric
-            label="Net 30d"
-            value={
-              chg(30) != null ? (
-                <Delta v={at(30) ? (chg(30)! / at(30)!) * 100 : null} />
-              ) : (
-                "—"
-              )
-            }
-            sub={
-              chg(30) != null
-                ? `${chg(30)! >= 0 ? "+" : ""}${fmtNum(chg(30))} wallets`
-                : "needs 30d of history"
-            }
-          />
-          <Metric
-            label="Avg Wallet"
-            value={avgWallet ? fmtNum(avgWallet) : "—"}
-            sub={avgUsd ? `${fmtUsd(avgUsd)} at spot` : "supply ÷ holders"}
-          />
-          <Metric
-            label="Top 10 Concentration"
-            value={t10 != null ? `${t10.toFixed(1)}%` : "—"}
-            tone={
-              t10 != null
-                ? t10 > 60
-                  ? "bad"
-                  : t10 < 35
-                    ? "good"
-                    : undefined
-                : undefined
-            }
-          />
-          <Metric
-            label="Circulating Supply"
-            value={fmtNum(p.circulating_supply)}
-            sub={
-              p.total_supply ? `of ${fmtNum(p.total_supply)} total` : undefined
-            }
-          />
-          <Metric
-            label="Locked (Team)"
-            value={fmtNum(p.team_package)}
-            sub={
-              p.team_package && p.total_supply
-                ? `${((p.team_package / p.total_supply) * 100).toFixed(0)}% of supply`
-                : undefined
-            }
-          />
-          <Metric
-            label="Market Cap / Holder"
-            value={cur && latest?.mcap ? fmtUsd(latest.mcap / cur) : "—"}
-          />
-        </div>
       </SectionCard>
 
       <SupplyAllocation p={p} />
@@ -675,7 +667,6 @@ export function HoldersPanel({
                     teamAddress: p.team_address,
                     ammVaultAddress: p.amm_vault_address,
                     lpPoolAddress: p.lp_pool_address,
-                    projectCount: crossCounts?.get(owner),
                     pct: h.pct,
                     venueLabel: h.label,
                   });
@@ -693,47 +684,58 @@ export function HoldersPanel({
                   return (
                     <tr key={h.rank}>
                       <td className="num text-faint">{h.rank}</td>
-                      <td>
+                      {/* The address, and only the address. Identity used to be
+                          printed here too, so the column answered "who" in one
+                          row and "what" in the next and the address vanished
+                          behind a label the Type column was already showing. */}
+                      <td className="!flex items-center gap-1.5">
                         <Link
                           href={`/wallet/${owner}`}
-                          className="flex items-center gap-2 hover:text-accent"
+                          className="num hover:text-accent"
+                          title={owner}
                         >
-                          <span className="num">
-                            {org?.isOrganisation ? org.label : shortAddr(owner)}
-                          </span>
-                          {org?.isOrganisation && (
-                            <span className="num text-[11px] text-faint">
-                              {shortAddr(owner)}
-                            </span>
-                          )}
+                          {shortAddr(owner)}
                         </Link>
+                        <CopyButton value={owner} />
                       </td>
                       <td>
-                        {org ? (
-                          <span
-                            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px]"
-                            style={{
-                              color: entityColor(org.type),
-                              background: "var(--surface-2)",
-                            }}
-                            title={org.reason}
-                          >
+                        {/* One chip in every row. An identified account shows
+                            what it is; everything else falls back to its size
+                            band, because a wallet on 17% and one on 0.01% are
+                            not the same finding and "Unidentified" said neither.
+                            Size never overrides evidence — only fills its
+                            absence, and a size-only guess is styled as the
+                            inference it is. */}
+                        {(() => {
+                          const evidenced = org?.isOrganisation ? org : null;
+                          const band = evidenced ? null : holdingBand(h.pct);
+                          const label = evidenced?.label ?? band?.label ?? "Unidentified";
+                          return (
                             <span
-                              className="h-1.5 w-1.5 rounded-full"
+                              className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px]"
                               style={{
-                                background: confidenceColor(org.confidence),
+                                color: evidenced ? entityColor(evidenced.type) : "var(--ink-muted)",
+                                background: "var(--surface-2)",
                               }}
-                            />
-                            {org.isOrganisation ? org.type : "Individual?"}
-                          </span>
-                        ) : (
-                          <span
-                            className="text-[11px] text-faint"
-                            title="No on-chain role, registry match or cross-project pattern found."
-                          >
-                            Unidentified
-                          </span>
-                        )}
+                              title={
+                                evidenced?.reason ??
+                                (band
+                                  ? `${band.label}: holds ${band.note}. Classified by position size because no on-chain role, registry match or cross-project pattern was found — this describes the holding, not the holder.`
+                                  : "No on-chain role, registry match or cross-project pattern found.")
+                              }
+                            >
+                              <span
+                                className="h-1.5 w-1.5 rounded-full"
+                                style={{
+                                  background: evidenced
+                                    ? confidenceColor(evidenced.confidence)
+                                    : "var(--ink-faint)",
+                                }}
+                              />
+                              {label}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="num text-right">{fmtNum(h.amount)}</td>
                       <td className="num text-right">
@@ -840,43 +842,29 @@ export function TreasuryPanel({ d }: { d: ProjectDetail }) {
           ) : undefined
         }
       >
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
-          <Metric
-            label="Current Value"
-            value={
-              treasuryValue != null && treasuryValue < 1
-                ? "~$0"
-                : fmtUsd(treasuryValue)
-            }
-            sub="USDC AUM in the DAO vault"
-          />
-          <Metric
-            label="Raised"
-            value={p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd)}
-          />
-          <Metric
-            label="Remaining vs Raise"
-            value={vsRaise != null ? `${(vsRaise * 100).toFixed(0)}%` : "—"}
-            tone={
-              vsRaise != null
-                ? vsRaise > 0.7
-                  ? "good"
-                  : vsRaise < 0.2
-                    ? "bad"
-                    : undefined
-                : undefined
-            }
-          />
-          <Metric
-            label="Treasury / Mkt Cap"
-            value={vsMcap != null ? `${(vsMcap * 100).toFixed(0)}%` : "—"}
-            sub={
-              vsMcap != null && vsMcap > 0.5
-                ? "backed above half of valuation"
-                : undefined
-            }
-          />
-        </div>
+        <MetricGrid
+          tiles={[
+            treasuryValue != null && {
+              label: "Current Value",
+              value: treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue),
+              sub: "USDC AUM in the DAO vault",
+            },
+            p.raise_amount_usd != null && {
+              label: "Raised",
+              value: p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd),
+            },
+            vsRaise != null && {
+              label: "Remaining vs Raise",
+              value: `${(vsRaise * 100).toFixed(0)}%`,
+              tone: vsRaise > 0.7 ? ("good" as const) : vsRaise < 0.2 ? ("bad" as const) : undefined,
+            },
+            vsMcap != null && {
+              label: "Treasury / Mkt Cap",
+              value: `${(vsMcap * 100).toFixed(0)}%`,
+              sub: vsMcap > 0.5 ? "backed above half of valuation" : undefined,
+            },
+          ]}
+        />
       </SectionCard>
 
       {treasuryHistory.length > 0 && (
@@ -983,63 +971,52 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
         ) : undefined
       }
     >
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
-        <Metric
-          label="Raise Price"
-          value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : "—"}
-          sub={rp?.derived ? "derived: raise ÷ 10M sold" : undefined}
-        />
-        <Metric label="Current Price" value={fmtPrice(cur)} />
-        <Metric label="ROI Since Raise" value={<Delta v={roi} />} />
-        <Metric
-          label="Current Drawdown"
-          value={<Delta v={drawdown} />}
-          sub="from all-time high"
-        />
-        <Metric
-          label="ATH"
-          value={fmtUsd(ath, { compact: false })}
-          sub={athRet != null ? `${fmtPct(athRet)} vs raise` : undefined}
-        />
-        <Metric
-          label="ATL"
-          value={fmtUsd(atl, { compact: false })}
-          sub={atlRet != null ? `${fmtPct(atlRet)} vs raise` : undefined}
-        />
-        <Metric
-          label="Days to ATH"
-          value={daysToAth != null ? `${daysToAth}d` : "—"}
-          sub={athTs ? fmtDate(athTs) : undefined}
-        />
-        <Metric
-          label="Treasury Remaining"
-          value={
-            treasuryValue != null && treasuryValue < 1
-              ? "~$0"
-              : fmtUsd(treasuryValue)
-          }
-        />
-        <Metric
-          label="Contributors at Raise"
-          value={fmtNum(p.raise_contributors)}
-        />
-        <Metric label="Holders Now" value={fmtNum(holdersNow)} />
-        <Metric
-          label="Committed"
-          value={fmtUsd(p.raise_committed_usd)}
-          sub={
-            p.raise_committed_usd && p.raise_amount_usd
+      <MetricGrid
+        tiles={[
+          rp && {
+            label: "Raise Price",
+            value: `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`,
+            sub: rp.derived ? "derived: raise ÷ 10M sold" : undefined,
+          },
+          cur != null && { label: "Current Price", value: fmtPrice(cur) },
+          roi != null && { label: "ROI Since Raise", value: <Delta v={roi} /> },
+          drawdown != null && {
+            label: "Current Drawdown", value: <Delta v={drawdown} />, sub: "from all-time high",
+          },
+          ath != null && {
+            label: "ATH", value: fmtPrice(ath),
+            sub: athRet != null ? `${fmtPct(athRet)} vs raise` : undefined,
+          },
+          atl != null && {
+            label: "ATL", value: fmtPrice(atl),
+            sub: atlRet != null ? `${fmtPct(atlRet)} vs raise` : undefined,
+          },
+          daysToAth != null && {
+            label: "Days to ATH", value: `${daysToAth}d`,
+            sub: athTs ? fmtDate(athTs) : undefined,
+          },
+          treasuryValue != null && {
+            label: "Treasury Remaining",
+            value: treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue),
+          },
+          p.raise_contributors != null && {
+            label: "Contributors at Raise", value: fmtNum(p.raise_contributors),
+          },
+          holdersNow != null && { label: "Holders Now", value: fmtNum(holdersNow) },
+          p.raise_committed_usd != null && {
+            label: "Committed", value: fmtUsd(p.raise_committed_usd),
+            sub: p.raise_amount_usd
               ? `${Math.round(p.raise_committed_usd / p.raise_amount_usd)}× oversubscribed`
-              : undefined
-          }
-        />
-        <Metric label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
-      </div>
-      {p.raise_contributors == null && (
+              : undefined,
+          },
+          p.raise_fdv_usd != null && { label: "Raise FDV", value: fmtUsd(p.raise_fdv_usd) },
+        ]}
+      />
+      {!p.raise_track && (
         <p className="border-t border-grid px-4 py-2.5 text-[11px] text-muted">
-          Holders-at-launch and whale growth since the raise need a holder
-          snapshot taken at launch; this platform began tracking later, so those
-          deltas start from first ingest rather than from TGE.
+          Not a launchpad sale, so the public-sale figures — per-token price,
+          minimum, commitments, contributor count — do not exist for this token
+          and are omitted rather than shown empty.
         </p>
       )}
     </SectionCard>

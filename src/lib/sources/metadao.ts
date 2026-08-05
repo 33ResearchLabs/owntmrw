@@ -215,7 +215,12 @@ export async function discoverProjects(): Promise<DiscoveredProject[]> {
       mint: t.base_currency, status: "live",
       pool_address: t.pool_id || undefined,
       treasury_address: t.treasury_vault_address || undefined,
-      treasury_value_usd: Number(t.treasury_usdc_aum) || undefined,
+      // `|| undefined` drops a real $0 balance along with a genuinely missing
+      // one — FAF's treasury is verifiably empty ("0.000000") and that fact
+      // was being silently discarded, leaving the token with no snapshot at
+      // all instead of a $0 one.
+      treasury_value_usd: Number.isFinite(Number(t.treasury_usdc_aum))
+        ? Number(t.treasury_usdc_aum) : undefined,
       launch_ts,
       category: existing?.category ?? enrich.category,
       source: "metadao-market-api",

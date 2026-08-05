@@ -1,58 +1,9 @@
 import type { ProjectDetail } from "@/lib/queries";
+import { DAY, changeVsAgo } from "@/lib/series";
 import { fmtUsd, timeAgo } from "@/lib/format";
 import {
   IconBadge, Sparkline, MiniBars, DeltaChip, MeterBar, ScaleMarker, type IconName,
 } from "./viz";
-
-const DAY = 86400;
-
-/**
- * How far from the date it claims a lookback reading may sit.
- *
- * Daily candles do not land on the exact hour a window opens, and a series can
- * miss a day, so an exact match would refuse most real comparisons. Two days
- * either side of the 7d mark is close enough that the label stays true, and
- * far enough that a token trading for a week and a half still gets a number.
- */
-const LOOKBACK_TOLERANCE = 2 * DAY;
-
-/**
- * Change from a window ago to the figure the tile is actually showing.
- *
- * `current` is the headline value, not the last point in the series. The two
- * are different things: the headline is a live quote while the series is
- * archived candles, and taking the series' own last point as "now" produced a
- * +2976% under a headline that had not moved 30× — it was measuring a
- * week-old candle against an older one and stamping it beneath a live number.
- *
- * The lookback is anchored to the clock rather than to the end of the series,
- * and must land within LOOKBACK_TOLERANCE of the date it claims. A series that
- * has stopped updating therefore stops producing deltas instead of comparing
- * whatever two points it happens to still hold.
- *
- * Two readings are enough. This deliberately does not share the sparkline's
- * minimum point count: a chart needs enough points to have a shape, arithmetic
- * needs two, and gating the number on the chart's requirement suppressed real
- * comparisons — then blamed it on missing history the project actually had.
- */
-function changeVsAgo(
-  current: number | null | undefined,
-  series: { ts: number; v: number }[],
-  windowSec: number,
-  nowSec: number
-): number | null {
-  if (current == null || !Number.isFinite(current)) return null;
-  if (series.length < 2) return null;
-
-  const target = nowSec - windowSec;
-  let best: { ts: number; v: number } | null = null;
-  for (const p of series) {
-    if (Math.abs(p.ts - target) > LOOKBACK_TOLERANCE) continue;
-    if (!best || Math.abs(p.ts - target) < Math.abs(best.ts - target)) best = p;
-  }
-  if (!best || !best.v) return null;
-  return ((current - best.v) / best.v) * 100;
-}
 
 function Tile({
   icon, color, label, value, sub, children,
