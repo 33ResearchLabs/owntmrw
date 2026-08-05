@@ -190,6 +190,12 @@ export const parseCodeFrequency = (g: GithubSnapshot | null) => parseJson<CodeWe
 export interface ProjectDetail {
   project: Project;
   latest: { price_usd: number | null; mcap: number | null; fdv: number | null; liquidity_usd: number | null; vol24h: number | null; change_24h: number | null } | null;
+  /**
+   * Which venue priced this token on this render, or null when nothing did.
+   * Jupiter serves price only, so a tile whose figure is missing can say which
+   * source declined to report it rather than showing a bare dash.
+   */
+  quoteSource: "dexscreener" | "jupiter" | null;
   candles: { ts: number; o: number; h: number; l: number; c: number; v: number }[];
   events: { ts: number; type: string; title: string; detail: string | null; url: string | null }[];
   topHolders: { rank: number; address: string; owner: string | null; amount: number; pct: number; label: string | null }[];
@@ -333,7 +339,8 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
     athTs = Math.floor(Date.now() / 1000);
   }
   return {
-    project, latest, candles, events, topHolders, holderHistory, proposals, github, observations,
+    project, latest, quoteSource: quote?.source ?? null,
+    candles, events, topHolders, holderHistory, proposals, github, observations,
     treasuryValue: treasury?.value_usd ?? null, treasuryHistory, treasuryLastRead,
     news, releases, listings, risk,
     ath, atl, athTs,

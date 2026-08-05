@@ -166,15 +166,21 @@ export function MiniBars({
 /**
  * A period-over-period change pill.
  *
- * `pct` is null whenever the series does not actually span the period being
- * claimed. The chip then says so instead of comparing the two closest readings
- * it happens to hold and labelling a six-hour move as a weekly one.
+ * `pct` is null whenever the comparison cannot honestly be made, but there is
+ * more than one way for that to happen — no reading from the period ago, or no
+ * current reading to compare it against. `reason` lets the caller say which,
+ * because a chip that blames missing history for a missing live quote sends
+ * the reader looking in the wrong place.
  */
-export function DeltaChip({ pct, period }: { pct: number | null; period: string }) {
+export function DeltaChip({
+  pct, period, reason,
+}: {
+  pct: number | null; period: string; reason?: string;
+}) {
   if (pct == null) {
     return (
       <span className="inline-flex items-center rounded-md bg-surface2 px-1.5 py-0.5 text-[10.5px] text-faint">
-        needs {period} of history
+        {reason ?? `needs ${period} of history`}
       </span>
     );
   }

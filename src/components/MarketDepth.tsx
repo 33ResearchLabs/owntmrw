@@ -83,7 +83,18 @@ function Tile({
  * until pool depth is archived per day.
  */
 export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
-  const { project: p, latest, candles } = d;
+  const { project: p, latest, candles, quoteSource } = d;
+
+  /**
+   * Jupiter prices tokens that trade only on MetaDAO's own AMM, and it reports
+   * price alone. applyQuote withholds volume and change rather than pairing a
+   * live price with a week-old snapshot, so those tiles have no figure at all —
+   * which is correct, and needs saying, because a bare dash reads as broken.
+   */
+  const priceOnlyQuote = quoteSource === "jupiter";
+  const noVolumeNote = priceOnlyQuote
+    ? "Jupiter quotes price only — no volume reported"
+    : undefined;
 
   const closes = candles.map((c) => c.c);
   const mcapSeries = p.circulating_supply
@@ -147,17 +158,24 @@ export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
 
         <Tile
           icon="bars" color="#9b7ae0" label="24h Volume"
-          value={fmtUsd(latest?.vol24h)} sub="traded, USD"
+          value={fmtUsd(latest?.vol24h)}
+          sub={noVolumeNote ?? "traded, USD"}
         >
           <MiniBars values={volSeries.map((s) => s.v)} color="#9b7ae0" />
           <div className="mt-1.5">
-            <DeltaChip pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, now)} period="7d" />
+            <DeltaChip
+              pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, now)}
+              period="7d"
+              reason={latest?.vol24h == null ? "no live volume to compare" : undefined}
+            />
           </div>
         </Tile>
 
         <Tile
           icon="target" color="var(--good)" label="Volume / Depth"
-          value={turnover != null ? `${turnover.toFixed(2)}×` : "—"} sub="turnover ratio"
+          value={turnover != null ? `${turnover.toFixed(2)}×` : "—"}
+          // Turnover divides volume by depth, so it goes with its numerator.
+          sub={turnover == null && noVolumeNote ? "needs 24h volume — " + noVolumeNote : "turnover ratio"}
         >
           <ScaleMarker
             value={turnover} max={2} ticks={["0", "1", "2+"]}
