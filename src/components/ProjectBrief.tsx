@@ -39,11 +39,22 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
   const treasuryVsRaise = treasuryValue != null && p.raise_amount_usd
     ? (treasuryValue / p.raise_amount_usd) * 100 : null;
 
-  const groups: { title: string; icon: IconName; color: string; tiles: Tile[] }[] = [
+  // MetaDAO and Flash.Trade never ran a public launchpad sale — raise_track is
+  // only set for tokens that did — so demand, per-token price, valuation and
+  // contributor counts were never public figures to show, not data ingest
+  // missed. Left silent, the card renders one tile in a grid built for six and
+  // reads as broken; the note fills that space with the reason instead.
+  const raiseIsPrivate = !p.raise_track;
+
+  const groups: { title: string; icon: IconName; color: string; tiles: Tile[]; note?: string }[] = [
     {
       title: "The Raise",
       icon: "chart",
       color: "var(--accent)",
+      note: raiseIsPrivate
+        ? (p.raise_note ??
+          "Not a launchpad sale — demand, per-token price, valuation and contributor figures were never public for this raise.")
+        : undefined,
       tiles: [
         p.raise_amount_usd != null && {
           label: "Raised",
@@ -258,13 +269,18 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
                 );
               })}
             </div>
+            {g.note && (
+              <p className="border-t border-grid px-5 py-3 text-[11.5px] leading-relaxed text-muted">
+                {g.note}
+              </p>
+            )}
           </div>
         ))}
       </div>
 
-      {(p.raise_note || footStats.length > 0) && (
+      {((p.raise_note && !raiseIsPrivate) || footStats.length > 0) && (
         <div className="mt-4 flex flex-col gap-4 rounded-xl border border-line bg-surface px-5 py-4 lg:flex-row lg:items-center">
-          {p.raise_note && (
+          {p.raise_note && !raiseIsPrivate && (
             <div className="flex min-w-0 flex-1 gap-3">
               <span className="mt-0.5 shrink-0 text-muted"><Icon name="info" size={15} /></span>
               <p className="text-[12px] leading-relaxed text-muted">{p.raise_note}</p>

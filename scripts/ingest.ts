@@ -11,7 +11,7 @@
  * Usage: npm run ingest            (full run)
  *        npm run ingest -- --fast  (skip candles/holders, prices only)
  */
-import { db, upsertProject, allProjects, recordTreasurySnapshot } from "../src/lib/db";
+import { db, upsertProject, allProjects, recordTreasurySnapshot, recordStructuralEvent } from "../src/lib/db";
 import { discoverProjects, fetchSupply } from "../src/lib/sources/metadao";
 import { fetchMarketHistory } from "../src/lib/sources/marketdata";
 import { bestPairForMint, socialsFromPair } from "../src/lib/sources/dexscreener";
@@ -26,7 +26,7 @@ import { raiseFor, refundRate } from "../src/lib/sources/raises";
 import { sleep } from "../src/lib/sources/http";
 import { discoverFeed, fetchFeed, githubFeeds } from "../src/lib/sources/feeds";
 import { KNOWN_WALLETS } from "../src/lib/sources/wallets";
-import { capFromSupply, isUndistributed } from "../src/lib/quote";
+import { capFromSupply, marketCap } from "../src/lib/quote";
 
 const FAST = process.argv.includes("--fast");
 const now = () => Math.floor(Date.now() / 1000);
@@ -135,7 +135,7 @@ async function main() {
         launch_ts: p.launch_ts ?? (pair.pairCreatedAt ? Math.floor(pair.pairCreatedAt / 1000) : undefined),
       });
       const price = Number(pair.priceUsd) || null;
-      const mcap = capFromSupply(price, p.circulating_supply, pair.marketCap);
+      const mcap = marketCap(price, p.circulating_supply, pair.marketCap);
       const fdv = capFromSupply(price, p.total_supply, pair.fdv);
       d.prepare(`
         INSERT OR REPLACE INTO price_snapshots
@@ -156,9 +156,7 @@ async function main() {
       if (price != null || tok) {
         // Jupiter's own mcap is as meaningless as ours for a token that has not
         // distributed yet, so report none instead of a figure like "$768".
-        const mcap = isUndistributed(p.circulating_supply)
-          ? null
-          : capFromSupply(price, p.circulating_supply, tok?.mcap);
+        const mcap = marketCap(price, p.circulating_supply, tok?.mcap);
         const fdv = capFromSupply(price, p.total_supply, tok?.fdv);
         d.prepare(`
           INSERT OR REPLACE INTO price_snapshots
@@ -220,6 +218,15 @@ async function main() {
         for (const c of candles) ins.run(p.id, c.ts, c.o, c.h, c.l, c.c, c.v);
       });
       tx();
+
+      // Tokens whose first pool predates DexScreener's record carry no
+      // pairCreatedAt, so they had no launch date at all. The first candle is
+      // direct evidence of the day trading started — only used as a fallback,
+      // never over a date a source actually reported.
+      if (!p.launch_ts && candles.length) {
+        upsertProject({ slug: p.slug, name: p.name, launch_ts: candles[0].ts });
+      }
+
       const real = candles.filter((c) => c.h !== c.l).length;
       console.log(
         `      ${p.name}: ${candles.length} candles from ${ranked.length} pool(s), ${real} with real range`
@@ -261,25 +268,45 @@ async function main() {
     for (const p of allProjects()) {
       if (!p.mint) continue;
       const jup = (await jupTokenSearch(p.mint)).find((t) => t.id === p.mint);
-      if (jup?.holderCount != null) {
-        d.prepare(
-          "INSERT OR REPLACE INTO holder_snapshots (project_id, ts, holder_count) VALUES (?,?,?)"
-        ).run(p.id, now(), jup.holderCount);
-        console.log(`      ${p.name}: ${jup.holderCount} holders (jupiter)`);
-      }
+      // GeckoTerminal carries concentration beside its own holder count, which
+      // is the only keyless route to it — getTokenLargestAccounts, below, is
+      // throttled on the public RPC, and top-10 used to vanish with it.
+      const gt = await tokenInfo(p.mint);
+      const holderCount = jup?.holderCount ?? gt?.holders ?? null;
       const supply = await tokenSupply(p.mint);
       const largest = await largestTokenAccounts(p.mint);
-      if (!largest.length) continue;
+
+      // One row per project per run. The count and the concentration used to be
+      // written by two separate statements, each calling now() — a second's
+      // drift between them split a single reading across two snapshots, one
+      // holding the count and the other the concentration.
+      const writeSnapshot = (top10: number | null) => {
+        d.prepare(`
+          INSERT OR REPLACE INTO holder_snapshots (project_id, ts, holder_count, top10_pct, supply)
+          VALUES (?,?,?,?,?)
+        `).run(p.id, now(), holderCount, top10, supply);
+      };
+
+      if (!largest.length) {
+        // No RPC list, so no per-wallet table — but the aggregate still lands.
+        writeSnapshot(gt?.top10Pct ?? null);
+        console.log(
+          `      ${p.name}: ${holderCount ?? "?"} holders` +
+          (gt?.top10Pct != null ? `, top10 ${gt.top10Pct.toFixed(1)}% (geckoterminal)` : "") +
+          " — RPC holder list unavailable"
+        );
+        continue;
+      }
       const insert = d.prepare(`
         INSERT OR REPLACE INTO top_holders (project_id, rank, address, owner, amount, pct, label, ts)
         VALUES (?,?,?,?,?,?,?,?)
       `);
       let rank = 1;
-      let top10 = 0;
+      let rpcTop10 = 0;
       for (const acc of largest.slice(0, 20)) {
         const owner = await tokenAccountOwner(acc.address);
         const pct = supply ? (acc.uiAmount / supply) * 100 : null;
-        if (rank <= 10 && pct) top10 += pct;
+        if (rank <= 10 && pct) rpcTop10 += pct;
         const known = owner ? KNOWN_WALLETS[owner] : null;
         // Match on the token account as well as its owner: the allocation
         // vaults are token accounts, so an owner-only check misses them.
@@ -296,14 +323,15 @@ async function main() {
         insert.run(p.id, rank, acc.address, owner, acc.uiAmount, pct, label, now());
         rank++;
       }
-      const prev = d.prepare(
-        "SELECT holder_count FROM holder_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1"
-      ).get(p.id) as { holder_count: number | null } | undefined;
-      d.prepare(`
-        INSERT OR REPLACE INTO holder_snapshots (project_id, ts, holder_count, top10_pct, supply)
-        VALUES (?,?,?,?,?)
-      `).run(p.id, now(), prev?.holder_count ?? null, top10 || null, supply);
-      console.log(`      ${p.name}: top10 = ${top10.toFixed(1)}% of supply`);
+      // The RPC list is per token account and computed against our own supply
+      // figure, so it is preferred; GeckoTerminal covers the run where it fails.
+      const top10 = rpcTop10 > 0 ? rpcTop10 : gt?.top10Pct ?? null;
+      writeSnapshot(top10);
+      console.log(
+        `      ${p.name}: ${holderCount ?? "?"} holders` +
+        (top10 != null ? `, top10 ${top10.toFixed(1)}%` : "") +
+        ` (${rpcTop10 > 0 ? "rpc" : "geckoterminal"})`
+      );
     }
   }
 
@@ -319,7 +347,9 @@ async function main() {
       // A broken lookup must not be read as "delisted" — leave the row alone.
       if (failed) { console.log(`      ${p.name}: lookup failed, keeping stored venues`); continue; }
 
-      const cg = cgId ? (await coinListings(cgId)) ?? [] : [];
+      const cg = cgId
+        ? (await coinListings(cgId, { mint: p.mint, symbol: p.symbol })) ?? []
+        : [];
       const pools = (await poolListings(p.mint)) ?? [];
 
       const byKey = new Map<string, {
@@ -480,10 +510,17 @@ async function main() {
       }
     }
 
-    // structural events
-    const insEv = d.prepare("INSERT OR IGNORE INTO events (project_id, ts, type, title, detail, url) VALUES (?,?,?,?,?,?)");
-    if (p.raise_end_ts) insEv.run(p.id, p.raise_end_ts, "raise_closed", "Raise closed", p.raise_amount_usd ? `$${Math.round(p.raise_amount_usd).toLocaleString()} raised` : null, null);
-    if (p.launch_ts) insEv.run(p.id, p.launch_ts, "token_launch", "Token trading began", null, null);
+    // Structural events replace rather than append: a corrected raise date must
+    // move the entry, not add a second one beside the superseded reading.
+    if (p.raise_end_ts) {
+      recordStructuralEvent(
+        p.id, p.raise_end_ts, "raise_closed", "Raise closed",
+        p.raise_amount_usd ? `$${Math.round(p.raise_amount_usd).toLocaleString()} raised` : null
+      );
+    }
+    if (p.launch_ts) {
+      recordStructuralEvent(p.id, p.launch_ts, "token_launch", "Token trading began", null);
+    }
   }
 
   // 6. press coverage, from two complementary directions:

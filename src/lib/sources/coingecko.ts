@@ -70,12 +70,37 @@ interface Ticker {
 }
 
 /**
+ * Quote assets, keyed by UPPERCASED mint.
+ *
+ * CoinGecko returns `base`/`target` as either a symbol or a contract address
+ * depending on the ticker — so the same market arrives twice in two notations —
+ * and it upper-cases the addresses, which base58 is not. Hence the uppercase
+ * keys and the case-insensitive comparisons below: matching the real mint
+ * spelling would never fire.
+ */
+const QUOTE_SYMBOLS: Record<string, string> = {
+  EPJFWDD5AUFQSSQEM2QN1XZYBAPC8G4WEGGKZWYTDT1V: "USDC",
+  SO11111111111111111111111111111111111111112: "SOL",
+  ES9VMFRZACERMJFRF4H2FYD4KCONKY11MCCE8BENWNYB: "USDT",
+  "9N4NBM75F5UI33ZBPYXN59EWSGE8CGSHTAETH5YFEJ9E": "BTC",
+  "7VFCXTUXX5WJV5JADK17DUJ4KSGAU7UTNKJ4B963VOXS": "ETH",
+};
+
+/**
  * Every venue CoinGecko sees trading this token, best volume first.
  *
  * Tickers repeat per pool on DEXes, so identical (venue, pair) rows are merged
  * — otherwise Meteora alone would appear four times and read as four listings.
+ *
+ * Pass the token's own mint and symbol to make that merge work. Without them a
+ * ticker quoting raw addresses reads as a different market from the identical
+ * one quoting symbols — RAWR/USDC and 4K1M…ETA/EPJF…T1V are the same pool pair
+ * — so the venue is listed twice and its volume split across both rows.
  */
-export async function coinListings(id: string): Promise<Listing[] | null> {
+export async function coinListings(
+  id: string,
+  token?: { mint?: string | null; symbol?: string | null }
+): Promise<Listing[] | null> {
   const data = await getJSON<{ tickers?: Ticker[] }>(
     `${BASE}/coins/${id}?localization=false&tickers=true&market_data=false&community_data=false&developer_data=false&sparkline=false`,
     { headers: HEADERS, retries: 1, timeoutMs: 15000 }
@@ -93,15 +118,30 @@ export async function coinListings(id: string): Promise<Listing[] | null> {
     // A venue quoting raw mint addresses is trading on-chain, whatever it is
     // called. Name matching alone mislabels order-book DEXes such as Manifest
     // as centralised, which overstates how many real CEX listings a token has.
-    const isMint = (s?: string) => !!s && s.length >= 30 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(s);
+    // Deliberately not a base58 charset check. CoinGecko upper-cases addresses,
+    // which turns wrapped SOL into SO111…, and base58 has no O — so the strict
+    // test rejected it and the full 43 characters were printed as a "symbol".
+    const isMint = (s?: string) => !!s && s.length >= 30 && /^[0-9A-Za-z]+$/.test(s);
     const onChain =
       isMint(t.base) || isMint(t.target) ||
       /\b(amm|swap|dex|meteora|raydium|orca|jupiter|omnipair|manifest|phoenix|lifinity)\b/i.test(exchange);
 
-    // Raw mints are unreadable next to "META/USDC", so shorten for display.
-    const short = (s?: string) => (s && s.length > 12 ? `${s.slice(0, 4)}…${s.slice(-3)}` : s ?? "?");
-    const pair = `${short(t.base)}/${short(t.target)}`;
-    const key = `${exchange}|${pair}`;
+    // Name the asset where we can. A mint we cannot resolve is still shortened
+    // rather than printed in full — unreadable beats unreadable and long — but
+    // it stays distinct so two genuinely different assets never merge.
+    const ownMint = token?.mint?.toUpperCase();
+    const asset = (s?: string) => {
+      if (!s) return "?";
+      const up = s.toUpperCase();
+      if (!isMint(s)) return up;
+      if (QUOTE_SYMBOLS[up]) return QUOTE_SYMBOLS[up];
+      if (ownMint && up === ownMint && token?.symbol) return token.symbol.toUpperCase();
+      return `${up.slice(0, 4)}…${up.slice(-3)}`;
+    };
+    const pair = `${asset(t.base)}/${asset(t.target)}`;
+    // Venues arrive spelled inconsistently ("Meteora DAMM V2" and "… v2"), so
+    // the key folds case while the row keeps the first spelling seen.
+    const key = `${exchange.toLowerCase()}|${pair.toUpperCase()}`;
     const vol = t.converted_volume?.usd ?? null;
     const existing = merged.get(key);
     if (existing) {

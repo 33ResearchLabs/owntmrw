@@ -143,12 +143,24 @@ export async function poolListings(mint: string): Promise<PoolListing[] | null> 
 
 /** Token info (may include holder count and metadata). */
 export async function tokenInfo(mint: string): Promise<{
-  holders?: number; description?: string; websites?: string[];
+  holders?: number;
+  /**
+   * Concentration straight from the same response as the holder count.
+   *
+   * Worth reading because the alternative is getTokenLargestAccounts, which the
+   * public RPC throttles — so on a keyless deployment top-10 concentration was
+   * simply absent. This arrives with a call already being made.
+   */
+  top10Pct?: number; top20Pct?: number;
+  description?: string; websites?: string[];
   twitter?: string; telegram?: string; discord?: string; image?: string;
 } | null> {
   const data = await getJSON<{
     data?: { attributes?: {
-      holders?: { count?: number };
+      holders?: {
+        count?: number;
+        distribution_percentage?: { top_10?: string; "11_20"?: string; "21_40"?: string; rest?: string };
+      };
       description?: string; websites?: string[];
       twitter_handle?: string; telegram_handle?: string; discord_url?: string;
       image_url?: string;
@@ -157,8 +169,18 @@ export async function tokenInfo(mint: string): Promise<{
   await sleep(2100);
   const a = data?.data?.attributes;
   if (!a) return null;
+  // Percentages arrive as strings; a band that is absent is unknown, not zero.
+  const band = (v: string | undefined) => {
+    const n = v == null ? NaN : Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const dist = a.holders?.distribution_percentage;
+  const top10 = band(dist?.top_10);
+  const next10 = band(dist?.["11_20"]);
   return {
     holders: a.holders?.count,
+    top10Pct: top10,
+    top20Pct: top10 != null && next10 != null ? top10 + next10 : undefined,
     description: a.description,
     websites: a.websites,
     twitter: a.twitter_handle ? `https://x.com/${a.twitter_handle}` : undefined,

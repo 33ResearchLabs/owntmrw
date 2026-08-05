@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import {
-  projectDetail, priceIsReliable, MIN_LIQUIDITY_USD, crossProjectHolderCounts,
-  parseLanguages, parseCodeFrequency, parseRisks, raisePriceOf,
+  projectDetail, priceIsReliable, MIN_LIQUIDITY_USD,
+  parseLanguages, parseCodeFrequency, parseRisks, raisePriceOf, tradingStart,
 } from "@/lib/queries";
 import { healthScore, insights, developerScore } from "@/lib/analytics";
 import { DevelopmentPanel } from "@/components/Development";
@@ -12,7 +12,7 @@ import { HealthScorePanel } from "@/components/HealthScore";
 import {
   HoldersPanel, SmartMoneyPanel, TreasuryPanel, CompareRaisePanel, NewsPanel,
   ResearchPanel, GovernancePanel, TimelinePanel, InsightList,
-  ListingsPanel, RiskPanel, SectionCard, Metric, DataGap,
+  ListingsPanel, RiskPanel, SectionCard, Metric, DataGap, DenseMetricGrid,
   DashboardCard, CardAction, CardTag, MetricGrid, MetricCell, CardNote,
 } from "@/components/panels";
 import { TradeTerminal } from "@/components/TradeTerminal";
@@ -45,8 +45,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     ? ((latest.price_usd - rp.usd) / rp.usd) * 100 : null;
   const athReturn = rp && ath && tradable ? ((ath - rp.usd) / rp.usd) * 100 : null;
   const fromAth = ath && latest?.price_usd && tradable ? ((latest.price_usd - ath) / ath) * 100 : null;
-  const daysToAth = athTs && (p.raise_end_ts || p.launch_ts)
-    ? Math.max(0, Math.round((athTs - (p.raise_end_ts ?? p.launch_ts!)) / 86400)) : null;
+  const tradingFrom = tradingStart(p, candles);
+  const daysToAth = athTs && tradingFrom
+    ? Math.max(0, Math.round((athTs - tradingFrom) / 86400)) : null;
   const latestHolders = holderHistory.length ? holderHistory[holderHistory.length - 1] : null;
   const refunded = p.raise_committed_usd && p.raise_amount_usd
     ? (1 - p.raise_amount_usd / p.raise_committed_usd) * 100 : null;
@@ -68,7 +69,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   const languages = parseLanguages(github);
   const codeFrequency = parseCodeFrequency(github);
   const memo = buildMemo(d);
-  const crossCounts = crossProjectHolderCounts();
 
   const chartEvents = events.map((e) => ({
     time: e.ts, label: EVENT_LABEL[e.type] ?? "•", title: e.title, type: e.type, detail: e.detail,
@@ -105,20 +105,35 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
           title="Development"
           right={<a href="#development" className="text-[11px] text-accent hover:underline">full breakdown →</a>}
         >
-          {github ? (
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
-              <Metric label="Commits 90d" value={fmtNum(github.commits_90d)} />
-              <Metric label="Contributors" value={fmtNum(github.contributors)} />
-              <Metric label="Stars" value={fmtNum(github.stars)} />
-              <Metric label="Last Commit" value={timeAgo(github.last_commit_ts ?? github.last_push_ts)} />
-            </div>
-          ) : (
+          {!github ? (
             <div className="p-4">
               <DataGap
                 title="No GitHub organisation linked"
                 why="Engineering output cannot be verified for this project because no public repository is recorded."
               />
             </div>
+          ) : github.commits_90d == null && github.contributors == null
+              && github.last_commit_ts == null && github.last_push_ts == null ? (
+            // A snapshot exists but carries only headline counters. Three bare
+            // dashes read as breakage; say which call was rate-limited instead.
+            <div className="p-4">
+              <DataGap
+                title="Repository counters not collected"
+                why={`Stars and repo count are on file${github.stars != null ? ` (★ ${fmtNum(github.stars)})` : ""}, but commit, contributor and push history need extra GitHub calls that were rate-limited on the last run.`}
+                unlock="Set GITHUB_TOKEN to lift the API ceiling from 60 to 5,000 requests an hour, then re-run npm run ingest."
+              />
+            </div>
+          ) : (
+            <DenseMetricGrid
+              tiles={[
+                github.commits_90d != null && { label: "Commits 90d", value: fmtNum(github.commits_90d) },
+                github.contributors != null && { label: "Contributors", value: fmtNum(github.contributors) },
+                github.stars != null && { label: "Stars", value: fmtNum(github.stars) },
+                (github.last_commit_ts ?? github.last_push_ts) != null && {
+                  label: "Last Commit", value: timeAgo(github.last_commit_ts ?? github.last_push_ts),
+                },
+              ]}
+            />
           )}
         </SectionCard>
       </div>
@@ -136,46 +151,56 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
           }
         >
           <MetricGrid>
-            <MetricCell
-              label="Raised"
-              value={p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd)}
-              sub={p.raise_amount_usd === 0
-                ? "fully refunded"
-                : p.raise_goal_usd && p.raise_amount_usd
-                  ? `${((p.raise_amount_usd / p.raise_goal_usd) * 100).toFixed(0)}% of minimum`
-                  : undefined}
-            />
-            <MetricCell
-              label="Minimum / Goal"
-              value={fmtUsd(p.raise_goal_usd)}
-              sub={p.raise_goal_usd && p.raise_amount_usd && p.raise_amount_usd >= p.raise_goal_usd
-                ? "Goal achieved"
-                : undefined}
-            />
-            <MetricCell
-              label="Committed"
-              value={fmtUsd(p.raise_committed_usd)}
-              sub={oversubscribed != null
-                ? `${oversubscribed < 10 ? oversubscribed.toFixed(1) : Math.round(oversubscribed)}× oversubscribed · ${refunded!.toFixed(0)}% refunded`
-                : undefined}
-            />
-            <MetricCell
-              label="Raise Price"
-              value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : "—"}
-              sub={rp?.derived ? "derived: raise ÷ 10M tokens sold" : undefined}
-            />
-            <MetricCell label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
-            <MetricCell label="Contributors" value={fmtNum(p.raise_contributors)} />
-            <MetricCell
-              label="Circulating Supply"
-              value={fmtNum(p.circulating_supply)}
-              sub={p.total_supply ? `of ${fmtNum(p.total_supply)} total` : undefined}
-            />
-            <MetricCell
-              label="Locked (Team)"
-              value={fmtNum(p.team_package)}
-              sub={lockedPct != null ? `${lockedPct.toFixed(0)}% of supply` : undefined}
-            />
+            {p.raise_amount_usd != null && (
+              <MetricCell
+                label="Raised"
+                value={p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd)}
+                sub={
+                  p.raise_amount_usd === 0
+                    ? "fully refunded"
+                    : p.raise_end_ts ? `closed ${fmtDate(p.raise_end_ts)}` : undefined
+                }
+              />
+            )}
+            {p.raise_goal_usd != null && (
+              <MetricCell label="Minimum / Goal" value={fmtUsd(p.raise_goal_usd)} />
+            )}
+            {p.raise_committed_usd != null && (
+              <MetricCell
+                label="Committed"
+                value={fmtUsd(p.raise_committed_usd)}
+                sub={
+                  oversubscribed != null
+                    ? `${oversubscribed < 10 ? oversubscribed.toFixed(1) : Math.round(oversubscribed)}× oversubscribed · ${refunded!.toFixed(0)}% refunded`
+                    : undefined
+                }
+              />
+            )}
+            {rp && (
+              <MetricCell
+                label="Raise Price"
+                value={`${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`}
+                sub={rp.derived ? "derived: raise ÷ 10M tokens sold" : undefined}
+              />
+            )}
+            {p.raise_fdv_usd != null && <MetricCell label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />}
+            {p.raise_contributors != null && (
+              <MetricCell label="Contributors" value={fmtNum(p.raise_contributors)} />
+            )}
+            {p.circulating_supply != null && (
+              <MetricCell
+                label="Circulating Supply"
+                value={fmtNum(p.circulating_supply)}
+                sub={p.total_supply ? `of ${fmtNum(p.total_supply)} total` : undefined}
+              />
+            )}
+            {p.team_package != null && (
+              <MetricCell
+                label="Locked (Team)"
+                value={fmtNum(p.team_package)}
+                sub={lockedPct != null ? `${lockedPct.toFixed(0)}% of supply` : undefined}
+              />
+            )}
           </MetricGrid>
           {p.raise_note && <CardNote>{p.raise_note}</CardNote>}
         </DashboardCard>
@@ -185,7 +210,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
 
   const tabs: TabDef[] = [
     { key: "overview", label: "Overview", content: overview },
-    { key: "holders", label: "Holders", badge: latestHolders?.holder_count ? fmtNum(latestHolders.holder_count) : undefined, content: <HoldersPanel d={d} crossCounts={crossCounts} /> },
+    { key: "holders", label: "Holders", badge: latestHolders?.holder_count ? fmtNum(latestHolders.holder_count) : undefined, content: <HoldersPanel d={d} /> },
     { key: "smart", label: "Smart Money", content: <SmartMoneyPanel d={d} /> },
     { key: "treasury", label: "Treasury", content: <TreasuryPanel d={d} /> },
     {
@@ -273,10 +298,26 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
               : p.raise_amount_usd != null ? `raised ${fmtUsd(p.raise_amount_usd)}` : "USDC AUM (on-chain)"
           }
         />
-        <StatTile
-          label="ROI vs Raise" value={<Delta v={roi} />}
-          sub={rp ? `from ${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : "raise price unknown"}
-        />
+        {/* A return needs a price to measure from. Where none exists — MetaDAO
+            raised privately, so no per-token price was ever published — the
+            tile carries the raise itself rather than an empty percentage that
+            reads as a load failure. */}
+        {roi != null || rp ? (
+          <StatTile
+            label="ROI vs Raise" value={<Delta v={roi} />}
+            sub={rp ? `from ${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : undefined}
+          />
+        ) : (
+          <StatTile
+            label="Raised"
+            value={p.raise_amount_usd != null ? fmtUsd(p.raise_amount_usd) : "—"}
+            sub={
+              p.raise_amount_usd == null ? "no raise on record"
+                : p.raise_track ? `${p.raise_track} launch · no ROI baseline`
+                  : "private round · no public token price"
+            }
+          />
+        )}
         <StatTile
           label="From ATH" value={<Delta v={fromAth} />}
           sub={
@@ -321,7 +362,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
         </div>
         <aside className="hidden w-[300px] shrink-0 xl:block">
           <div className="space-y-4">
-            <PortfolioCard />
+            {/* <PortfolioCard /> */}
             {observations.length > 0 && (
               <div className="card">
                 <div className="border-b border-grid px-4 py-3">

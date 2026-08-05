@@ -39,7 +39,7 @@ export function Tabs({ tabs, initial }: { tabs: TabDef[]; initial?: string }) {
       <div
         role="tablist"
         aria-label="Project intelligence sections"
-        className="scroll-x flex gap-0.5 border-b border-grid"
+        className="scroll-x-quiet flex gap-0.5 border-b border-grid"
       >
         {tabs.map((t) => {
           const on = t.key === active;

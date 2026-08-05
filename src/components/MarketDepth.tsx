@@ -1,45 +1,9 @@
 import type { ProjectDetail } from "@/lib/queries";
+import { DAY, changeVsAgo } from "@/lib/series";
 import { fmtUsd, timeAgo } from "@/lib/format";
 import {
-  IconBadge, Sparkline, MiniBars, DeltaChip, MeterBar, ScaleMarker,
-  MIN_SERIES_POINTS, type IconName,
+  IconBadge, Sparkline, MiniBars, DeltaChip, MeterBar, ScaleMarker, type IconName,
 } from "./viz";
-
-const DAY = 86400;
-
-/**
- * Change from a window ago to the figure the tile is actually showing.
- *
- * `current` is the headline value, not the last point in the series. The two
- * are different things: the headline is a live quote while the series is
- * archived candles, and taking the series' own last point as "now" produced a
- * +2976% under a headline that had not moved 30× — it was measuring a
- * week-old candle against an older one and stamping it beneath a live number.
- *
- * The lookback is anchored to the clock rather than to the end of the series,
- * and must land within a fifth of the window of the date it claims. A series
- * that has stopped updating therefore stops producing deltas instead of
- * comparing whatever two points it happens to still hold.
- */
-function changeVsAgo(
-  current: number | null | undefined,
-  series: { ts: number; v: number }[],
-  windowSec: number,
-  nowSec: number
-): number | null {
-  if (current == null || !Number.isFinite(current)) return null;
-  if (series.length < MIN_SERIES_POINTS) return null;
-
-  const target = nowSec - windowSec;
-  const tolerance = windowSec * 0.2;
-  let best: { ts: number; v: number } | null = null;
-  for (const p of series) {
-    if (Math.abs(p.ts - target) > tolerance) continue;
-    if (!best || Math.abs(p.ts - target) < Math.abs(best.ts - target)) best = p;
-  }
-  if (!best || !best.v) return null;
-  return ((current - best.v) / best.v) * 100;
-}
 
 function Tile({
   icon, color, label, value, sub, children,
@@ -70,7 +34,18 @@ function Tile({
  * until pool depth is archived per day.
  */
 export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
-  const { project: p, latest, candles } = d;
+  const { project: p, latest, candles, quoteSource } = d;
+
+  /**
+   * Jupiter prices tokens that trade only on MetaDAO's own AMM, and it reports
+   * price alone. applyQuote withholds volume and change rather than pairing a
+   * live price with a week-old snapshot, so those tiles have no figure at all —
+   * which is correct, and needs saying, because a bare dash reads as broken.
+   */
+  const priceOnlyQuote = quoteSource === "jupiter";
+  const noVolumeNote = priceOnlyQuote
+    ? "Jupiter quotes price only — no volume reported"
+    : undefined;
 
   const closes = candles.map((c) => c.c);
   const mcapSeries = p.circulating_supply
@@ -134,17 +109,24 @@ export function MarketDepthPanel({ d }: { d: ProjectDetail }) {
 
         <Tile
           icon="bars" color="#9b7ae0" label="24h Volume"
-          value={fmtUsd(latest?.vol24h)} sub="traded, USD"
+          value={fmtUsd(latest?.vol24h)}
+          sub={noVolumeNote ?? "traded, USD"}
         >
           <MiniBars values={volSeries.map((s) => s.v)} color="#9b7ae0" />
           <div className="mt-1.5">
-            <DeltaChip pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, now)} period="7d" />
+            <DeltaChip
+              pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, now)}
+              period="7d"
+              reason={latest?.vol24h == null ? "no live volume to compare" : undefined}
+            />
           </div>
         </Tile>
 
         <Tile
           icon="target" color="var(--good)" label="Volume / Depth"
-          value={turnover != null ? `${turnover.toFixed(2)}×` : "—"} sub="turnover ratio"
+          value={turnover != null ? `${turnover.toFixed(2)}×` : "—"}
+          // Turnover divides volume by depth, so it goes with its numerator.
+          sub={turnover == null && noVolumeNote ? "needs 24h volume — " + noVolumeNote : "turnover ratio"}
         >
           <ScaleMarker
             value={turnover} max={2} ticks={["0", "1", "2+"]}

@@ -1,5 +1,5 @@
 import { db, Project, sameBalance } from "./db";
-import { applyQuote, liveQuotes } from "./live";
+import { applyQuote, liveQuotes, liveTreasury } from "./live";
 import { ICO_TOKENS_SOLD } from "./sources/raises";
 
 export interface ScreenerRow extends Project {
@@ -58,6 +58,30 @@ export function raisePrice(
   p: Pick<Project, "raise_price" | "raise_amount_usd" | "raise_track">
 ): number | null {
   return raisePriceOf(p)?.usd ?? null;
+}
+
+/**
+ * When the token actually started trading — the baseline for anything measured
+ * "since launch", days-to-ATH above all.
+ *
+ * Not raise_end_ts. For a launchpad sale the raise closes and trading opens the
+ * same week, so the two were interchangeable; for MetaDAO they are seventeen
+ * months apart, because its raise was a private round in Aug 2024 and the token
+ * did not trade until Oct 2025. Counting from the raise reported "ATH in 521d"
+ * when the token had existed for 87.
+ *
+ * The earliest of the recorded launch and the first candle, because either can
+ * be the earlier evidence: a launch date can predate any indexed pool, and a
+ * pool can predate a launch date that was recorded later or loosely. Falls back
+ * to the raise only when there is no evidence of trading at all.
+ */
+export function tradingStart(
+  p: Pick<Project, "launch_ts" | "raise_end_ts">,
+  candles: { ts: number }[]
+): number | null {
+  const seen = [p.launch_ts, candles.length ? candles[0].ts : null]
+    .filter((t): t is number => t != null);
+  return seen.length ? Math.min(...seen) : p.raise_end_ts ?? null;
 }
 
 /**
@@ -120,15 +144,18 @@ function withReturns(r: ScreenerRow & { ath: number | null }): ScreenerRow {
 }
 
 export async function screenerRows(): Promise<ScreenerRow[]> {
-  const quotes = await liveQuotes();
+  const [quotes, treasury] = await Promise.all([liveQuotes(), liveTreasury()]);
   return screenerSnapshot().map((r) => {
     const live = applyQuote(r, r.mint ? quotes.get(r.mint) : undefined);
+    // Treasury is read live for the same reason price is: the snapshot is only
+    // as fresh as the last ingest, and a DAO spends in between.
+    const treasury_usd = (r.mint ? treasury.get(r.mint) : undefined) ?? r.treasury_usd;
     // ATH is a running peak, so a live price above the last stored candle is
     // the new high — otherwise a token at a fresh high reads as "-0.0% from ATH"
     // only after the next ingest.
     const ath = live.price_usd != null && (live.ath == null || live.price_usd > live.ath)
       ? live.price_usd : live.ath;
-    return withReturns({ ...live, ath });
+    return withReturns({ ...live, ath, treasury_usd });
   });
 }
 
@@ -190,10 +217,16 @@ export const parseCodeFrequency = (g: GithubSnapshot | null) => parseJson<CodeWe
 export interface ProjectDetail {
   project: Project;
   latest: { price_usd: number | null; mcap: number | null; fdv: number | null; liquidity_usd: number | null; vol24h: number | null; change_24h: number | null } | null;
+  /**
+   * Which venue priced this token on this render, or null when nothing did.
+   * Jupiter serves price only, so a tile whose figure is missing can say which
+   * source declined to report it rather than showing a bare dash.
+   */
+  quoteSource: "dexscreener" | "jupiter" | null;
   candles: { ts: number; o: number; h: number; l: number; c: number; v: number }[];
   events: { ts: number; type: string; title: string; detail: string | null; url: string | null }[];
   topHolders: { rank: number; address: string; owner: string | null; amount: number; pct: number; label: string | null }[];
-  holderHistory: { ts: number; holder_count: number | null; top10_pct: number | null }[];
+  holderHistory: { ts: number; holder_count: number | null; top10_pct: number | null; top20_pct: number | null }[];
   proposals: { number: number | null; title: string | null; state: string | null; created_ts: number | null; url: string | null; author: string | null }[];
   github: GithubSnapshot | null;
   observations: { ts: number; kind: string | null; text: string }[];
@@ -226,7 +259,9 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
     "SELECT price_usd, mcap, fdv, liquidity_usd, vol24h, change_24h FROM price_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1"
   ).get(id) as ProjectDetail["latest"];
   // Everything below is archival and reads from the store; the quote is not.
-  const quote = project.mint ? (await liveQuotes()).get(project.mint) : undefined;
+  const [quotes, treasuryLive] = await Promise.all([liveQuotes(), liveTreasury()]);
+  const quote = project.mint ? quotes.get(project.mint) : undefined;
+  const liveTreasuryUsd = project.mint ? treasuryLive.get(project.mint) : undefined;
   const latest = stored
     ? applyQuote(stored, quote)
     : quote
@@ -238,7 +273,7 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   const candles = d.prepare("SELECT ts,o,h,l,c,v FROM candles WHERE project_id = ? ORDER BY ts").all(id) as ProjectDetail["candles"];
   const events = d.prepare("SELECT ts,type,title,detail,url FROM events WHERE project_id = ? ORDER BY ts DESC LIMIT 100").all(id) as ProjectDetail["events"];
   const topHolders = d.prepare("SELECT rank,address,owner,amount,pct,label FROM top_holders WHERE project_id = ? ORDER BY rank LIMIT 20").all(id) as ProjectDetail["topHolders"];
-  const holderHistory = d.prepare("SELECT ts,holder_count,top10_pct FROM holder_snapshots WHERE project_id = ? ORDER BY ts").all(id) as ProjectDetail["holderHistory"];
+  const holderHistory = d.prepare("SELECT ts,holder_count,top10_pct,top20_pct FROM holder_snapshots WHERE project_id = ? ORDER BY ts").all(id) as ProjectDetail["holderHistory"];
   const proposals = d.prepare("SELECT number,title,state,created_ts,url,author FROM proposals WHERE project_id = ? ORDER BY created_ts DESC").all(id) as ProjectDetail["proposals"];
   const github = d.prepare(`
     SELECT ts, stars, forks, repos, last_push_ts, last_commit_ts, contributors, commits_90d,
@@ -333,8 +368,12 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
     athTs = Math.floor(Date.now() / 1000);
   }
   return {
-    project, latest, candles, events, topHolders, holderHistory, proposals, github, observations,
-    treasuryValue: treasury?.value_usd ?? null, treasuryHistory, treasuryLastRead,
+    project, latest, quoteSource: quote?.source ?? null,
+    candles, events, topHolders, holderHistory, proposals, github, observations,
+    // Live where the feed has it, the archived snapshot otherwise. Without
+    // this, treasury/market-cap divided a six-day-old balance by a live cap.
+    treasuryValue: liveTreasuryUsd ?? treasury?.value_usd ?? null,
+    treasuryHistory, treasuryLastRead,
     news, releases, listings, risk,
     ath, atl, athTs,
   };

@@ -103,6 +103,29 @@ export async function fetchTickers(): Promise<Ticker[]> {
   return Array.isArray(data) ? data : [];
 }
 
+/**
+ * Mint → USDC held in that project's DAO vault, from the same feed discovery
+ * reads. Separate from fetchTickers because that one sleeps afterwards to pace
+ * the ingest loop, and this runs on the request path.
+ *
+ * Treasury is the one archival figure that moves on its own: a DAO spends
+ * between ingest runs, so a stored snapshot goes wrong quietly. Reading it live
+ * costs nothing extra — the number is already on a feed we call.
+ */
+export async function treasuryAum(): Promise<Map<string, number>> {
+  const data = await getJSON<Ticker[]>(`${MARKET_API}/api/tickers`, {
+    headers: { "user-agent": BROWSER_UA },
+    retries: 1,
+    timeoutMs: 9000,
+  });
+  const out = new Map<string, number>();
+  for (const t of data ?? []) {
+    const v = Number(t.treasury_usdc_aum);
+    if (t.base_currency && Number.isFinite(v)) out.set(t.base_currency, v);
+  }
+  return out;
+}
+
 export interface SupplyInfo {
   totalSupply: number | null;
   circulatingSupply: number | null;
@@ -192,7 +215,12 @@ export async function discoverProjects(): Promise<DiscoveredProject[]> {
       mint: t.base_currency, status: "live",
       pool_address: t.pool_id || undefined,
       treasury_address: t.treasury_vault_address || undefined,
-      treasury_value_usd: Number(t.treasury_usdc_aum) || undefined,
+      // `|| undefined` drops a real $0 balance along with a genuinely missing
+      // one — FAF's treasury is verifiably empty ("0.000000") and that fact
+      // was being silently discarded, leaving the token with no snapshot at
+      // all instead of a $0 one.
+      treasury_value_usd: Number.isFinite(Number(t.treasury_usdc_aum))
+        ? Number(t.treasury_usdc_aum) : undefined,
       launch_ts,
       category: existing?.category ?? enrich.category,
       source: "metadao-market-api",

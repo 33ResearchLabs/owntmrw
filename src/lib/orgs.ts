@@ -43,8 +43,6 @@ export interface ClassifyInput {
   /** Liquidity vaults MetaDAO names, distinct from the venue an aggregator ranks. */
   ammVaultAddress?: string | null;
   lpPoolAddress?: string | null;
-  /** How many distinct MetaDAO projects list this wallet as a top holder. */
-  projectCount?: number;
   /** Owner program of the account, when known (jsonParsed getAccountInfo). */
   ownerProgram?: string | null;
   /** Share of supply held, 0-100. */
@@ -147,14 +145,12 @@ export function classifyWallet(input: ClassifyInput): OrgVerdict | null {
     };
   }
 
-  // 3. same wallet is a large holder across multiple projects
-  if ((input.projectCount ?? 0) >= 4) {
-    return {
-      label: "Institution", type: "Smart Money", isOrganisation: true,
-      confidence: "likely",
-      reason: `Appears among the top holders of ${input.projectCount} separate MetaDAO projects — a pattern typical of a fund or desk rather than an individual.`,
-    };
-  }
+  // Cross-project presence was once treated as evidence of a fund here. It is
+  // not: an AMM pool is a top holder of every project it makes a market for,
+  // and appearing on many launchpad lists is as consistent with infrastructure,
+  // or with one active retail wallet, as with a desk. The count is still shown
+  // on the wallet page as the observation it is, rather than dressed up as an
+  // identity nobody verified.
 
   // 4. program-owned account = a contract
   if (
@@ -191,6 +187,29 @@ export function crossProjectCounts(
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return counts;
+}
+
+/**
+ * What a holder is by size, when nothing says what it is by identity.
+ *
+ * Deliberately not an EntityType. A share of supply describes the position, not
+ * the account behind it — "Whale" is a fact about the balance, where "Treasury"
+ * is a claim about who controls it, and collapsing the two would let a number
+ * masquerade as evidence. It exists because "Unidentified" on every row of the
+ * table wastes the column: a wallet on 17% and a wallet on 0.01% are not the
+ * same finding, and the size is the one thing about them that is known.
+ */
+const HOLDING_BANDS = [
+  { floor: 10, label: "Whale", note: "10% or more of supply" },
+  { floor: 1, label: "Shark", note: "1–10% of supply" },
+  { floor: 0.1, label: "Dolphin", note: "0.1–1% of supply" },
+  { floor: 0.01, label: "Fish", note: "0.01–0.1% of supply" },
+  { floor: 0, label: "Shrimp", note: "under 0.01% of supply" },
+];
+
+export function holdingBand(pct: number | null | undefined): { label: string; note: string } | null {
+  if (pct == null || !Number.isFinite(pct) || pct <= 0) return null;
+  return HOLDING_BANDS.find((b) => pct >= b.floor) ?? null;
 }
 
 export function confidenceColor(c: Confidence): string {

@@ -315,6 +315,44 @@ export function projectBySlug(slug: string): Project | undefined {
 }
 
 /**
+ * Event types that are a derived fact rather than an occurrence.
+ *
+ * A project closes its raise once and begins trading once. News, releases and
+ * proposals are the opposite — each row is its own event and must accumulate.
+ */
+export type StructuralEvent = "raise_closed" | "token_launch";
+
+/**
+ * Record a structural event, replacing any earlier reading of the same fact.
+ *
+ * The events table is unique on (project_id, ts, type, title), so when a source
+ * corrects a date the new row does not collide with the old one and INSERT OR
+ * IGNORE appends instead of updating — which is how three projects came to show
+ * "Raise closed" twice, two days apart, one of them a fossil of a superseded
+ * date.
+ *
+ * Ordered so a failure can only ever leave the record more correct: rows with a
+ * different timestamp go first, then the right one is written or its detail
+ * refreshed. Nothing is deleted unless a replacement timestamp is already known,
+ * so a source that temporarily stops reporting a date cannot erase the event.
+ */
+export function recordStructuralEvent(
+  projectId: number,
+  ts: number,
+  type: StructuralEvent,
+  title: string,
+  detail: string | null
+): void {
+  const d = db();
+  d.prepare("DELETE FROM events WHERE project_id = ? AND type = ? AND ts <> ?")
+    .run(projectId, type, ts);
+  d.prepare(`
+    INSERT INTO events (project_id, ts, type, title, detail, url) VALUES (?,?,?,?,?,NULL)
+    ON CONFLICT (project_id, ts, type, title) DO UPDATE SET detail = excluded.detail
+  `).run(projectId, ts, type, title, detail);
+}
+
+/**
  * Two vault reads that mean "the balance did not move". Compared at cent
  * precision because the balance is a USDC total: anything finer is float
  * noise from the RPC decimal conversion, not money leaving the treasury.
