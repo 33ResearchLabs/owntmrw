@@ -35,7 +35,7 @@ export default async function Home() {
     <div className="flex flex-col gap-6 xl:flex-row">
       <div className="min-w-0 flex-1 space-y-8">
         {/* hero */}
-        <section className="hero px-10 pb-16 pt-12">
+        <section className="hero hero-banner px-10 pb-16 pt-12">
           <div className="hero-glow" />
           <h1 className="relative m-0 text-[64px] font-extrabold leading-[1.02] tracking-[-0.03em]">
             Own<br />Tomorrow<span className="text-accent">.</span>

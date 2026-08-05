@@ -13,6 +13,7 @@ import {
   HoldersPanel, SmartMoneyPanel, TreasuryPanel, CompareRaisePanel, NewsPanel,
   ResearchPanel, GovernancePanel, TimelinePanel, InsightList,
   ListingsPanel, RiskPanel, SectionCard, Metric, DataGap,
+  DashboardCard, CardAction, CardTag, MetricGrid, MetricCell, CardNote,
 } from "@/components/panels";
 import { TradeTerminal } from "@/components/TradeTerminal";
 import { PortfolioCard } from "@/components/PortfolioCard";
@@ -55,6 +56,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     ? (p.team_package / p.total_supply) * 100 : null;
 
   const hs = healthScore(d);
+  // Freshness stamp for the health panel: the newest of the snapshot streams the
+  // score actually reads from. Display only — nothing here feeds `healthScore`.
+  const hsUpdatedAt = Math.max(
+    holderHistory.length ? holderHistory[holderHistory.length - 1].ts : 0,
+    candles.length ? candles[candles.length - 1].ts : 0,
+    github?.ts ?? 0,
+  ) || null;
   const signals = insights(d);
   const devScore = developerScore(github, !!p.github);
   const languages = parseLanguages(github);
@@ -88,7 +96,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
 
   const overview = (
     <div className="space-y-5">
-      <HealthScorePanel hs={hs} />
+      <HealthScorePanel hs={hs} updatedAt={hsUpdatedAt} />
       <div className="grid gap-5 lg:grid-cols-2">
         <SectionCard title="AI Insights" right={<span className="text-[11px] text-muted">{signals.length} signal{signals.length === 1 ? "" : "s"}</span>}>
           <InsightList items={signals} />
@@ -118,59 +126,59 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       <ListingsPanel listings={d.listings} />
       <CompareRaisePanel d={d} />
       {(p.raise_amount_usd != null || rp != null || p.circulating_supply != null || p.raise_note != null) && (
-        <SectionCard
+        <DashboardCard
           title="Raise & Supply"
           right={
-            <div className="flex items-center gap-2">
-              {p.raise_track && (
-                <span className="rounded bg-surface2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink2">
-                  {p.raise_track}
-                </span>
-              )}
-              {p.raise_source_url && (
-                <a href={p.raise_source_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-accent hover:underline">
-                  source ↗
-                </a>
-              )}
-            </div>
+            <>
+              {p.raise_track && <CardTag>{p.raise_track}</CardTag>}
+              <CardAction href={p.raise_source_url}>View details</CardAction>
+            </>
           }
         >
-          <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
-            <Metric
+          <MetricGrid>
+            <MetricCell
               label="Raised"
               value={p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd)}
-              sub={p.raise_amount_usd === 0 ? "fully refunded" : undefined}
+              sub={p.raise_amount_usd === 0
+                ? "fully refunded"
+                : p.raise_goal_usd && p.raise_amount_usd
+                  ? `${((p.raise_amount_usd / p.raise_goal_usd) * 100).toFixed(0)}% of minimum`
+                  : undefined}
             />
-            <Metric label="Minimum / Goal" value={fmtUsd(p.raise_goal_usd)} />
-            <Metric
+            <MetricCell
+              label="Minimum / Goal"
+              value={fmtUsd(p.raise_goal_usd)}
+              sub={p.raise_goal_usd && p.raise_amount_usd && p.raise_amount_usd >= p.raise_goal_usd
+                ? "Goal achieved"
+                : undefined}
+            />
+            <MetricCell
               label="Committed"
               value={fmtUsd(p.raise_committed_usd)}
               sub={oversubscribed != null
                 ? `${oversubscribed < 10 ? oversubscribed.toFixed(1) : Math.round(oversubscribed)}× oversubscribed · ${refunded!.toFixed(0)}% refunded`
                 : undefined}
             />
-            <Metric
+            <MetricCell
               label="Raise Price"
               value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : "—"}
               sub={rp?.derived ? "derived: raise ÷ 10M tokens sold" : undefined}
             />
-            <Metric label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
-            <Metric label="Contributors" value={fmtNum(p.raise_contributors)} />
-            <Metric
+            <MetricCell label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
+            <MetricCell label="Contributors" value={fmtNum(p.raise_contributors)} />
+            <MetricCell
               label="Circulating Supply"
               value={fmtNum(p.circulating_supply)}
               sub={p.total_supply ? `of ${fmtNum(p.total_supply)} total` : undefined}
             />
-            <Metric
+            <MetricCell
               label="Locked (Team)"
               value={fmtNum(p.team_package)}
               sub={lockedPct != null ? `${lockedPct.toFixed(0)}% of supply` : undefined}
             />
-          </div>
-          {p.raise_note && (
-            <p className="border-t border-grid px-4 py-3 text-[12px] leading-relaxed text-ink2">{p.raise_note}</p>
-          )}
-        </SectionCard>
+          </MetricGrid>
+          {p.raise_note && <CardNote>{p.raise_note}</CardNote>}
+        </DashboardCard>
       )}
     </div>
   );
