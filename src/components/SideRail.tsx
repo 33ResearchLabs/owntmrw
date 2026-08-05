@@ -21,7 +21,7 @@ export function SideRail() {
   return (
     <nav
       aria-label="Sections"
-      className="sticky top-14 hidden h-[calc(100vh-56px)] w-[92px] shrink-0 flex-col items-center gap-1.5 border-r border-line py-5 md:flex"
+      className="sticky top-(--nav-h) hidden h-[calc(100vh-var(--nav-h))] w-[92px] shrink-0 flex-col items-center gap-1.5 border-r border-line py-5 md:flex"
     >
       {ITEMS.map((it) => {
         const on = it.href === "/" ? path === "/" : path.startsWith(it.href);

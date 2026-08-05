@@ -293,8 +293,8 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
           {chartBlock}
           <MarketDepthPanel d={d} />
         </div>
-        <div id="trade" className="scroll-mt-20">
-          <div className="card sticky top-[76px] overflow-hidden">
+        <div id="trade">
+          <div className="card sticky top-[calc(var(--nav-h)+20px)] overflow-hidden">
             <div className="flex items-baseline justify-between border-b border-grid px-4 py-3">
               <h2 className="text-[14px] font-semibold">Trade {p.symbol ?? p.name}</h2>
               <span className="num text-[12px] text-muted">{fmtUsd(latest?.price_usd, { compact: false })}</span>

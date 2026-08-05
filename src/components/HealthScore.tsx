@@ -35,69 +35,22 @@ function bandFor(score: number | null) {
   return BANDS.find((b) => score < b.to) ?? BANDS[BANDS.length - 1];
 }
 
-/* ---------------------------------------------------------------- icons --- */
+/* ----------------------------------------------------------------- table --- */
 
 /**
- * One glyph per dimension, keyed by `ScoreComponent.key`. The tint is a fixed
- * identity colour, deliberately *not* the score colour: an unmeasured dimension
- * still needs a legible icon, and tinting by score would double-encode a number
- * the row already states twice.
+ * The one column template the header and every body row share.
+ *
+ * Declared once because the alignment guarantee *is* the shared string: two
+ * copies of a template are two things that can drift, and a header sitting a
+ * few pixels off its column is exactly the failure this table had before.
+ *
+ * The insight column is dropped rather than wrapped below the narrowest
+ * breakpoint — wrapping is what made rows different heights and pushed the
+ * bars out of their column.
  */
-const ICONS: Record<string, { tint: string; path: React.ReactNode }> = {
-  treasury: {
-    tint: "var(--warn)",
-    path: <><path d="M3 9.5 12 4l9 5.5" /><path d="M5 10v8M10 10v8M14 10v8M19 10v8" /><path d="M3 20h18" /></>,
-  },
-  holders: {
-    tint: "var(--serious)",
-    path: <><circle cx="9" cy="8" r="3" /><path d="M3 20a6 6 0 0 1 12 0" /><path d="M16 6.5a3 3 0 0 1 0 5.5" /><path d="M17.5 15.2A5.5 5.5 0 0 1 21 20" /></>,
-  },
-  concentration: {
-    tint: "var(--bad)",
-    path: <><path d="M12 3a9 9 0 1 0 9 9h-9V3Z" /><path d="M14.5 2.6A9 9 0 0 1 21.4 9.5H14.5V2.6Z" /></>,
-  },
-  liquidity: {
-    tint: "var(--good)",
-    path: <><path d="M12 3s6 6.2 6 10.2A6 6 0 0 1 6 13.2C6 9.2 12 3 12 3Z" /></>,
-  },
-  dev: {
-    tint: "var(--accent)",
-    path: <><path d="m8 7-5 5 5 5" /><path d="m16 7 5 5-5 5" /><path d="m13.5 4-3 16" /></>,
-  },
-  governance: {
-    tint: "#8b7cf6",
-    path: <><path d="M3 9.5 12 4l9 5.5" /><path d="M6 10v8M12 10v8M18 10v8" /><path d="M3.5 20h17" /></>,
-  },
-  momentum: {
-    tint: "var(--ink-muted)",
-    path: <><path d="M2 12h4l3 7 6-14 3 7h4" /></>,
-  },
-};
-
-function DimensionIcon({ dkey }: { dkey: string }) {
-  const icon = ICONS[dkey];
-  if (!icon) return <span className="h-9 w-9 shrink-0" aria-hidden />;
-  return (
-    <span
-      aria-hidden
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border"
-      style={{
-        color: icon.tint,
-        // Tint at low alpha over the card surface, so the disc reads as a
-        // recess rather than a second foreground element.
-        background: `color-mix(in srgb, ${icon.tint} 13%, transparent)`,
-        borderColor: `color-mix(in srgb, ${icon.tint} 22%, transparent)`,
-      }}
-    >
-      <svg
-        width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"
-      >
-        {icon.path}
-      </svg>
-    </span>
-  );
-}
+const ROW_GRID =
+  "grid grid-cols-[minmax(104px,1.15fr)_minmax(64px,1.35fr)_44px] items-center gap-x-3 " +
+  "sm:grid-cols-[minmax(124px,1fr)_minmax(90px,1.3fr)_52px_minmax(0,1.45fr)] sm:gap-x-4";
 
 function InfoGlyph({ size = 14 }: { size?: number }) {
   return (
@@ -194,26 +147,13 @@ function DimensionRow({
   const color = scoreColor(c.score);
 
   return (
-    <div
-      className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-3 rounded-lg px-2 py-3.5 transition-colors duration-150 hover:bg-surface2/60 md:grid-cols-[186px_minmax(110px,1fr)_46px_minmax(140px,1.15fr)] md:gap-y-0"
-    >
+    <div className={`${ROW_GRID} min-h-[54px] px-2 transition-colors duration-150 hover:bg-surface2/50`}>
       {/* Dimension */}
-      <div className="flex min-w-0 items-center gap-3">
-        <DimensionIcon dkey={c.key} />
-        <span className="truncate text-[13px] font-medium text-ink">{c.label}</span>
-      </div>
-
-      {/* Score — sits beside the label on mobile, in its own column from md up. */}
-      <span
-        className="num order-2 text-right text-[15px] font-semibold tabular-nums md:order-0 md:col-start-3"
-        style={{ color: c.score == null ? "var(--ink-muted)" : color }}
-      >
-        {c.score ?? "—"}
-      </span>
+      <span className="truncate text-[13px] font-medium text-ink">{c.label}</span>
 
       {/* Progress */}
       <div
-        className="order-1 col-span-2 h-2 overflow-hidden rounded-full bg-grid md:order-0 md:col-span-1 md:col-start-2"
+        className="h-2 overflow-hidden rounded-full bg-grid"
         role="meter"
         aria-valuenow={c.score ?? undefined}
         aria-valuemin={0}
@@ -228,9 +168,17 @@ function DimensionRow({
         )}
       </div>
 
+      {/* Score */}
+      <span
+        className="num text-center text-[15px] font-bold tabular-nums"
+        style={{ color: c.score == null ? "var(--ink-muted)" : color }}
+      >
+        {c.score ?? "—"}
+      </span>
+
       {/* Insights */}
       <span
-        className="order-3 col-span-2 text-[12px] leading-snug text-muted md:order-0 md:col-span-1 md:col-start-4 md:truncate"
+        className="hidden truncate text-[12px] text-muted sm:block"
         title={c.detail}
       >
         {c.detail}
@@ -290,13 +238,13 @@ export function HealthScorePanel({
         </div>
 
         <div className="min-w-0">
-          {/* Column headers — the mobile layout stacks the cells, so the header
-              row would label nothing there. */}
-          <div className="hidden grid-cols-[186px_minmax(110px,1fr)_46px_minmax(140px,1.15fr)] items-center gap-x-4 px-2 pb-2.5 text-[10px] uppercase tracking-[0.09em] text-faint md:grid">
+          {/* Column headers. Same template as the body rows, so a heading can
+              never sit off the column it names. */}
+          <div className={`${ROW_GRID} px-2 pb-2.5 text-[10px] uppercase tracking-[0.09em] text-faint`}>
             <span>Dimension</span>
-            <span />
-            <span className="text-right">Score</span>
-            <span>Insights</span>
+            <span aria-hidden />
+            <span className="text-center">Score</span>
+            <span className="hidden sm:block">Insights</span>
           </div>
 
           <div className="divide-y divide-grid border-t border-grid">

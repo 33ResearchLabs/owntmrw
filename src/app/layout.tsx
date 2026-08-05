@@ -6,6 +6,7 @@ import { GlobalSearch } from "@/components/GlobalSearch";
 import { SideRail } from "@/components/SideRail";
 import { WalletProvider } from "@/components/wallet";
 import { ConnectButton } from "@/components/ConnectButton";
+import { TopNav } from "@/components/TopNav";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -33,34 +34,33 @@ export default function RootLayout({
     <html lang="en" className={`${inter.className} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <WalletProvider>
-        <header className="sticky top-0 z-50 border-b border-line bg-page/85 backdrop-blur-xl">
-          <div className="mx-auto flex h-14 max-w-[1660px] items-center gap-6 px-6">
-            <Link href="/" className="flex shrink-0 items-baseline gap-2.5" aria-label="OwnTmrw — Own Tomorrow">
+        {/* Transparent on purpose — see the note on `.nav-glass`. This
+            element's total height (pt + bar + pb) is what `--nav-h` states. */}
+        <header className="sticky top-0 z-50 px-3 pb-3 pt-3 sm:px-5">
+          <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-3 sm:px-4 lg:gap-5 lg:px-5">
+            <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="OwnTmrw — Own Tomorrow">
               <span
-                className="flex h-[30px] w-[30px] shrink-0 translate-y-[3px] items-center justify-center rounded-full text-[15px] font-extrabold text-white"
-                style={{ background: "radial-gradient(circle at 35% 35%, #86b6ef, #3987e5 55%, #184f95)" }}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[16px] font-extrabold text-white"
+                style={{
+                  background: "radial-gradient(circle at 35% 35%, #86b6ef, #3987e5 55%, #184f95)",
+                  boxShadow: "0 0 18px -3px rgba(57, 135, 229, 0.6)",
+                }}
               >
                 ∞
               </span>
-              <span className="text-[13.5px] font-extrabold tracking-[0.07em]">
-                OWNTMRW
-              </span>
-              <span className="hidden text-[10.5px] uppercase tracking-[0.13em] text-faint lg:inline">
-                Own Tomorrow
+              <span className="flex items-baseline gap-2.5">
+                <span className="text-[14px] font-extrabold tracking-[0.07em]">
+                  OWNTMRW
+                </span>
+                <span className="hidden text-[10.5px] uppercase tracking-[0.13em] text-faint lg:inline">
+                  Own Tomorrow
+                </span>
               </span>
             </Link>
 
-            <nav className="hidden items-center gap-1 sm:flex">
-              {NAV.map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-ink2 transition-colors hover:bg-white/6 hover:text-ink"
-                >
-                  {n.label}
-                </Link>
-              ))}
-            </nav>
+            <span className="hidden h-6 w-px shrink-0 bg-line2 sm:block" aria-hidden />
+
+            <TopNav items={NAV} />
 
             <div className="mx-auto w-full max-w-[460px]">
               <GlobalSearch />
@@ -73,7 +73,7 @@ export default function RootLayout({
         </header>
 
         <div className="mx-auto flex w-full max-w-[1660px] flex-1">
-          <SideRail />
+          {/* <SideRail /> */}
           <main className="min-w-0 flex-1 px-6 py-7">{children}</main>
         </div>
 
