@@ -24,6 +24,8 @@ export interface OrgStats {
   stars: number; forks: number; repos: number; lastPushTs: number;
   /** Repos pushed to within 90 days — "43 repos" flatters an org with 3 alive. */
   activeRepos: number;
+  /** Of those, how many hold code rather than docs. See OrgHeadline.codeRepos. */
+  codeRepos: number;
   commits90d: number | null;
   contributors: number | null;
   openIssues: number | null;
@@ -57,6 +59,66 @@ async function searchCount(q: string): Promise<number | null> {
   );
   await sleep(2100); // stay inside the search limit
   return res?.total_count ?? null;
+}
+
+/**
+ * Languages that carry documentation and configuration rather than the product.
+ * A repo whose primary language is one of these is published work, but it is not
+ * evidence that the protocol itself is being built in the open.
+ */
+const DOCS_LANGUAGES = new Set([
+  "MDX", "Markdown", "HTML", "CSS", "SCSS", "Less", "Nix", "Shell", "Dockerfile", "Makefile",
+]);
+
+/** Repos whose primary language is actual code, forks and archives excluded. */
+function countCodeRepos(repos: Repo[]): number {
+  return repos.filter((r) => r.language && !DOCS_LANGUAGES.has(r.language)).length;
+}
+
+export interface OrgHeadline {
+  stars: number; forks: number; repos: number;
+  activeRepos: number; lastPushTs: number | null;
+  /**
+   * Repos that hold code rather than docs. Recency alone cannot tell the two
+   * apart: a docs-only org pushing today scores identically to a protocol
+   * shipping Rust, which flatters it badly.
+   */
+  codeRepos: number;
+}
+
+/**
+ * The counters a single repo listing already contains — one API call, no search
+ * quota, no per-repo walks.
+ *
+ * `orgStats` costs roughly eighteen core calls plus five search calls, so
+ * thirteen orgs cannot be ingested inside the 60/hour unauthenticated ceiling.
+ * This fills stars, repo counts and push recency for all of them cheaply; the
+ * fields that need the deeper walks stay null rather than being guessed, and a
+ * later authenticated run supersedes the row.
+ *
+ * Forks are excluded exactly as `orgStats` excludes them — Ranger carries 24
+ * forked repos, so a naive total would report it as far busier than it is.
+ */
+export async function orgHeadline(owner: string): Promise<OrgHeadline | null> {
+  const repos = await getJSON<Repo[]>(
+    `https://api.github.com/users/${owner}/repos?per_page=100&sort=pushed`,
+    { headers: HEADERS, retries: 1, timeoutMs: 15000 }
+  );
+  await sleep(400);
+  if (!repos || !Array.isArray(repos)) return null;
+
+  const own = repos.filter((r) => !r.fork);
+  const live = own.filter((r) => !r.archived);
+  const now = Date.now() / 1000;
+  const pushes = own.map((r) => Date.parse(r.pushed_at) / 1000).filter((n) => Number.isFinite(n));
+  return {
+    stars: own.reduce((s, r) => s + r.stargazers_count, 0),
+    forks: own.reduce((s, r) => s + r.forks_count, 0),
+    repos: own.length,
+    activeRepos: live.filter((r) => now - Date.parse(r.pushed_at) / 1000 < 90 * DAY).length,
+    lastPushTs: pushes.length ? Math.max(...pushes) : null,
+    codeRepos: countCodeRepos(live),
+  };
 }
 
 /**
@@ -190,6 +252,7 @@ export async function orgStats(owner: string): Promise<OrgStats | null> {
 
   return {
     stars, forks, repos: own.length, lastPushTs, activeRepos,
+    codeRepos: countCodeRepos(live),
     commits90d,
     contributors: sawContributors ? contributorLogins.size : null,
     openIssues, closedIssues, openPRs, mergedPRs,
