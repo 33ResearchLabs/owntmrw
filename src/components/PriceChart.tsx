@@ -388,19 +388,33 @@ export function PriceChart({
     ro.observe(el);
     chart.applyOptions({ width: el.clientWidth });
 
+    // A trackpad pan fires this far faster than 60Hz — each tick was
+    // triggering its own React re-render of the header readout, competing
+    // with the chart's own canvas redraw for the main thread and turning a
+    // two-finger swipe into a stutter. Collapsing every tick within a frame
+    // down to one setVis, holding only the latest range, keeps the state
+    // update at the display's refresh rate instead of the input's.
+    let pendingRange: { from: number; to: number } | null = null;
+    let rafId: number | null = null;
     const onRange = (r: { from: number; to: number } | null) => {
       if (!r) return;
       const n = dataRef.current.length;
       if (!n) return;
-      const from = Math.max(0, Math.floor(r.from));
-      const to = Math.min(n - 1, Math.ceil(r.to));
-      setVis((prev) => (prev && prev.from === from && prev.to === to ? prev : { from, to }));
+      pendingRange = { from: Math.max(0, Math.floor(r.from)), to: Math.min(n - 1, Math.ceil(r.to)) };
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const next = pendingRange;
+        if (!next) return;
+        setVis((prev) => (prev && prev.from === next.from && prev.to === next.to ? prev : next));
+      });
     };
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRange);
 
     return () => {
       ro.disconnect();
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
+      if (rafId != null) cancelAnimationFrame(rafId);
       chart.remove();
       chartRef.current = null;
       priceRef.current = null;
