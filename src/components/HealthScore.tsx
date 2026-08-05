@@ -147,7 +147,7 @@ function DimensionRow({
   const color = scoreColor(c.score);
 
   return (
-    <div className={`${ROW_GRID} min-h-[54px] px-2 transition-colors duration-150 hover:bg-surface2/50`}>
+    <div className={`${ROW_GRID} min-h-[38px] px-2 py-1.5 transition-colors duration-150 hover:bg-surface2/50`}>
       {/* Dimension */}
       <span className="truncate text-[13px] font-medium text-ink">{c.label}</span>
 
@@ -232,7 +232,7 @@ export function HealthScorePanel({
       </div>
 
       {/* Body: score | dimensions */}
-      <div className="grid gap-6 border-t border-grid px-5 py-6 sm:px-6 lg:grid-cols-[290px_minmax(0,1fr)] lg:gap-8 lg:py-8">
+      <div className="grid gap-6 border-t border-grid px-5 py-5 sm:px-6 lg:grid-cols-[290px_minmax(0,1fr)] lg:gap-8 lg:py-6">
         <div className="flex items-center justify-center lg:border-r lg:border-grid lg:pr-8">
           <Gauge score={hs.overall} />
         </div>
@@ -240,14 +240,17 @@ export function HealthScorePanel({
         <div className="min-w-0">
           {/* Column headers. Same template as the body rows, so a heading can
               never sit off the column it names. */}
-          <div className={`${ROW_GRID} px-2 pb-2.5 text-[10px] uppercase tracking-[0.09em] text-faint`}>
+          <div className={`${ROW_GRID} px-2 pb-2 text-[10px] uppercase tracking-[0.09em] text-faint`}>
             <span>Dimension</span>
             <span aria-hidden />
             <span className="text-center">Score</span>
             <span className="hidden sm:block">Insights</span>
           </div>
 
-          <div className="divide-y divide-grid border-t border-grid">
+          {/* No `divide-y`: rows are separated by their own spacing and the
+              hover tint, not by rules. The `border-t` stays — it is the
+              header's baseline, not a row separator. */}
+          <div className="border-t border-grid">
             {hs.components.map((c) => (
               <DimensionRow key={c.key} c={c} />
             ))}

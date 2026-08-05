@@ -34,9 +34,11 @@ export default function RootLayout({
     <html lang="en" className={`${inter.className} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <WalletProvider>
-        {/* Transparent on purpose — see the note on `.nav-glass`. This
-            element's total height (pt + bar + pb) is what `--nav-h` states. */}
-        <header className="sticky top-0 z-50 px-3 pb-3 pt-3 sm:px-5">
+        {/* Opaque, not just the bar: the padding around the bar is a gap the
+            page scrolls through, so a transparent wrapper leaks content above
+            and beside the floating pill even when the pill itself is solid.
+            This element's total height (pt + bar + pb) is what `--nav-h` states. */}
+        <header className="sticky top-0 z-50 bg-page px-3 pb-3 pt-3 sm:px-5">
           <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-3 sm:px-4 lg:gap-5 lg:px-5">
             <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="OwnTmrw — Own Tomorrow">
               <span
@@ -74,7 +76,7 @@ export default function RootLayout({
 
         <div className="mx-auto flex w-full max-w-[1660px] flex-1">
           {/* <SideRail /> */}
-          <main className="min-w-0 flex-1 px-6 py-7">{children}</main>
+          <main className="min-w-0 flex-1 px-6 ml-12 py-7">{children}</main>
         </div>
 
         <footer className="border-t border-line py-5">

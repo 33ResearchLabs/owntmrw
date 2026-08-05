@@ -168,7 +168,7 @@ export default async function Home() {
 
       {/* right rail — portfolio, trending, activity */}
       <aside className="w-full shrink-0 space-y-4 xl:w-[340px]">
-        <PortfolioCard />
+        <PortfolioCard hideWhenDisconnected />
 
         {trending.length > 0 && (
           <div className="card px-5 pb-2.5 pt-4">
