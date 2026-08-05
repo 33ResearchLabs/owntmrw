@@ -46,24 +46,85 @@ export function Metric({
   value,
   sub,
   tone,
+  size,
 }: {
   label: string;
   value: React.ReactNode;
   sub?: React.ReactNode;
   tone?: "good" | "bad";
+  /** `lg` is the dashboard-cell scale used inside `MetricGrid`. */
+  size?: "lg";
 }) {
+  const lg = size === "lg";
   return (
-    <div>
-      <div className="text-[11px] uppercase tracking-[0.06em] text-muted">
+    <div className={lg ? "flex h-full flex-col" : undefined}>
+      <div
+        className={`uppercase text-muted ${lg ? "text-[10.5px] font-semibold tracking-[0.09em]" : "text-[11px] tracking-[0.06em]"}`}
+      >
         {label}
       </div>
       <div
-        className={`num mt-0.5 text-[17px] font-semibold ${tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : ""}`}
+        className={`num font-semibold ${lg ? "mt-2 text-[24px] leading-none tracking-tight sm:text-[26px]" : "mt-0.5 text-[17px]"} ${tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : ""}`}
       >
         {value}
       </div>
-      {sub != null && <div className="mt-0.5 text-[11px] text-ink2">{sub}</div>}
+      {sub != null && (
+        <div className={lg ? "mt-2 text-[12px] leading-relaxed text-muted" : "mt-0.5 text-[11px] text-ink2"}>
+          {sub}
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * Dashboard cell grid: 4 columns on desktop, 2 on tablet, 1 on mobile.
+ *
+ * The hairlines are the 1px grid gap showing the container behind the cells,
+ * not per-cell borders — so only the dividers *between* cells are ever drawn,
+ * at every breakpoint, without the column-count arithmetic that per-cell
+ * borders would need. Cells therefore have to be opaque and match the card.
+ */
+export function MetricGrid({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-1 gap-px bg-line *:bg-surface *:px-5 *:py-5 sm:grid-cols-2 sm:*:px-6 lg:grid-cols-4">
+      {children}
+    </div>
+  );
+}
+
+const EXTERNAL_ICON = (
+  <svg
+    width="12" height="12" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+    className="shrink-0 opacity-70" aria-hidden
+  >
+    <path d="M14 4h6v6M20 4l-8.5 8.5M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+  </svg>
+);
+
+/** Outlined action in a card header — the external-link affordance in the design. */
+export function CardLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-line bg-white/[0.03] px-3 py-1.5 text-[12px] font-medium text-ink2 transition-colors duration-150 hover:border-line2 hover:bg-white/[0.08] hover:text-ink"
+    >
+      {children}
+      {EXTERNAL_ICON}
+    </a>
+  );
+}
+
+/** Dotted status pill in a card header (raise track, etc.). */
+export function CardTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface2 px-2.5 py-1.5 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-ink2">
+      <span className="h-1.5 w-1.5 rounded-full bg-[var(--ink-faint)]" aria-hidden />
+      {children}
+    </span>
   );
 }
 
@@ -71,15 +132,23 @@ export function SectionCard({
   title,
   right,
   children,
+  size,
 }: {
   title: string;
   right?: React.ReactNode;
   children: React.ReactNode;
+  /** `lg` is the dashboard-card scale: bigger title, roomier header. */
+  size?: "lg";
 }) {
+  const lg = size === "lg";
   return (
-    <section className="card">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-grid px-4 py-3">
-        <h3 className="text-[14px] font-semibold">{title}</h3>
+    <section className={lg ? "card overflow-hidden" : "card"}>
+      <div
+        className={`flex flex-wrap justify-between gap-2 border-b border-grid ${lg ? "items-center gap-x-4 gap-y-3 px-5 py-4 sm:px-6 sm:py-5" : "items-baseline px-4 py-3"}`}
+      >
+        <h3 className={lg ? "text-[17px] font-semibold tracking-tight sm:text-[19px]" : "text-[14px] font-semibold"}>
+          {title}
+        </h3>
         {right}
       </div>
       {children}
@@ -1033,21 +1102,16 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   return (
     <SectionCard
       title="Performance Since Raise"
+      size="lg"
       right={
         p.raise_source_url ? (
-          <a
-            href={p.raise_source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] text-accent hover:underline"
-          >
-            raise source ↗
-          </a>
+          <CardLink href={p.raise_source_url}>Data source</CardLink>
         ) : undefined
       }
     >
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
+      <MetricGrid>
         <Metric
+          size="lg"
           label="Raise Price"
           value={
             p.raise_price != null
@@ -1055,29 +1119,34 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
               : "—"
           }
         />
-        <Metric label="Current Price" value={fmtUsd(cur, { compact: false })} />
-        <Metric label="ROI Since Raise" value={<Delta v={roi} />} />
+        <Metric size="lg" label="Current Price" value={fmtUsd(cur, { compact: false })} />
+        <Metric size="lg" label="ROI Since Raise" value={<Delta v={roi} />} sub="vs raise price" />
         <Metric
+          size="lg"
           label="Current Drawdown"
           value={<Delta v={drawdown} />}
           sub="from all-time high"
         />
         <Metric
+          size="lg"
           label="ATH"
           value={fmtUsd(ath, { compact: false })}
           sub={athRet != null ? `${fmtPct(athRet)} vs raise` : undefined}
         />
         <Metric
+          size="lg"
           label="ATL"
           value={fmtUsd(atl, { compact: false })}
           sub={atlRet != null ? `${fmtPct(atlRet)} vs raise` : undefined}
         />
         <Metric
+          size="lg"
           label="Days to ATH"
           value={daysToAth != null ? `${daysToAth}d` : "—"}
           sub={athTs ? fmtDate(athTs) : undefined}
         />
         <Metric
+          size="lg"
           label="Treasury Remaining"
           value={
             treasuryValue != null && treasuryValue < 1
@@ -1086,11 +1155,13 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
           }
         />
         <Metric
+          size="lg"
           label="Contributors at Raise"
           value={fmtNum(p.raise_contributors)}
         />
-        <Metric label="Holders Now" value={fmtNum(holdersNow)} />
+        <Metric size="lg" label="Holders Now" value={fmtNum(holdersNow)} />
         <Metric
+          size="lg"
           label="Committed"
           value={fmtUsd(p.raise_committed_usd)}
           sub={
@@ -1099,14 +1170,16 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
               : undefined
           }
         />
-        <Metric label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
-      </div>
+        <Metric size="lg" label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
+      </MetricGrid>
       {p.raise_contributors == null && (
-        <p className="border-t border-grid px-4 py-2.5 text-[11px] text-muted">
-          Holders-at-launch and whale growth since the raise need a holder
-          snapshot taken at launch; this platform began tracking later, so those
-          deltas start from first ingest rather than from TGE.
-        </p>
+        <div className="border-t border-grid px-5 py-4 sm:px-6 sm:py-5">
+          <p className="rounded-xl border border-line bg-surface2 px-4 py-4 text-[12px] leading-relaxed text-muted sm:px-5">
+            Holders-at-launch and whale growth since the raise need a holder
+            snapshot taken at launch; this platform began tracking later, so those
+            deltas start from first ingest rather than from TGE.
+          </p>
+        </div>
       )}
     </SectionCard>
   );

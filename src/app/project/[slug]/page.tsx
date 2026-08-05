@@ -12,7 +12,7 @@ import { HealthScorePanel } from "@/components/HealthScore";
 import {
   HoldersPanel, SmartMoneyPanel, TreasuryPanel, CompareRaisePanel, NewsPanel,
   ResearchPanel, GovernancePanel, TimelinePanel, InsightList,
-  ListingsPanel, RiskPanel, SectionCard, Metric, DataGap,
+  ListingsPanel, RiskPanel, SectionCard, Metric, MetricGrid, CardLink, CardTag, DataGap,
 } from "@/components/panels";
 import { TradeTerminal } from "@/components/TradeTerminal";
 import { PortfolioCard } from "@/components/PortfolioCard";
@@ -83,7 +83,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
 
   const overview = (
     <div className="space-y-5">
-      <HealthScorePanel hs={hs} />
+      <HealthScorePanel hs={hs} updatedTs={p.updated_ts} />
       <div className="grid gap-5 lg:grid-cols-2">
         <SectionCard title="AI Insights" right={<span className="text-[11px] text-muted">{signals.length} signal{signals.length === 1 ? "" : "s"}</span>}>
           <InsightList items={signals} />
@@ -115,51 +115,52 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       {(p.raise_amount_usd != null || p.raise_price != null || p.circulating_supply != null || p.raise_note != null) && (
         <SectionCard
           title="Raise & Supply"
+          size="lg"
           right={
-            <div className="flex items-center gap-2">
-              {p.raise_track && (
-                <span className="rounded bg-surface2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink2">
-                  {p.raise_track}
-                </span>
-              )}
-              {p.raise_source_url && (
-                <a href={p.raise_source_url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-accent hover:underline">
-                  source ↗
-                </a>
-              )}
+            <div className="flex flex-wrap items-center gap-2">
+              {p.raise_track && <CardTag>{p.raise_track}</CardTag>}
+              {p.raise_source_url && <CardLink href={p.raise_source_url}>View details</CardLink>}
             </div>
           }
         >
-          <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
+          <MetricGrid>
             <Metric
+              size="lg"
               label="Raised"
               value={p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd)}
               sub={p.raise_amount_usd === 0 ? "fully refunded" : undefined}
             />
-            <Metric label="Minimum / Goal" value={fmtUsd(p.raise_goal_usd)} />
+            <Metric size="lg" label="Minimum / Goal" value={fmtUsd(p.raise_goal_usd)} />
             <Metric
+              size="lg"
               label="Committed"
               value={fmtUsd(p.raise_committed_usd)}
               sub={oversubscribed != null
                 ? `${oversubscribed < 10 ? oversubscribed.toFixed(1) : Math.round(oversubscribed)}× oversubscribed · ${refunded!.toFixed(0)}% refunded`
                 : undefined}
             />
-            <Metric label="Raise Price" value={p.raise_price != null ? fmtUsd(p.raise_price, { compact: false }) : "—"} />
-            <Metric label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
-            <Metric label="Contributors" value={fmtNum(p.raise_contributors)} />
+            <Metric size="lg" label="Raise Price" value={p.raise_price != null ? fmtUsd(p.raise_price, { compact: false }) : "—"} />
+            <Metric size="lg" label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />
+            <Metric size="lg" label="Contributors" value={fmtNum(p.raise_contributors)} />
             <Metric
+              size="lg"
               label="Circulating Supply"
               value={fmtNum(p.circulating_supply)}
               sub={p.total_supply ? `of ${fmtNum(p.total_supply)} total` : undefined}
             />
             <Metric
+              size="lg"
               label="Locked (Team)"
               value={fmtNum(p.team_package)}
               sub={lockedPct != null ? `${lockedPct.toFixed(0)}% of supply` : undefined}
             />
-          </div>
+          </MetricGrid>
           {p.raise_note && (
-            <p className="border-t border-grid px-4 py-3 text-[12px] leading-relaxed text-ink2">{p.raise_note}</p>
+            <div className="border-t border-grid px-5 py-4 sm:px-6 sm:py-5">
+              <p className="rounded-xl border border-line bg-surface2 px-4 py-4 text-[12.5px] leading-relaxed text-ink2 sm:px-5">
+                {p.raise_note}
+              </p>
+            </div>
           )}
         </SectionCard>
       )}
