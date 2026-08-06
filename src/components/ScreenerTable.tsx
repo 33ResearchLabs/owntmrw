@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Delta, Logo, StatusBadge } from "./ui";
+import { Icon, type IconName } from "./viz";
 import { fmtUsd, fmtPrice, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 import { MIN_LIQUIDITY_USD } from "@/lib/quote";
 
@@ -75,11 +76,25 @@ function useLiveRows(initial: ScreenerRowDTO[]): { rows: ScreenerRowDTO[]; stale
   return { rows, stale };
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+/**
+ * Summary tile for the screener header.
+ *
+ * The icon is identity, not data — it marks which figure the tile carries so
+ * the four read as a set at a glance, and never encodes a value.
+ */
+function Stat({ label, value, icon }: { label: string; value: string; icon: IconName }) {
   return (
-    <div className="card px-4 py-3">
-      <div className="text-[10.5px] uppercase tracking-[0.09em] text-faint">{label}</div>
-      <div className="num mt-1 text-[18px] font-extrabold tracking-tight">{value}</div>
+    <div
+      className="group rounded-2xl border border-line bg-surface2/40 px-5 py-4 shadow-sm shadow-black/20
+                 transition-colors hover:border-line2 hover:bg-surface2/70"
+    >
+      <div className="flex items-center gap-2 text-faint transition-colors group-hover:text-muted">
+        <Icon name={icon} size={13} />
+        <span className="text-[10.5px] uppercase tracking-[0.09em]">{label}</span>
+      </div>
+      <div className="num mt-2.5 text-[22px] font-extrabold leading-none tracking-tight text-ink">
+        {value}
+      </div>
     </div>
   );
 }
@@ -192,11 +207,12 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
 
   return (
     <>
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-      <Stat label="Projects" value={String(rows.length)} />
-      <Stat label="Combined Mkt Cap" value={fmtUsd(totals.mcap)} />
-      <Stat label="Total Liquidity" value={fmtUsd(totals.liq)} />
-      <Stat label="24h Volume" value={fmtUsd(totals.vol)} />
+    {/* One per row on a phone, two on a tablet, all four across on desktop. */}
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-4">
+      <Stat label="Projects" value={String(rows.length)} icon="layers" />
+      <Stat label="Combined Mkt Cap" value={fmtUsd(totals.mcap)} icon="pie" />
+      <Stat label="Total Liquidity" value={fmtUsd(totals.liq)} icon="droplet" />
+      <Stat label="24h Volume" value={fmtUsd(totals.vol)} icon="chart" />
     </div>
 
     <div className="card">

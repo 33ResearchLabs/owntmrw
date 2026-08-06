@@ -17,8 +17,8 @@ export default async function ScreenerPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[24px] font-extrabold tracking-tight">Screener</h1>
-          <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-ink2">
+          <h1 className="text-[30px] font-extrabold leading-tight tracking-tight">Screener</h1>
+          <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-muted">
             Every project launched through MetaDAO and Futard. Click any column to sort, or any
             row to open its trading terminal. Market caps use MetaDAO&apos;s circulating supply,
             not FDV.

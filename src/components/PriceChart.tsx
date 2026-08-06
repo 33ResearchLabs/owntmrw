@@ -11,7 +11,9 @@ import {
   TIMEFRAMES, TF_SECONDS, fromDaily, isIntraday, normalize,
   type Candle, type Timeframe,
 } from "@/lib/candles";
-import { IconBadge, DeltaChip } from "@/components/viz";
+import { DeltaChip } from "@/components/viz";
+import { Delta, Logo } from "@/components/ui";
+import { fmtNum, fmtUsd } from "@/lib/format";
 
 export type { Candle };
 export interface ChartEvent {
@@ -54,6 +56,12 @@ const T = {
   down: "#d03b3b",
   accent: "#3987e5",
   grid: "#2c2c2a",
+  /**
+   * Horizontal rules only, and fainter than the pane borders. A full grid at
+   * `grid` strength competes with the candles for attention; at this weight it
+   * reads as a ruler behind them, which is what a price grid is for.
+   */
+  gridSoft: "rgba(255, 255, 255, 0.05)",
   axis: "#383835",
   muted: "#898781",
   ink: "#ffffff",
@@ -61,10 +69,18 @@ const T = {
 };
 
 /**
- * Price:volume height ratio. Volume is context for the bars above it, never the
- * subject, so it gets a fifth of the chart the way a desk terminal shows it.
+ * Plot height in px. Width is fluid — the resize observer feeds it in — but
+ * height is fixed, so this is the one number that sets how tall the card reads.
+ * The panes below divide it by ratio rather than by pixels, so the candles and
+ * the volume histogram shrink together with whatever is set here.
  */
-const PRICE_STRETCH = 4;
+const CHART_HEIGHT = 360;
+
+/**
+ * Price:volume height ratio. Volume is context for the bars above it, never the
+ * subject, so it gets a seventh of the chart the way a desk terminal shows it.
+ */
+const PRICE_STRETCH = 6;
 const VOLUME_STRETCH = 1;
 
 /**
@@ -80,6 +96,29 @@ function sizeVolumePane(chart: IChartApi) {
   if (panes.length < 2) return;
   panes[0].setStretchFactor(PRICE_STRETCH);
   panes[1].setStretchFactor(VOLUME_STRETCH);
+}
+
+/**
+ * Plot height for the expanded view: the viewport, less what the card's own
+ * chrome (header, toolbar, legend, period strip) takes above and below it.
+ * Read at click time, so it never runs during a server render.
+ */
+function expandedPlotHeight(): number {
+  const CHROME_PX = 330;
+  const MIN_PLOT_PX = 260;
+  return Math.max(MIN_PLOT_PX, window.innerHeight - CHROME_PX);
+}
+
+/** "Aug 6, 2026 14:30" in UTC, for the header's freshness stamp. */
+function fmtUtcStamp(ts: number): string {
+  const d = new Date(ts * 1000);
+  const date = d.toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
+  });
+  const time = d.toLocaleTimeString("en-US", {
+    hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC",
+  });
+  return `${date} ${time}`;
 }
 
 /** Compact span for the header, e.g. 5400s → "1h", 950400s → "11d". */
@@ -117,6 +156,65 @@ function LineIcon() {
   );
 }
 
+/** Calendar glyph, for the date-range control. */
+function CalendarIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden focusable="false">
+      <rect x="1.8" y="2.8" width="10.4" height="9.4" rx="1.6" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M1.8 5.6h10.4M4.6 1.8v2M9.4 1.8v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Download glyph: a tray with an arrow into it. */
+function DownloadIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden focusable="false">
+      <path
+        d="M7 1.9v6.6m0 0L4.5 6M7 8.5 9.5 6M2.2 10.1v1a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1v-1"
+        stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** Four corners pushing out / pulling in, for the fullscreen toggle. */
+function FullscreenIcon({ on }: { on: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden focusable="false">
+      <path
+        d={on
+          ? "M5.6 1.9v3.7H1.9M8.4 1.9v3.7h3.7M5.6 12.1V8.4H1.9M8.4 12.1V8.4h3.7"
+          : "M1.9 5.2V1.9h3.3M12.1 5.2V1.9H8.8M1.9 8.8v3.3h3.3M12.1 8.8v3.3H8.8"}
+        stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Toolbar control groups.
+ *
+ * Every cluster — metric, series type, interval, utilities — sits in the same
+ * inset tray so the toolbar reads as one row of related switches rather than
+ * loose buttons, and the active item is the only lit surface in its tray.
+ */
+function SegGroup({
+  children, label, className = "",
+}: {
+  children: React.ReactNode; label?: string; className?: string;
+}) {
+  return (
+    <div
+      role={label ? "group" : undefined}
+      aria-label={label}
+      className={`flex shrink-0 items-center gap-0.5 rounded-lg border border-line bg-surface2/50 p-0.5 ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 /** Square icon button for the series-type switch. */
 function IconButton({
   active, onClick, label, children,
@@ -130,8 +228,41 @@ function IconButton({
       aria-pressed={active}
       aria-label={label}
       title={label}
-      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded transition-colors ${
-        active ? "bg-white/10 text-ink" : "text-muted hover:bg-white/5 hover:text-ink2"
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${
+        active
+          ? "bg-white/10 text-ink shadow-sm shadow-black/20"
+          : "text-muted hover:bg-white/5 hover:text-ink2"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Utility button that carries an icon but no state of its own.
+ *
+ * `disabled` is a first-class case here: the date-range and export controls are
+ * drawn because the toolbar is specified to carry them, but neither has a
+ * behaviour behind it yet, and a button that silently does nothing is worse
+ * than one that says so.
+ */
+function UtilityButton({
+  label, onClick, disabled = false, children,
+}: {
+  label: string; onClick?: () => void; disabled?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={disabled ? `${label} — not available yet` : label}
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${
+        disabled
+          ? "cursor-not-allowed text-faint opacity-50"
+          : "text-muted hover:bg-white/5 hover:text-ink2"
       }`}
     >
       {children}
@@ -153,8 +284,10 @@ function SegButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`shrink-0 rounded px-2 py-1.5 text-[11px] leading-none transition-colors sm:px-2.5 ${
-        active ? "bg-white/10 font-medium text-ink" : "text-muted hover:bg-white/5 hover:text-ink2"
+      className={`shrink-0 rounded-md px-2 py-1.5 text-[11px] leading-none transition-colors sm:px-2.5 ${
+        active
+          ? "bg-white/10 font-medium text-ink shadow-sm shadow-black/20"
+          : "text-muted hover:bg-white/5 hover:text-ink2"
       } ${className}`}
     >
       {children}
@@ -162,11 +295,40 @@ function SegButton({
   );
 }
 
+/** One figure in the header's market row. */
+function MarketStat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="whitespace-nowrap text-[11px] text-muted">{label}</div>
+      <div className="num mt-1 truncate text-[13px] font-medium text-ink">{value}</div>
+    </div>
+  );
+}
+
+/**
+ * One cell of the footer period strip.
+ *
+ * A period with no figure behind it renders an em dash rather than a zero —
+ * the platform's rule that a missing number stays missing applies here too.
+ */
+function PeriodStat({ label, value }: { label: string; value: number | null | undefined }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-1 px-2 py-3">
+      <span className="text-[10px] uppercase tracking-[0.08em] text-muted">{label}</span>
+      <span className="text-[13px] font-medium">
+        <Delta v={value} notation="sign" />
+      </span>
+    </div>
+  );
+}
+
 /** What the y-axis measures. Market cap is price scaled by circulating supply. */
 type Metric = "price" | "mcap";
 
 export function PriceChart({
-  candles, events = [], height = 470, slug, circulatingSupply = null,
+  candles, events = [], height = CHART_HEIGHT, slug, circulatingSupply = null,
+  name, symbol, imageUrl = null,
+  marketCap = null, volume24h = null, change24h = null, lastUpdated = null,
 }: {
   candles: Candle[];
   events?: ChartEvent[];
@@ -174,6 +336,22 @@ export function PriceChart({
   slug?: string;
   /** Enables the Market Cap switch. Without it the toggle is not offered. */
   circulatingSupply?: number | null;
+  // ---------------------------------------------------------------------
+  // Everything below is read-only chrome for the card header and footer. None
+  // of it reaches the chart: the series, the scales and every interaction are
+  // driven by `candles` / `circulatingSupply` exactly as before.
+  // ---------------------------------------------------------------------
+  /** Project name, for the logo fallback and the "<name> Price" subtitle. */
+  name: string;
+  /** Ticker shown in the pair label and against the supply figure. */
+  symbol: string;
+  imageUrl?: string | null;
+  marketCap?: number | null;
+  volume24h?: number | null;
+  /** 24h change for the footer strip. Longer periods are not held anywhere. */
+  change24h?: number | null;
+  /** Unix seconds of the newest snapshot behind these figures. */
+  lastUpdated?: number | null;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -186,6 +364,9 @@ export function PriceChart({
   const [hover, setHover] = useState<Candle | null>(null);
   const [hoverEvents, setHoverEvents] = useState<ChartEvent[]>([]);
   const [off, setOff] = useState<Set<string>>(new Set());
+  const [fullscreen, setFullscreen] = useState(false);
+  /** Plot height while expanded. Null whenever the card sits inline. */
+  const [fsHeight, setFsHeight] = useState<number | null>(null);
   /** Logical index range currently on screen, for the header's change readout. */
   const [vis, setVis] = useState<{ from: number; to: number } | null>(null);
   /** Last intraday response, tagged with the timeframe that asked for it. */
@@ -229,6 +410,47 @@ export function PriceChart({
     })();
     return () => ac.abort();
   }, [fetchable, timeframe, slug]);
+
+  /**
+   * Expanded view.
+   *
+   * Presentation only: the card is lifted to an overlay and the plot is handed
+   * the height that frees up. Nothing about the chart changes — the existing
+   * resize observer picks up the new width by itself, and the height travels
+   * the same prop path an inline render already uses, so zoom, pan, crosshair
+   * and the series all behave identically at either size.
+   *
+   * The first measurement is taken in the click handler rather than in an
+   * effect, so entering fullscreen is one render instead of a render followed
+   * by a corrective one.
+   */
+  const openFullscreen = useCallback(() => {
+    setFsHeight(expandedPlotHeight());
+    setFullscreen(true);
+  }, []);
+  const closeFullscreen = useCallback(() => {
+    setFullscreen(false);
+    setFsHeight(null);
+  }, []);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onResize = () => setFsHeight(expandedPlotHeight());
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeFullscreen(); };
+    window.addEventListener("resize", onResize);
+    window.addEventListener("keydown", onKey);
+    // The page behind the overlay must not scroll under it.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [fullscreen, closeFullscreen]);
+
+  /** What the chart is actually built at: the expanded height, else the prop. */
+  const plotHeight = fullscreen ? fsHeight ?? height : height;
 
   /**
    * Everything the timeframe has. The whole series is loaded so panning back
@@ -345,8 +567,10 @@ export function PriceChart({
         },
       },
       grid: {
-        vertLines: { color: T.grid, style: LineStyle.Solid },
-        horzLines: { color: T.grid, style: LineStyle.Solid },
+        // Verticals are dropped: the time axis already carries the reading, and
+        // a column behind every few bars is what made the plot look boxed in.
+        vertLines: { visible: false },
+        horzLines: { color: T.gridSoft, style: LineStyle.Solid },
       },
       rightPriceScale: {
         borderColor: T.axis,
@@ -463,6 +687,23 @@ export function PriceChart({
       volRef.current = null;
     };
   }, [height, fitToWidth]);
+
+  /**
+   * Apply the expanded height to the live chart.
+   *
+   * Deliberately a resize and not a rebuild. Routing the height through
+   * `createChart` would tear the chart down and stand a new one up, and the
+   * series effect below is keyed on the data — not on the chart instance — so
+   * the replacement would come back empty. `applyOptions` keeps the same chart,
+   * which also keeps its series, its zoom and the crosshair subscription.
+   */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.applyOptions({ height: plotHeight });
+    sizeVolumePane(chart);
+    fitToWidth();
+  }, [plotHeight, fitToWidth]);
 
   // (re)build series when the display mode changes.
   //
@@ -630,84 +871,154 @@ export function PriceChart({
               : `$${n.toPrecision(4)}`;
 
   return (
-    <div>
-      {/* readout — same IconBadge + DeltaChip language as Market Depth & Risk
-          and Performance Since Raise, so the price up here reads as the same
-          kind of figure as the ones below it rather than a plainer one-off. */}
-      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <IconBadge
-          name="chart"
-          color={period == null ? "var(--ink-muted)" : period.change >= 0 ? "var(--good)" : "var(--bad)"}
-          size={26}
-        />
-        <div className="flex items-baseline gap-2">
-          <span className="num text-[20px] font-semibold">{fmtP(shown?.c)}</span>
-          {period && !hover && (
-            <DeltaChip pct={period.change} period={spanLabel(period.seconds)} />
-          )}
+    <div
+      className={
+        fullscreen
+          ? "fixed inset-0 z-50 flex flex-col overflow-y-auto bg-page p-4 sm:p-6"
+          : undefined
+      }
+    >
+      {/* Identity, price and the market row. Stacks on narrow screens and only
+          splits into two columns once there is width for both to breathe. */}
+      {/* Identity and market figures sit side by side only once the card is wide
+          enough for both. Below that they stack, which is what keeps the pair,
+          price and change on a single line at ordinary desktop widths — the
+          alternative was a two-column split that crushed the price into a wrap. */}
+      <div className="flex flex-col gap-3 border-b border-line pb-3 2xl:flex-row 2xl:items-start 2xl:justify-between 2xl:gap-8">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <Logo src={imageUrl} name={name} size={38} />
+          <div className="min-w-0">
+            {/* Pair, price and change share one baseline: the three figures are
+                read together, and stacking them was what made the header tall.
+                They wrap as a group on narrow screens rather than overflowing. */}
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h2 className="text-[16px] font-semibold leading-tight text-ink">
+                {symbol}
+                <span className="font-normal text-muted"> / USD</span>
+              </h2>
+              <span className="num text-[26px] font-semibold leading-none tracking-tight text-ink">
+                {fmtP(shown?.c)}
+              </span>
+              {period && !hover && (
+                <DeltaChip pct={period.change} period={spanLabel(period.seconds)} />
+              )}
+            </div>
+            <div className="mt-1 truncate text-[11px] text-muted">{name} Price</div>
+
+            {/* Crosshair readout. Unchanged in what it reports — only quieter,
+                so the price above stays the largest thing in the header. */}
+            {shown && (
+              <div className="num mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
+                <span>O <span className="text-ink2">{fmtP(shown.o)}</span></span>
+                <span>H <span className="text-ink2">{fmtP(shown.h)}</span></span>
+                <span>L <span className="text-ink2">{fmtP(shown.l)}</span></span>
+                <span>C <span className="text-ink2">{fmtP(shown.c)}</span></span>
+                <span className="hidden sm:inline">
+                  VOL <span className="text-ink2">
+                    ${shown.v >= 1e6 ? `${(shown.v / 1e6).toFixed(2)}M` : shown.v >= 1e3 ? `${(shown.v / 1e3).toFixed(1)}K` : shown.v.toFixed(0)}
+                  </span>
+                </span>
+                <span>
+                  {new Date(shown.ts * 1000).toLocaleString("en-US", {
+                    month: "short", day: "numeric",
+                    ...(intra
+                      ? { hour: "2-digit", minute: "2-digit", hour12: false }
+                      : { year: "numeric" }),
+                  })}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
-        {shown && (
-          <div className="num flex flex-wrap gap-x-3 text-[11px] text-muted">
-            <span>O <span className="text-ink2">{fmtP(shown.o)}</span></span>
-            <span>H <span className="text-ink2">{fmtP(shown.h)}</span></span>
-            <span>L <span className="text-ink2">{fmtP(shown.l)}</span></span>
-            <span>C <span className="text-ink2">{fmtP(shown.c)}</span></span>
-            <span className="hidden sm:inline">
-              VOL <span className="text-ink2">
-                ${shown.v >= 1e6 ? `${(shown.v / 1e6).toFixed(2)}M` : shown.v >= 1e3 ? `${(shown.v / 1e3).toFixed(1)}K` : shown.v.toFixed(0)}
+        {/* Market row. Two columns on a phone, three once there is room, and a
+            single line only on a genuinely wide desktop — flattening it earlier
+            eats the width the pair/price/change row needs to stay on one line. */}
+        <div className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 2xl:flex 2xl:items-start 2xl:gap-7">
+          <MarketStat label="Market Cap" value={marketCap == null ? "—" : fmtUsd(marketCap, { compact: true })} />
+          <MarketStat label="Volume (24h)" value={volume24h == null ? "—" : fmtUsd(volume24h, { compact: true })} />
+          <MarketStat
+            label="Circulating Supply"
+            value={circulatingSupply == null ? "—" : `${fmtNum(circulatingSupply)} ${symbol}`}
+          />
+          <MarketStat
+            label="Last updated"
+            value={
+              // Date and time are formatted separately and joined with a space:
+              // asking toLocaleString for both yields "Aug 6, 2026, 00:00", and
+              // the second comma reads as a typo.
+              lastUpdated == null ? "—" : `${fmtUtcStamp(lastUpdated)} (UTC)`
+            }
+          />
+          <MarketStat
+            label="Currency"
+            value={
+              // Every figure on the platform is quoted in USD, so this states
+              // the unit rather than offering a switch that has nowhere to go.
+              <span className="inline-flex items-center rounded-md border border-line bg-surface2/50 px-2 py-0.5 text-[11px] font-medium text-ink2">
+                USD
               </span>
-            </span>
-            <span className="text-muted">
-              {new Date(shown.ts * 1000).toLocaleString("en-US", {
-                month: "short", day: "numeric",
-                ...(intra
-                  ? { hour: "2-digit", minute: "2-digit", hour12: false }
-                  : { year: "numeric" }),
-              })}
-            </span>
-          </div>
-        )}
+            }
+          />
+        </div>
       </div>
 
       {/* Toolbar: what is measured on the left, over what interval on the right. */}
-      <div className="flex items-center gap-2 border-y border-grid py-1">
-        <div className="flex shrink-0 items-center gap-1">
+      <div className="flex flex-col gap-2 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex shrink-0 items-center gap-2">
           {circulatingSupply ? (
-            <div className="flex items-center gap-0.5" role="group" aria-label="Chart metric">
+            <SegGroup label="Chart metric">
               <SegButton active={metric === "price"} onClick={() => setMetric("price")}>
                 Price
               </SegButton>
               <SegButton active={metric === "mcap"} onClick={() => setMetric("mcap")}>
                 Market Cap
               </SegButton>
-            </div>
+            </SegGroup>
           ) : (
             // Without a supply figure a market cap would be fabricated, so the
             // switch is withheld rather than offered and left dead.
-            <span className="px-2 text-[11px] text-muted">Price</span>
+            <SegGroup>
+              <span className="px-2 py-1.5 text-[11px] leading-none text-muted">Price</span>
+            </SegGroup>
           )}
-          <span aria-hidden className="mx-0.5 h-4 w-px bg-grid" />
-          <div className="flex items-center gap-0.5" role="group" aria-label="Series type">
+          <SegGroup label="Series type">
             <IconButton active={mode === "candles"} onClick={() => setMode("candles")} label="Candlestick">
               <CandlesIcon />
             </IconButton>
             <IconButton active={mode === "area"} onClick={() => setMode("area")} label="Line">
               <LineIcon />
             </IconButton>
-          </div>
+          </SegGroup>
         </div>
 
-        <div
-          className="scroll-x flex min-w-0 flex-1 items-center justify-end gap-0.5"
-          role="group"
-          aria-label="Candle interval"
-        >
-          {TIMEFRAMES.map((tf) => (
-            <SegButton key={tf} active={timeframe === tf} onClick={() => setTimeframe(tf)}>
-              {tf}
-            </SegButton>
-          ))}
+        <div className="flex min-w-0 items-center gap-2 lg:justify-end">
+          {/* The interval strip is the one control that can outgrow a phone,
+              so it is the one that scrolls rather than wrapping. */}
+          <div className="scroll-x-quiet min-w-0 flex-1 lg:flex-none">
+            <SegGroup label="Candle interval" className="w-max">
+              {TIMEFRAMES.map((tf) => (
+                <SegButton key={tf} active={timeframe === tf} onClick={() => setTimeframe(tf)}>
+                  {tf}
+                </SegButton>
+              ))}
+            </SegGroup>
+          </div>
+
+          <SegGroup label="Chart tools">
+            <UtilityButton label="Custom date range" disabled>
+              <CalendarIcon />
+            </UtilityButton>
+            <UtilityButton label="Export data" disabled>
+              <DownloadIcon />
+            </UtilityButton>
+            <UtilityButton
+              label={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+              onClick={fullscreen ? closeFullscreen : openFullscreen}
+            >
+              <FullscreenIcon on={fullscreen} />
+            </UtilityButton>
+          </SegGroup>
         </div>
       </div>
 
@@ -748,7 +1059,7 @@ export function PriceChart({
       </div>
 
       {presentGroups.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-grid pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3">
           <span className="text-[11px] uppercase tracking-[0.08em] text-muted">Events</span>
           {presentGroups.map((g) => {
             const on = !off.has(g.key);
@@ -778,6 +1089,30 @@ export function PriceChart({
           <span className="text-[11px] text-muted">· hover a marker for detail</span>
         </div>
       )}
+
+      {/* Period strip.
+          Only the 24h figure is held anywhere — `price_snapshots.change_24h`,
+          which is what the row below reads. The longer periods have no stored
+          value and are deliberately left as em dashes rather than computed
+          here: deriving them would put a new calculation in a presentational
+          component, and a wrong number is worse than an absent one. */}
+      <div className="mt-3 grid grid-cols-3 overflow-hidden rounded-xl border border-line bg-surface2/30 sm:grid-cols-6">
+        {([
+          ["24H", change24h],
+          ["7D", null],
+          ["30D", null],
+          ["90D", null],
+          ["YTD", null],
+          ["All time", null],
+        ] as const).map(([label, value], i) => (
+          <div
+            key={label}
+            className={`border-line ${i % 3 !== 2 ? "border-r" : ""} ${i < 3 ? "border-b sm:border-b-0" : ""} sm:border-b-0 ${i !== 5 ? "sm:border-r" : "sm:border-r-0"}`}
+          >
+            <PeriodStat label={label} value={value} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
