@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import {
   projectDetail, priceIsReliable, MIN_LIQUIDITY_USD,
   parseLanguages, parseCodeFrequency, parseRisks, raisePriceOf, tradingStart,
+  periodReturns,
 } from "@/lib/queries";
 import { healthScore, insights, developerScore } from "@/lib/analytics";
 import { DevelopmentPanel } from "@/components/Development";
@@ -53,6 +54,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   const athReturn = rp && ath && tradable ? ((ath - rp.usd) / rp.usd) * 100 : null;
   const fromAth = ath && latest?.price_usd && tradable ? ((latest.price_usd - ath) / ath) * 100 : null;
   const tradingFrom = tradingStart(p, candles);
+  const periods = periodReturns(candles, latest?.price_usd ?? null, nowSec);
   const daysToAth = athTs && tradingFrom
     ? Math.max(0, Math.round((athTs - tradingFrom) / 86400)) : null;
   const latestHolders = holderHistory.length ? holderHistory[holderHistory.length - 1] : null;
@@ -99,6 +101,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
         marketCap={latest?.mcap ?? null}
         volume24h={latest?.vol24h ?? null}
         change24h={latest?.change_24h ?? null}
+        periods={periods}
         // Freshness of the series on screen, which is the newest bar we hold.
         lastUpdated={candles.length ? candles[candles.length - 1].ts : null}
       />
