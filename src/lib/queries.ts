@@ -1,6 +1,33 @@
 import { db, Project, sameBalance } from "./db";
 import { applyQuote, liveQuotes, liveTreasury } from "./live";
-import { ICO_TOKENS_SOLD } from "./sources/raises";
+import { ICO_TOKENS_SOLD, raiseFor } from "./sources/raises";
+import { priceIsReliable } from "./quote";
+
+/**
+ * A raise figure that is absent by nature rather than by omission.
+ *
+ * `no_ico` — the token never ran a sale at all (Flash.Trade airdropped).
+ * `private_round` — raised off-launchpad, so no per-token sale price exists.
+ * `unpublished` — a sale happened but never published what it settled at.
+ */
+export type RaiseAbsence = "no_ico" | "private_round" | "unpublished" | null;
+
+/**
+ * Deriving the missing figure was tried and rejected for each of these, which
+ * is why they are labelled rather than computed. Omnipair is the clearest
+ * case: the uniform-price rule implies $1,120,000 accepted against $1,118,102
+ * ever committed — more than the book held — so the rule plainly does not
+ * apply to it, and the launch record settles nothing either.
+ */
+function raiseAbsenceOf(symbol: string | null | undefined): RaiseAbsence {
+  const r = raiseFor(symbol);
+  if (!r) return null;
+  if (r.noRaise) return "no_ico";
+  if (r.amountUnknown) return "unpublished";
+  // A launchpad sale has a track; anything else priced its tokens privately.
+  if (!r.track) return "private_round";
+  return null;
+}
 
 export interface ScreenerRow extends Project {
   price_usd: number | null; mcap: number | null; fdv: number | null;
@@ -8,6 +35,20 @@ export interface ScreenerRow extends Project {
   change_24h: number | null;
   /** Reconstructed from the raise rather than recorded — surface it as such. */
   raise_price_derived: boolean;
+  /**
+   * The pool behind this row's price is below `MIN_LIQUIDITY_USD`, so the
+   * return figures are arithmetic on a price the market cannot defend. They
+   * are still shown; this says not to trust them.
+   */
+  returns_thin: boolean;
+  /**
+   * Why this row has no raise figures, when the reason is a fact rather than a
+   * gap. A dash reads as "we failed to fetch this"; these rows have nothing to
+   * fetch — Flash.Trade never held an ICO, MetaDAO's round was private, and two
+   * launches closed without ever publishing a settled amount. Null means the
+   * ordinary case: the figures are present, or genuinely unknown.
+   */
+  raise_absence: RaiseAbsence;
   roi_since_raise: number | null;   // % vs raise price
   ath_return: number | null;        // % from raise price to ATH (peak return a raise buyer saw)
   from_ath: number | null;          // % current price vs ATH (drawdown)
@@ -84,15 +125,58 @@ export function tradingStart(
   return seen.length ? Math.min(...seen) : p.raise_end_ts ?? null;
 }
 
-/**
- * Minimum pool depth for a quoted price to be treated as a real market price.
- * Below this, a handful of dollars moves the price arbitrarily, so returns
- * computed against it would be noise presented as fact.
- */
-export const MIN_LIQUIDITY_USD = 10_000;
+// Re-exported so existing importers keep working; defined in ./quote because
+// client components need it too. See the note there.
+export { MIN_LIQUIDITY_USD, priceIsReliable } from "./quote";
 
-export function priceIsReliable(liquidityUsd: number | null | undefined): boolean {
-  return liquidityUsd != null && liquidityUsd >= MIN_LIQUIDITY_USD;
+export interface PeriodReturns {
+  d7: number | null;
+  d30: number | null;
+  d90: number | null;
+  ytd: number | null;
+  allTime: number | null;
+}
+
+/**
+ * Close-to-close returns for the chart footer's period strip, measured
+ * against the same live price the 24h figure already uses — so every column
+ * in that row reads from the same "now" rather than mixing a live quote with
+ * a stale last candle.
+ *
+ * A period a token's history does not reach renders null, not a number from
+ * whatever data happens to exist. A 5-candle-old launch has no honest 30D
+ * figure; showing one anyway is exactly the "wrong number is worse than an
+ * absent one" case this file already guards for 24h, extended to the rest of
+ * the row instead of leaving it hardcoded blank.
+ */
+export function periodReturns(
+  candles: { ts: number; c: number }[],
+  price: number | null,
+  nowSec: number
+): PeriodReturns {
+  const empty: PeriodReturns = { d7: null, d30: null, d90: null, ytd: null, allTime: null };
+  if (!candles.length || price == null) return empty;
+
+  // candles is ts-ascending (see the query below), so the last close seen
+  // before the scan passes the target is the close at-or-before it.
+  const closeAtOrBefore = (target: number): number | null => {
+    let found: number | null = null;
+    for (const c of candles) {
+      if (c.ts > target) break;
+      found = c.c;
+    }
+    return found;
+  };
+  const ret = (base: number | null) => (base ? ((price - base) / base) * 100 : null);
+  const yearStart = Math.floor(Date.UTC(new Date(nowSec * 1000).getUTCFullYear(), 0, 1) / 1000);
+
+  return {
+    d7: ret(closeAtOrBefore(nowSec - 7 * 86400)),
+    d30: ret(closeAtOrBefore(nowSec - 30 * 86400)),
+    d90: ret(closeAtOrBefore(nowSec - 90 * 86400)),
+    ytd: ret(closeAtOrBefore(yearStart)),
+    allTime: ret(candles[0].c),
+  };
 }
 
 /**
@@ -100,7 +184,24 @@ export function priceIsReliable(liquidityUsd: number | null | undefined): boolea
  * so every caller goes through `screenerRows`, which overlays live quotes
  * before the return metrics are computed from them.
  */
-function screenerSnapshot(): (ScreenerRow & { ath: number | null })[] {
+/**
+ * A 24h price change measured against our own candle history.
+ *
+ * DexScreener returns a bare `priceChange: {}` for a token nobody traded, and
+ * Jupiter omits the window entirely, so thinly-traded tokens showed no change
+ * at all — not because the price held, but because neither venue would say.
+ * The close from a day ago is stored, and the live price is in hand, so the
+ * figure is computable from data we already have rather than left blank.
+ *
+ * Strictly a fallback: a venue that reports its own change knows about trades
+ * inside the window that daily candles cannot see, so it always wins.
+ */
+function closeToClose24h(price: number | null, closeADayAgo: number | null): number | null {
+  if (price == null || !closeADayAgo) return null;
+  return ((price - closeADayAgo) / closeADayAgo) * 100;
+}
+
+function screenerSnapshot(): (ScreenerRow & { ath: number | null; close_24h_ago: number | null })[] {
   const d = db();
   const rows = d.prepare(`
     SELECT p.*,
@@ -108,6 +209,10 @@ function screenerSnapshot(): (ScreenerRow & { ath: number | null })[] {
       hs.holder_count,
       gh.stars AS gh_stars, gh.last_push_ts AS gh_last_push,
       (SELECT MAX(c.h) FROM candles c WHERE c.project_id = p.id) AS ath,
+      -- The close a day ago, so a 24h change can still be computed for a token
+      -- whose venue declines to report one. See closeToClose24h.
+      (SELECT c.c FROM candles c WHERE c.project_id = p.id
+        AND c.ts <= strftime('%s','now') - 86400 ORDER BY c.ts DESC LIMIT 1) AS close_24h_ago,
       (SELECT ts2.value_usd FROM treasury_snapshots ts2
         WHERE ts2.project_id = p.id ORDER BY ts2.ts DESC LIMIT 1) AS treasury_usd
     FROM projects p
@@ -118,7 +223,7 @@ function screenerSnapshot(): (ScreenerRow & { ath: number | null })[] {
     LEFT JOIN github_snapshots gh ON gh.project_id = p.id
       AND gh.ts = (SELECT MAX(ts) FROM github_snapshots WHERE project_id = p.id)
     ORDER BY ps.mcap DESC NULLS LAST, p.name
-  `).all() as (ScreenerRow & { ath: number | null })[];
+  `).all() as (ScreenerRow & { ath: number | null; close_24h_ago: number | null })[];
   return rows;
 }
 
@@ -126,12 +231,16 @@ function screenerSnapshot(): (ScreenerRow & { ath: number | null })[] {
 function withReturns(r: ScreenerRow & { ath: number | null }): ScreenerRow {
   const resolved = raisePriceOf(r);
   const rp = resolved?.usd ?? null;
-  // Returns are only meaningful against a price the market can actually
-  // support; a few thousand dollars of liquidity is not a real quote.
-  const tradable = priceIsReliable(r.liquidity_usd);
-  const roi = rp && r.price_usd && tradable ? ((r.price_usd - rp) / rp) * 100 : null;
-  const athRet = rp && r.ath && tradable ? ((r.ath - rp) / rp) * 100 : null;
-  const fromAth = r.ath && r.price_usd && tradable ? ((r.price_usd - r.ath) / r.ath) * 100 : null;
+  // A return computed against a $33 pool is arithmetic, not a market fact, so
+  // it used to be withheld outright. Withholding hid the arithmetic without
+  // explaining the pool, which reads as "we have no data" rather than "this
+  // price cannot bear the weight" — so the figure is now shown and marked
+  // instead, the same way a reconstructed raise price is. The threshold still
+  // decides; it just sets a flag now rather than a null.
+  const thin = !priceIsReliable(r.liquidity_usd);
+  const roi = rp && r.price_usd ? ((r.price_usd - rp) / rp) * 100 : null;
+  const athRet = rp && r.ath ? ((r.ath - rp) / rp) * 100 : null;
+  const fromAth = r.ath && r.price_usd ? ((r.price_usd - r.ath) / r.ath) * 100 : null;
   // raise_price on the row is the resolved figure, so every screener consumer
   // sees the same number the returns were computed from; the flag beside it
   // says whether it was recorded or reconstructed.
@@ -139,6 +248,8 @@ function withReturns(r: ScreenerRow & { ath: number | null }): ScreenerRow {
     ...r,
     raise_price: rp,
     raise_price_derived: resolved?.derived ?? false,
+    returns_thin: thin,
+    raise_absence: raiseAbsenceOf(r.symbol),
     roi_since_raise: roi, ath_return: athRet, from_ath: fromAth,
   };
 }
@@ -155,7 +266,8 @@ export async function screenerRows(): Promise<ScreenerRow[]> {
     // only after the next ingest.
     const ath = live.price_usd != null && (live.ath == null || live.price_usd > live.ath)
       ? live.price_usd : live.ath;
-    return withReturns({ ...live, ath, treasury_usd });
+    const change_24h = live.change_24h ?? closeToClose24h(live.price_usd, r.close_24h_ago);
+    return withReturns({ ...live, ath, treasury_usd, change_24h });
   });
 }
 
@@ -229,6 +341,19 @@ export interface ProjectDetail {
   holderHistory: { ts: number; holder_count: number | null; top10_pct: number | null; top20_pct: number | null }[];
   proposals: { number: number | null; title: string | null; state: string | null; created_ts: number | null; url: string | null; author: string | null }[];
   github: GithubSnapshot | null;
+  /**
+   * One row per ingest read, unfiltered. Early rows commonly carry nulls for
+   * the search-API fields (commits_90d, issue/PR counts) from ingests that ran
+   * before those calls existed or before GITHUB_TOKEN lifted the rate ceiling
+   * — real absences, not a query bug, so callers filter per-field rather than
+   * this function guessing which fields "count" as present.
+   */
+  githubHistory: {
+    ts: number; commits_90d: number | null; contributors: number | null;
+    stars: number | null; forks: number | null;
+    open_issues: number | null; closed_issues: number | null;
+    merged_prs: number | null; active_repos: number | null;
+  }[];
   observations: { ts: number; kind: string | null; text: string }[];
   treasuryValue: number | null;
   /**
@@ -240,6 +365,8 @@ export interface ProjectDetail {
   treasuryHistory: { ts: number; value_usd: number | null; last_seen_ts: number }[];
   /** When the vault was last read at all, regardless of whether it moved. */
   treasuryLastRead: number | null;
+  /** Pool depth at every ingest read — unlike treasury this moves continuously, so it is not deduped. */
+  liquidityHistory: { ts: number; liquidity_usd: number | null }[];
   /** `source` is the publisher (CoinDesk…); `type` is the event class. */
   news: { ts: number; title: string; url: string | null; source: string | null; type: string }[];
   /** Git tags from the project's repos — engineering output, not press. */
@@ -281,6 +408,11 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
            languages, code_frequency
     FROM github_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1
   `).get(id) as ProjectDetail["github"];
+  const githubHistory = d.prepare(`
+    SELECT ts, commits_90d, contributors, stars, forks,
+           open_issues, closed_issues, merged_prs, active_repos
+    FROM github_snapshots WHERE project_id = ? ORDER BY ts
+  `).all(id) as ProjectDetail["githubHistory"];
   const observations = d.prepare("SELECT ts,kind,text FROM observations WHERE project_id = ? ORDER BY ts DESC LIMIT 30").all(id) as ProjectDetail["observations"];
   const treasury = d.prepare("SELECT value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1").get(id) as { value_usd: number | null } | undefined;
   // recordTreasurySnapshot keeps this one-row-per-change going forward, but
@@ -304,6 +436,9 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   const treasuryLastRead = treasuryHistory.length
     ? treasuryHistory[treasuryHistory.length - 1].last_seen_ts
     : null;
+  const liquidityHistory = d.prepare(
+    "SELECT ts, liquidity_usd FROM price_snapshots WHERE project_id = ? ORDER BY ts"
+  ).all(id) as ProjectDetail["liquidityHistory"];
   // News and releases are kept apart. Folding git tags into "news" made the
   // News tab read "17" on a project with no press coverage at all, and half of
   // those tags were from a test repo — an availability claim we cannot support.
@@ -369,11 +504,11 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   }
   return {
     project, latest, quoteSource: quote?.source ?? null,
-    candles, events, topHolders, holderHistory, proposals, github, observations,
+    candles, events, topHolders, holderHistory, proposals, github, githubHistory, observations,
     // Live where the feed has it, the archived snapshot otherwise. Without
     // this, treasury/market-cap divided a six-day-old balance by a live cap.
     treasuryValue: liveTreasuryUsd ?? treasury?.value_usd ?? null,
-    treasuryHistory, treasuryLastRead,
+    treasuryHistory, treasuryLastRead, liquidityHistory,
     news, releases, listings, risk,
     ath, atl, athTs,
   };
@@ -415,16 +550,16 @@ export function searchAll(q: string) {
 
 export function globalTimeline(limit = 120) {
   return db().prepare(`
-    SELECT e.ts, e.type, e.title, e.detail, e.url, p.slug, p.name, p.symbol
+    SELECT e.ts, e.type, e.title, e.detail, e.url, p.slug, p.name, p.symbol, p.image_url
     FROM events e JOIN projects p ON p.id = e.project_id
     ORDER BY e.ts DESC LIMIT ?
-  `).all(limit) as { ts: number; type: string; title: string; detail: string | null; url: string | null; slug: string; name: string; symbol: string | null }[];
+  `).all(limit) as { ts: number; type: string; title: string; detail: string | null; url: string | null; slug: string; name: string; symbol: string | null; image_url: string | null }[];
 }
 
 export function allObservations(limit = 100) {
   return db().prepare(`
-    SELECT o.ts, o.kind, o.text, p.slug, p.name FROM observations o
+    SELECT o.ts, o.kind, o.text, p.slug, p.name, p.image_url FROM observations o
     LEFT JOIN projects p ON p.id = o.project_id
     ORDER BY o.ts DESC LIMIT ?
-  `).all(limit) as { ts: number; kind: string | null; text: string; slug: string | null; name: string | null }[];
+  `).all(limit) as { ts: number; kind: string | null; text: string; slug: string | null; name: string | null; image_url: string | null }[];
 }

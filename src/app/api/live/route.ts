@@ -22,6 +22,10 @@ export async function GET() {
         price_usd: r.price_usd, mcap: r.mcap, fdv: r.fdv,
         liquidity_usd: r.liquidity_usd, vol24h: r.vol24h, change_24h: r.change_24h,
         roi_since_raise: r.roi_since_raise, ath_return: r.ath_return, from_ath: r.from_ath,
+        // Rides along with the returns it qualifies: a pool that drains below
+        // the threshold between polls must take the marker with it, or the
+        // table shows freshly-thin numbers as though they were still solid.
+        returns_thin: r.returns_thin,
       })),
     },
     { headers: { "cache-control": "no-store" } }

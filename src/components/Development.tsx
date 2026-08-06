@@ -1,8 +1,10 @@
-import type { GithubSnapshot, Language, CodeWeek } from "@/lib/queries";
+import type { GithubSnapshot, Language, CodeWeek, ProjectDetail } from "@/lib/queries";
 import type { DevScore } from "@/lib/analytics";
 import { scoreColor } from "@/lib/analytics";
 import { fmtNum, timeAgo } from "@/lib/format";
 import { SectionCard, DataGap } from "./panels";
+import { TrendCard, type IconName } from "./viz";
+import { DAY, changeVsAgo } from "@/lib/series";
 
 /** Distinct hues for the language bar; falls back to grey past the eighth. */
 const LANG_COLORS = [
@@ -89,15 +91,37 @@ function CodeFrequency({ weeks }: { weeks: CodeWeek[] }) {
   );
 }
 
+/** One numeric field of the Development grid, trended over real ingest history. */
+interface TrendField {
+  key: keyof ProjectDetail["githubHistory"][number] & string;
+  label: string;
+  icon: IconName;
+  color: string;
+  sub?: string;
+}
+
+const TREND_FIELDS: TrendField[] = [
+  { key: "commits_90d", label: "Commits (90d)", icon: "chart", color: "var(--accent)", sub: "org-wide" },
+  { key: "contributors", label: "Contributors", icon: "users", color: "var(--good)", sub: "unique authors" },
+  { key: "stars", label: "Stars", icon: "target", color: "var(--warn)", sub: "across owned repos" },
+  { key: "forks", label: "Forks", icon: "layers", color: "var(--accent)" },
+  { key: "open_issues", label: "Open Issues", icon: "info", color: "var(--warn)" },
+  { key: "closed_issues", label: "Closed Issues", icon: "shield", color: "var(--good)" },
+  { key: "merged_prs", label: "Pull Requests", icon: "pie", color: "#9b7ae0", sub: "merged" },
+  { key: "active_repos", label: "Active Repositories", icon: "clock", color: "var(--accent)", sub: "pushed in 90d" },
+];
+
 export function DevelopmentPanel({
-  github, languages, codeFrequency, score, githubUrl, releaseCount,
+  github, githubHistory, languages, codeFrequency, score, githubUrl, releaseCount, nowSec,
 }: {
   github: GithubSnapshot | null;
+  githubHistory: ProjectDetail["githubHistory"];
   languages: Language[];
   codeFrequency: CodeWeek[];
   score: DevScore;
   githubUrl: string | null;
   releaseCount: number;
+  nowSec: number;
 }) {
   if (!githubUrl) {
     return (
@@ -131,8 +155,55 @@ export function DevelopmentPanel({
   const closeRate = github.closed_issues != null && issueTotal > 0
     ? (github.closed_issues / issueTotal) * 100 : null;
 
+  // Weekly lines touched on the busiest repo — the one real week-over-week
+  // series GitHub's API gives us. Magnitude (additions + |deletions|) rather
+  // than net, so a week that mostly deleted code reads as active instead of
+  // quiet; a net figure would hide a big refactor as "-3 lines".
+  const weeklyTotals = codeFrequency.map((w) => w.additions + Math.abs(w.deletions));
+  const last4 = weeklyTotals.slice(-4).reduce((s, v) => s + v, 0);
+  const prev4 = weeklyTotals.slice(-8, -4).reduce((s, v) => s + v, 0);
+  const codeChangeDelta = prev4 > 0 ? ((last4 - prev4) / prev4) * 100 : null;
+
+  // One card per numeric field, trended over every ingest read on file.
+  // `githubHistory` is unfiltered — rows from before a field's API call
+  // existed, or from a run the rate limit cut off, carry it as null — so
+  // each field builds its own series rather than sharing one row filter,
+  // and a field with only its latest read renders that read alone. The
+  // card still shows, live value and all; only the sparkline underneath
+  // defers to `Sparkline`'s own "needs more history" state.
+  const trendCards = TREND_FIELDS.map((f) => {
+    const series = githubHistory
+      .map((h) => ({ ts: h.ts, v: h[f.key] }))
+      .filter((r): r is { ts: number; v: number } => r.v != null);
+    if (!series.length) return null;
+    const current = series[series.length - 1].v;
+    return (
+      <TrendCard
+        key={f.key}
+        icon={f.icon} color={f.color} label={f.label}
+        value={fmtNum(current)}
+        deltaPct={changeVsAgo(current, series, 30 * DAY, nowSec)}
+        deltaLabel="vs 30d ago"
+        series={series.map((s) => s.v)}
+      />
+    );
+  }).filter(Boolean);
+
   return (
     <div className="space-y-5">
+      {(trendCards.length > 0 || weeklyTotals.length > 0) && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {trendCards}
+          {weeklyTotals.length > 0 && (
+            <TrendCard
+              icon="bars" color="var(--warn)" label="Code Changes (30d)"
+              value={fmtNum(last4)}
+              deltaPct={codeChangeDelta} deltaLabel="vs previous 30d"
+              series={weeklyTotals}
+            />
+          )}
+        </div>
+      )}
       <SectionCard
         title="Development"
         right={

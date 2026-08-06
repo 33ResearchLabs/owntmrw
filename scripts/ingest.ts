@@ -16,12 +16,12 @@ import { discoverProjects, fetchSupply } from "../src/lib/sources/metadao";
 import { fetchMarketHistory } from "../src/lib/sources/marketdata";
 import { bestPairForMint, socialsFromPair } from "../src/lib/sources/dexscreener";
 import { dailyOHLCV, topPoolForToken, tokenInfo, poolsForToken, poolListings } from "../src/lib/sources/geckoterminal";
-import { largestTokenAccounts, tokenAccountOwner, tokenSupply } from "../src/lib/sources/rpc";
+import { largestTokenAccounts, tokenAccountOwner, tokenSupply, usdcBalance } from "../src/lib/sources/rpc";
 import { orgStats, githubOwner } from "../src/lib/sources/github";
 import { coinIdByContract, coinListings } from "../src/lib/sources/coingecko";
 import { fetchWire, matchProject, searchNews, filterForProject } from "../src/lib/sources/newswire";
 import { tokenReport } from "../src/lib/sources/rugcheck";
-import { jupTokenSearch, jupPrices } from "../src/lib/sources/jupiter";
+import { jupTokenSearch, jupPrices, jupVolume } from "../src/lib/sources/jupiter";
 import { raiseFor, refundRate } from "../src/lib/sources/raises";
 import { sleep } from "../src/lib/sources/http";
 import { discoverFeed, fetchFeed, githubFeeds } from "../src/lib/sources/feeds";
@@ -52,6 +52,29 @@ async function main() {
     `, ${treasuryMoves} treasury balance${treasuryMoves === 1 ? "" : "s"} moved`
   );
 
+  // 1a. treasuries the tickers feed does not cover. It carries
+  // `treasury_usdc_aum` only for the tokens it lists, so a project missing from
+  // it had no treasury figure at all — Ranger and ZKLSOL read as unknown when
+  // both vaults are verifiably empty. The vault is public, so read it: an
+  // unlisted project is not an unknowable one. Checked against a project the
+  // feed does list, the two agree exactly (ORDR: $105,000 either way).
+  // Keyed on what discovery actually reported, not on whether a row already
+  // exists: gating on the latter would read each vault once and then never
+  // refresh it, freezing the balance at whatever it was the first time.
+  const fedByTickers = new Set(
+    discovered.filter((p) => p.treasury_value_usd != null).map((p) => p.slug)
+  );
+  let onchainTreasuries = 0;
+  for (const p of allProjects()) {
+    if (!p.treasury_address || fedByTickers.has(p.slug)) continue;
+    const usdc = await usdcBalance(p.treasury_address);
+    if (usdc == null) { console.log(`      ${p.name}: treasury vault unreadable`); continue; }
+    recordTreasurySnapshot(p.id, now(), usdc);
+    onchainTreasuries++;
+    console.log(`      ${p.name}: treasury $${usdc.toLocaleString()} (on-chain)`);
+  }
+  if (onchainTreasuries) console.log(`      ${onchainTreasuries} treasury balance(s) read on-chain`);
+
   const projects = allProjects();
 
   // 1b. authoritative supply + allocation (drives correct market cap)
@@ -65,10 +88,30 @@ async function main() {
       s = await fetchSupply(p.mint);
     }
     if (!s) { console.log(`      ${p.name}: supply unavailable`); continue; }
+
+    // A zero circulating supply withholds market cap outright (see quote.ts),
+    // so a wrong zero blanks the column rather than erring loudly. MetaDAO
+    // reports one for some v0.7 launches whose own allocation block, in the
+    // same response, shows millions of tokens claimed — Ranger reads
+    // "circulatingSupply": "0" beside 5.3M claimed and 59,439 live on Jupiter.
+    // Only a zero is second-guessed: a figure MetaDAO states is authoritative,
+    // and a genuinely undistributed token still reports no cap because Jupiter
+    // agrees it has none.
+    let circulating = s.circulatingSupply;
+    if (circulating != null && circulating <= 0) {
+      const tok = (await jupTokenSearch(p.mint)).find((t) => t.id === p.mint);
+      if (tok?.circSupply != null && tok.circSupply > 0) {
+        console.log(
+          `      ${p.name}: MetaDAO reports 0 circulating, Jupiter ${fmtM(tok.circSupply)} — using Jupiter`
+        );
+        circulating = tok.circSupply;
+      }
+    }
+
     upsertProject({
       slug: p.slug, name: p.name,
       total_supply: s.totalSupply ?? undefined,
-      circulating_supply: s.circulatingSupply ?? undefined,
+      circulating_supply: circulating ?? undefined,
       team_package: s.teamPackage ?? undefined,
       liquidity_tokens: s.liquidity ?? undefined,
       launch_address: s.launchAddress ?? undefined,
@@ -79,7 +122,7 @@ async function main() {
     });
     const lockedPct = s.teamPackage && s.totalSupply ? (s.teamPackage / s.totalSupply) * 100 : 0;
     console.log(
-      `      ${p.name}: circ ${fmtM(s.circulatingSupply)} / total ${fmtM(s.totalSupply)}` +
+      `      ${p.name}: circ ${fmtM(circulating)} / total ${fmtM(s.totalSupply)}` +
       (lockedPct ? ` (${lockedPct.toFixed(0)}% locked in team package)` : "")
     );
   }
@@ -89,7 +132,15 @@ async function main() {
   let raiseCount = 0;
   for (const p of allProjects()) {
     const r = raiseFor(p.symbol);
-    if (!r) continue;
+    // RAISES is keyed by symbol, so a token discovery finds before anyone
+    // records its raise matches nothing and silently keeps both raise columns
+    // blank. Saying so is the difference between "this project never raised"
+    // and "nobody has written its raise down yet" — ORDR sat in the second
+    // state looking like the first.
+    if (!r) {
+      console.log(`      ${p.name} (${p.symbol ?? "?"}): no raise record — add one to RAISES`);
+      continue;
+    }
     const closedTs = r.closed ? Math.floor(Date.parse(`${r.closed}T00:00:00Z`) / 1000) : undefined;
     upsertProject({
       slug: p.slug, name: p.name,
@@ -158,11 +209,19 @@ async function main() {
         // distributed yet, so report none instead of a figure like "$768".
         const mcap = marketCap(price, p.circulating_supply, tok?.mcap);
         const fdv = capFromSupply(price, p.total_supply, tok?.fdv);
+        // Jupiter's rolling windows carry depth, volume and price change, so a
+        // token that only trades on MetaDAO's AMM keeps a full row instead of
+        // a price beside four nulls. Volume is buy + sell to match how
+        // DexScreener quotes h24, keeping the two comparable in one column.
         d.prepare(`
           INSERT OR REPLACE INTO price_snapshots
           (project_id, ts, price_usd, mcap, fdv, liquidity_usd, vol24h, change_1h, change_24h)
           VALUES (?,?,?,?,?,?,?,?,?)
-        `).run(p.id, now(), price, mcap, fdv, tok?.liquidity ?? null, null, null, null);
+        `).run(
+          p.id, now(), price, mcap, fdv, tok?.liquidity ?? null,
+          jupVolume(tok?.stats24h), tok?.stats1h?.priceChange ?? null,
+          tok?.stats24h?.priceChange ?? null
+        );
         console.log(`      ${p.name}: $${price ?? "?"} (jupiter fallback)`);
       } else {
         console.log(`      ${p.name}: no market data found`);

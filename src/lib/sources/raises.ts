@@ -52,6 +52,17 @@ const FUTARD_ARCHIVE =
  * base units and reconcile to the cent against archived pages.
  */
 const ONCHAIN = "https://solscan.io/account/moontUzsdepotRGe5xsfip7vLPTJnVuafqdUWexVnPM";
+/**
+ * A single launch's record, live rather than archived. Append the *launch
+ * address* — the mint 404s. The page embeds the launch struct as JSON
+ * (`minimumRaise`, `approvedAmount`, `finalRaiseAmount`, `committedAmount`,
+ * `numFunders`, `isPermissionless`) and states its own price and FDV in prose,
+ * so nothing here needs deriving through the 10M-token rule.
+ *
+ * Read the meta description with care: it quotes *committed*, not settled. It
+ * calls ORDR a "$9.3M raise" where the project actually kept $150,000.
+ */
+const FUTARD_LAUNCH = "https://www.futard.io/launch/";
 
 /**
  * Per docs.metadao.fi/how-launches-work/sale: every launchpad ICO sells exactly
@@ -130,9 +141,9 @@ export const RAISES: RaiseRecord[] = [
   },
   {
     symbol: "LASO", goalUsd: 750_000, committedUsd: 25_637_316, contributors: 715,
-    fdvUsd: 3_000_000, closed: "2026-07-04",
+    fdvUsd: 3_000_000, price: 0.1, closed: "2026-07-04",
     track: "curated", amountUnknown: true,
-    note: "Blind-cap raise at a fixed $3M FDV regardless of amount raised, on a 30M-token supply — an exception to the standard 10M-token sale. 34× oversubscribed. The settled amount is not recorded on-chain, so it is left blank rather than estimated.",
+    note: "Blind-cap raise at a fixed $3M FDV regardless of amount raised, on a 30M-token supply — an exception to the standard 10M-token sale. 34× oversubscribed. The settled amount is not recorded on-chain, so it is left blank rather than estimated. The price is not estimated either: a fixed $3M FDV over the 29,999,942 tokens the chain reports fixes it at $0.10, which is why this row carries a price but no amount — the blind cap is exactly what severs the two.",
     sourceUrl: ONCHAIN,
   },
   {
@@ -186,14 +197,50 @@ export const RAISES: RaiseRecord[] = [
     sourceUrl: ONCHAIN,
   },
   {
+    symbol: "ORDR", amountUsd: 150_000, goalUsd: 150_000, committedUsd: 9_286_571,
+    price: 0.015, fdvUsd: 387_000, contributors: 293, closed: "2026-07-31",
+    track: "permissionless",
+    note: "62× oversubscribed — $9.29M committed against a $150K cap, so 98.4% was refunded. The launch page's own meta description reads \"$9.3M raised\", which is the committed figure; the settled raise was $150,000.",
+    sourceUrl: `${FUTARD_LAUNCH}HwvxqXHcRNKikH8RsqRRaV6NCpzxg1g5tHgnMfsdaaEj`,
+  },
+  {
+    symbol: "KIMIA", amountUsd: 60_000, goalUsd: 60_000, committedUsd: 727_114,
+    price: 0.006, fdvUsd: 154_800, contributors: 58, closed: "2026-08-05",
+    track: "permissionless",
+    note: "12× oversubscribed. CryptoRank reports $672,114 for this raise, which matches neither the committed nor the settled figure; the launch record is authoritative.",
+    sourceUrl: `${FUTARD_LAUNCH}FwCDgK9C8mjWr7wULPFzEv4QBt6koTnMQrKTC45TxWAk`,
+  },
+  {
+    symbol: "BASKET", amountUsd: 10_000, goalUsd: 10_000, committedUsd: 17_509,
+    price: 0.001, fdvUsd: 25_800, contributors: 29, closed: "2026-08-05",
+    track: "permissionless",
+    note: "The least oversubscribed launch on the platform at 1.75×, so only 42.9% was refunded — against 98%+ on most permissionless raises.",
+    sourceUrl: `${FUTARD_LAUNCH}AtBwB8fYsxLLSt3mwK9Ma4joCpG9yuPzxBEcSsEaiSAT`,
+  },
+  {
     symbol: "FAF", noRaise: true,
     note: "Flash.Trade never ran an ICO. The team self-funded through 15 months of development and distributed 80% of supply to the community via a burn-to-claim airdrop to Flash Beast NFT holders. It appears here because it adopted MetaDAO futarchy governance and trades on the AMM — that is secondary trading, not a raise.",
     sourceUrl: "https://solanafloor.com/news/flash-trade-faf-token-launch",
   },
   {
-    symbol: "META", amountUsd: 2_200_000, closed: "2024-08-01",
-    note: "Not a launchpad ICO — a private round led by Paradigm with Variant and 6th Man ($12.1M total across all rounds).",
-    sourceUrl: "https://icodrops.com/metadao/",
+    symbol: "META", amountUsd: 2_229_950, price: 0.5574875, fdvUsd: 11_600_000,
+    contributors: 31, closed: "2024-08-01",
+    // $2,229,950 bought exactly 4,000 pre-split META — 3,035 to Paradigm
+    // (14.6% of supply) and 965 across ~30 angels, per CoinDesk's announcement.
+    // The 1:1000 split (metadao.fi/migration) makes that 4,000,000 tokens in
+    // today's units, so the price is $2,229,950 ÷ 4,000,000 — held in the
+    // registry rather than derived at runtime because the 10M-token launchpad
+    // rule does not apply to a private round, and its tooltip would misstate
+    // where this number comes from. Aggregators list the round price as
+    // undisclosed; the token counts in the primary source pin it down.
+    // The valuation follows the same way: 3,035 ÷ 14.6% ≈ 20,788 pre-split
+    // tokens in existence, × $557.49 ≈ $11.6M — rounded to match the
+    // percentage's own precision. Contributors is Paradigm plus the article's
+    // "around 30" angels, so it carries that same softness. No committedUsd on
+    // purpose: a private round has no commitment book, so demand and
+    // oversubscription do not exist for it, undisclosed or otherwise.
+    note: "Not a launchpad ICO — a $2.23M round led by Paradigm (3,035 of 4,000 pre-split tokens; ~30 angels took the rest) at ~$11.6M implied valuation, $12.1M total across all rounds. Price is in post-split units: $557.49 a token then, ÷1000 for today's META.",
+    sourceUrl: "https://www.coindesk.com/tech/2024/08/01/crypto-vc-paradigm-invests-in-metadao-as-prediction-markets-boom",
   },
 ];
 

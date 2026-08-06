@@ -15,6 +15,7 @@ import {
   shortAddr,
 } from "@/lib/format";
 import { Delta, StatusBadge } from "./ui";
+import { TrendCard } from "./viz";
 import { DAY, changeVsAgo, deltaVsAgo } from "@/lib/series";
 import { MoreRows } from "./MoreRows";
 import { CopyButton } from "./CopyButton";
@@ -940,12 +941,13 @@ export function SmartMoneyPanel({ d }: { d: ProjectDetail }) {
 
 // ---------------------------------------------------------------- treasury
 
-export function TreasuryPanel({ d }: { d: ProjectDetail }) {
+export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number }) {
   const {
     project: p,
     treasuryValue,
     treasuryHistory,
     treasuryLastRead,
+    liquidityHistory,
     latest,
   } = d;
   const vsRaise =
@@ -955,8 +957,44 @@ export function TreasuryPanel({ d }: { d: ProjectDetail }) {
   const vsMcap =
     treasuryValue && latest?.mcap ? treasuryValue / latest.mcap : null;
 
+  // Real series, not derived figures: treasuryHistory is already deduped to
+  // actual balance changes (see projectDetail), and liquidity is read raw
+  // since a pool's depth genuinely moves on every read rather than stepping.
+  // changeVsAgo is the one lookback implementation the codebase uses
+  // everywhere else, specifically so this panel and the market tiles cannot
+  // disagree about what "vs 7d ago" means the way two of them once did.
+  const treasurySeries = treasuryHistory
+    .map((t) => ({ ts: t.ts, v: t.value_usd }))
+    .filter((r): r is { ts: number; v: number } => r.v != null);
+  const treasuryDelta = changeVsAgo(treasuryValue, treasurySeries, 7 * DAY, nowSec);
+
+  const liquiditySeries = liquidityHistory
+    .map((l) => ({ ts: l.ts, v: l.liquidity_usd }))
+    .filter((r): r is { ts: number; v: number } => r.v != null);
+  const liquidityDelta = changeVsAgo(latest?.liquidity_usd, liquiditySeries, 7 * DAY, nowSec);
+
   return (
     <div className="space-y-5">
+      {(treasurySeries.length > 0 || liquiditySeries.length > 0) && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {treasurySeries.length > 0 && (
+            <TrendCard
+              icon="bank" color="var(--good)" label="Treasury Value"
+              value={treasuryValue != null ? (treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)) : "—"}
+              deltaPct={treasuryDelta} deltaLabel="vs 7d ago"
+              series={treasurySeries.map((s) => s.v)}
+            />
+          )}
+          {liquiditySeries.length > 0 && (
+            <TrendCard
+              icon="droplet" color="var(--accent)" label="Available Liquidity"
+              value={fmtUsd(latest?.liquidity_usd ?? null)}
+              deltaPct={liquidityDelta} deltaLabel="vs 7d ago"
+              series={liquiditySeries.map((s) => s.v)}
+            />
+          )}
+        </div>
+      )}
       <SectionCard
         title="Treasury"
         right={
@@ -1077,6 +1115,7 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
     atl,
     athTs,
     holderHistory,
+    treasuryHistory,
     treasuryValue,
   } = d;
   const cur = latest?.price_usd ?? null;
@@ -1091,7 +1130,73 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   const hh = holderHistory.filter((h) => h.holder_count != null);
   const holdersNow = hh.length ? hh[hh.length - 1].holder_count : null;
 
+  // Five glanceable cards above the detail grid below, each real: price and
+  // ROI read straight off the candle history against the raise price; market
+  // cap multiplies that same price series by today's circulating supply, so
+  // it moves in lockstep with ROI where supply hasn't changed and is stated
+  // as such rather than implying a supply-adjusted history this app does not
+  // have. Holder growth is measured from the earliest tracked reading, not
+  // "at raise" — no snapshot exists from the raise date itself, and claiming
+  // one would be exactly the fabrication this file exists to avoid.
+  const supply = p.circulating_supply;
+  const raiseMcap = rp && supply ? rp.usd * supply : null;
+  const curMcap = latest?.mcap ?? (cur && supply ? cur * supply : null);
+  const mcapGrowth = raiseMcap && curMcap ? ((curMcap - raiseMcap) / raiseMcap) * 100 : null;
+  const mcapSeries = supply ? candles.map((c) => c.c * supply) : [];
+  const holderBaseline = hh.length ? hh[0].holder_count : null;
+  const holderGrowth = holderBaseline && holdersNow ? ((holdersNow - holderBaseline) / holderBaseline) * 100 : null;
+  const treasuryGrowth = treasuryValue != null && p.raise_amount_usd
+    ? ((treasuryValue - p.raise_amount_usd) / p.raise_amount_usd) * 100 : null;
+  const treasurySeries = treasuryHistory.map((t) => t.value_usd).filter((v): v is number => v != null);
+
   return (
+    <div className="space-y-5">
+      {(rp || treasuryGrowth != null || holderGrowth != null) && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {rp && cur != null && candles.length > 0 && (
+            <TrendCard
+              icon="token" color="var(--accent)" label="Raise vs Current"
+              value={fmtPrice(cur)}
+              deltaPct={roi} deltaLabel={`vs raise ${fmtPrice(rp.usd)}`}
+              series={candles.map((c) => c.c)}
+            />
+          )}
+          {roi != null && (
+            <TrendCard
+              icon="percent" color="var(--good)" label="ROI Since Raise"
+              value={fmtPct(roi)}
+              deltaPct={roi} deltaLabel="vs raise price"
+              series={candles.map((c) => ((c.c - rp!.usd) / rp!.usd) * 100)}
+            />
+          )}
+          {mcapGrowth != null && (
+            <TrendCard
+              icon="pie" color="var(--warn)" label="Market Cap Growth"
+              value={fmtUsd(curMcap)}
+              deltaPct={mcapGrowth} deltaLabel={`vs raise ${fmtUsd(raiseMcap)}`}
+              series={mcapSeries}
+              title={`Raise-time cap here is raise price × today's circulating supply, so it moves with ROI rather than history — not the same figure as "Raise Valuation" below, which uses the supply that actually existed at the raise.`}
+            />
+          )}
+          {holderGrowth != null && (
+            <TrendCard
+              icon="users" color="var(--good)" label="Holder Growth"
+              value={fmtNum(holdersNow)}
+              deltaPct={holderGrowth} deltaLabel="since tracking began"
+              series={hh.map((h) => h.holder_count!)}
+            />
+          )}
+          {treasuryValue != null && (
+            <TrendCard
+              icon="bank" color="var(--accent)" label="Treasury Growth"
+              value={treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)}
+              deltaPct={treasuryGrowth}
+              deltaLabel={p.raise_amount_usd ? `vs raised ${fmtUsd(p.raise_amount_usd)}` : undefined}
+              series={treasurySeries}
+            />
+          )}
+        </div>
+      )}
     <DashboardCard
       title="Performance Since Raise"
       right={<CardAction href={p.raise_source_url}>Data source</CardAction>}
@@ -1164,6 +1269,7 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
         </CardNote>
       )}
     </DashboardCard>
+    </div>
   );
 }
 

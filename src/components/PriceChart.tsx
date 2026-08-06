@@ -329,6 +329,7 @@ export function PriceChart({
   candles, events = [], height = CHART_HEIGHT, slug, circulatingSupply = null,
   name, symbol, imageUrl = null,
   marketCap = null, volume24h = null, change24h = null, lastUpdated = null,
+  periods = null,
 }: {
   candles: Candle[];
   events?: ChartEvent[];
@@ -348,10 +349,12 @@ export function PriceChart({
   imageUrl?: string | null;
   marketCap?: number | null;
   volume24h?: number | null;
-  /** 24h change for the footer strip. Longer periods are not held anywhere. */
+  /** 24h change for the footer strip. */
   change24h?: number | null;
   /** Unix seconds of the newest snapshot behind these figures. */
   lastUpdated?: number | null;
+  /** 7D/30D/90D/YTD/all-time for the rest of the footer strip. */
+  periods?: { d7: number | null; d30: number | null; d90: number | null; ytd: number | null; allTime: number | null } | null;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -1090,20 +1093,19 @@ export function PriceChart({
         </div>
       )}
 
-      {/* Period strip.
-          Only the 24h figure is held anywhere — `price_snapshots.change_24h`,
-          which is what the row below reads. The longer periods have no stored
-          value and are deliberately left as em dashes rather than computed
-          here: deriving them would put a new calculation in a presentational
-          component, and a wrong number is worse than an absent one. */}
+      {/* Period strip. 24h comes from the live quote (`price_snapshots.change_24h`);
+          the rest are close-to-close against our own candle history, computed
+          in `periodReturns` rather than here — this component stays
+          presentational, and a period the token's history doesn't reach back
+          to renders null from that function rather than a fabricated figure. */}
       <div className="mt-3 grid grid-cols-3 overflow-hidden rounded-xl border border-line bg-surface2/30 sm:grid-cols-6">
         {([
           ["24H", change24h],
-          ["7D", null],
-          ["30D", null],
-          ["90D", null],
-          ["YTD", null],
-          ["All time", null],
+          ["7D", periods?.d7 ?? null],
+          ["30D", periods?.d30 ?? null],
+          ["90D", periods?.d90 ?? null],
+          ["YTD", periods?.ytd ?? null],
+          ["All time", periods?.allTime ?? null],
         ] as const).map(([label, value], i) => (
           <div
             key={label}

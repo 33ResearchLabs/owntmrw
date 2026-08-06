@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { pairsForMints } from "./sources/dexscreener";
-import { jupPrices } from "./sources/jupiter";
+import { jupTokens, jupVolume } from "./sources/jupiter";
 import { treasuryAum } from "./sources/metadao";
 import { capFromSupply, marketCap } from "./quote";
 
@@ -22,7 +22,11 @@ export interface LiveQuote {
   vol24h: number | null;
   change_1h: number | null;
   change_24h: number | null;
-  /** Jupiter serves price only — it carries no depth, volume or change. */
+  /**
+   * Which venue answered. Both carry depth, volume and change; Jupiter reports
+   * them per rolling window and omits a window it has no activity for, so a
+   * null here is "the venue reported none", never "this venue cannot say".
+   */
   source: "dexscreener" | "jupiter";
 }
 
@@ -78,18 +82,19 @@ async function refresh(): Promise<Map<string, LiveQuote>> {
   // Tokens that trade only on MetaDAO's own AMM never appear on DexScreener.
   const missing = mints.filter((m) => !out.has(m));
   if (missing.length) {
-    const prices = await jupPrices(missing);
-    for (const [mint, price] of Object.entries(prices)) {
-      if (!Number.isFinite(price) || price <= 0) continue;
+    const toks = await jupTokens(missing);
+    for (const [mint, tok] of toks) {
+      const price = tok.usdPrice;
+      if (price == null || !Number.isFinite(price) || price <= 0) continue;
       const t = supply.get(mint);
       out.set(mint, {
         price_usd: price,
-        mcap: marketCap(price, t?.circulating_supply, null),
-        fdv: capFromSupply(price, t?.total_supply, null),
-        liquidity_usd: null,
-        vol24h: null,
-        change_1h: null,
-        change_24h: null,
+        mcap: marketCap(price, t?.circulating_supply, tok.mcap),
+        fdv: capFromSupply(price, t?.total_supply, tok.fdv),
+        liquidity_usd: tok.liquidity ?? null,
+        vol24h: jupVolume(tok.stats24h),
+        change_1h: tok.stats1h?.priceChange ?? null,
+        change_24h: tok.stats24h?.priceChange ?? null,
         source: "jupiter",
       });
     }
@@ -225,23 +230,26 @@ export interface QuotedFields {
  * Price, cap and FDV always come from the quote when there is one, so they are
  * all read from the same instant.
  *
- * Jupiter carries no depth, volume or change. Rather than pair its live price
- * with the stored ones — which is how a $6.81 price came to sit beside a 24h
- * volume of $4.98M when the real figure was $790K — the point-in-time fields
- * are withheld and render as "—". Depth is the exception: it moves slowly and
- * gates whether returns are shown at all, so a slightly stale pool size beats
- * withholding every return metric on the page.
+ * The point-in-time fields come from the quote or not at all. Pairing a live
+ * price with stored ones is how a $6.81 price came to sit beside a 24h volume
+ * of $4.98M when the real figure was $790K, so a venue that reports no volume
+ * or change renders "—" rather than borrowing the snapshot's. This used to
+ * blank them for every Jupiter-quoted token on the assumption that Jupiter
+ * served price only; it carries both in its `stats24h` window, so the figures
+ * now come through instead of being discarded.
+ *
+ * Depth is the exception: it moves slowly and gates whether returns are shown
+ * at all, so a slightly stale pool size beats withholding every return metric.
  */
 export function applyQuote<T extends QuotedFields>(row: T, q: LiveQuote | undefined): T {
   if (!q) return row;
-  const venue = q.source === "dexscreener";
   return {
     ...row,
     price_usd: q.price_usd,
     mcap: q.mcap,
     fdv: q.fdv,
-    liquidity_usd: venue ? q.liquidity_usd : row.liquidity_usd,
-    vol24h: venue ? q.vol24h : null,
-    change_24h: venue ? q.change_24h : null,
+    liquidity_usd: q.liquidity_usd ?? row.liquidity_usd,
+    vol24h: q.vol24h,
+    change_24h: q.change_24h,
   };
 }
