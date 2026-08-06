@@ -110,49 +110,22 @@ const TREND_FIELDS: TrendField[] = [
   { key: "active_repos", label: "Active Repositories", color: "var(--accent)", sub: "pushed in 90d" },
 ];
 
-export function DevelopmentPanel({
-  github, githubHistory, languages, codeFrequency, score, githubUrl, releaseCount, nowSec,
+/**
+ * Just the card grid — split out so the Overview tab can show the same
+ * summary without the dense stat grid, language bar and code-frequency chart
+ * that belong to the full Development tab underneath it. Silently omits
+ * rather than explaining a gap: that DataGap treatment stays on the tab
+ * where the reader came looking specifically for development activity.
+ */
+export function DevelopmentTrendCards({
+  github, githubHistory, codeFrequency, nowSec,
 }: {
   github: GithubSnapshot | null;
   githubHistory: ProjectDetail["githubHistory"];
-  languages: Language[];
   codeFrequency: CodeWeek[];
-  score: DevScore;
-  githubUrl: string | null;
-  releaseCount: number;
   nowSec: number;
 }) {
-  if (!githubUrl) {
-    return (
-      <SectionCard title="Development">
-        <div className="p-4">
-          <DataGap
-            title="No GitHub organisation linked"
-            why="Engineering output cannot be verified for this project because no public repository is recorded."
-            unlock="Add a github.com organisation or user URL to the project record."
-          />
-        </div>
-      </SectionCard>
-    );
-  }
-
-  if (!github) {
-    return (
-      <SectionCard title="Development">
-        <div className="p-4">
-          <DataGap
-            title="GitHub is linked, but no snapshot has been taken"
-            why="The repository is on file but the GitHub API has not been read for this project yet, so no activity metrics exist."
-            unlock="Run the ingest; set GITHUB_TOKEN to lift the API ceiling from 60 to 5,000 requests an hour."
-          />
-        </div>
-      </SectionCard>
-    );
-  }
-
-  const issueTotal = (github.open_issues ?? 0) + (github.closed_issues ?? 0);
-  const closeRate = github.closed_issues != null && issueTotal > 0
-    ? (github.closed_issues / issueTotal) * 100 : null;
+  if (!github) return null;
 
   // Weekly lines touched on the busiest repo — the one real week-over-week
   // series GitHub's API gives us. Magnitude (additions + |deletions|) rather
@@ -188,21 +161,68 @@ export function DevelopmentPanel({
     );
   }).filter(Boolean);
 
+  if (!trendCards.length && !weeklyTotals.length) return null;
+
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      {trendCards}
+      {weeklyTotals.length > 0 && (
+        <TrendCard
+          color="var(--warn)" label="Code Changes (30d)"
+          value={fmtNum(last4)}
+          deltaPct={codeChangeDelta} deltaLabel="vs previous 30d"
+          series={weeklyTotals}
+        />
+      )}
+    </div>
+  );
+}
+
+export function DevelopmentPanel({
+  github, languages, codeFrequency, score, githubUrl, releaseCount, recentCommits,
+}: {
+  github: GithubSnapshot | null;
+  languages: Language[];
+  codeFrequency: CodeWeek[];
+  score: DevScore;
+  githubUrl: string | null;
+  releaseCount: number;
+  recentCommits: ProjectDetail["recentCommits"];
+}) {
+  if (!githubUrl) {
+    return (
+      <SectionCard title="Development">
+        <div className="p-4">
+          <DataGap
+            title="No GitHub organisation linked"
+            why="Engineering output cannot be verified for this project because no public repository is recorded."
+            unlock="Add a github.com organisation or user URL to the project record."
+          />
+        </div>
+      </SectionCard>
+    );
+  }
+
+  if (!github) {
+    return (
+      <SectionCard title="Development">
+        <div className="p-4">
+          <DataGap
+            title="GitHub is linked, but no snapshot has been taken"
+            why="The repository is on file but the GitHub API has not been read for this project yet, so no activity metrics exist."
+            unlock="Run the ingest; set GITHUB_TOKEN to lift the API ceiling from 60 to 5,000 requests an hour."
+          />
+        </div>
+      </SectionCard>
+    );
+  }
+
+  const issueTotal = (github.open_issues ?? 0) + (github.closed_issues ?? 0);
+  const closeRate = github.closed_issues != null && issueTotal > 0
+    ? (github.closed_issues / issueTotal) * 100 : null;
+
   return (
     <div className="space-y-5">
-      {(trendCards.length > 0 || weeklyTotals.length > 0) && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {trendCards}
-          {weeklyTotals.length > 0 && (
-            <TrendCard
-              color="var(--warn)" label="Code Changes (30d)"
-              value={fmtNum(last4)}
-              deltaPct={codeChangeDelta} deltaLabel="vs previous 30d"
-              series={weeklyTotals}
-            />
-          )}
-        </div>
-      )}
       <SectionCard
         title="Development"
         right={
@@ -278,6 +298,36 @@ export function DevelopmentPanel({
           />
         </div>
       </SectionCard>
+
+      {recentCommits.length > 0 && (
+        <SectionCard title="Recent Commits">
+          <div className="divide-y divide-grid">
+            {recentCommits.map((c) => {
+              // The short sha shown alongside each row is not stored — it's
+              // the last path segment of the commit URL, sliced to 7 chars,
+              // the same identifier GitHub itself shows in its UI.
+              const sha = c.url?.split("/").pop()?.slice(0, 7);
+              return (
+                <div key={c.url ?? c.ts} className="flex items-center gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] text-ink">{c.message}</div>
+                    {c.author && <div className="mt-0.5 text-[11px] text-muted">{c.author}</div>}
+                  </div>
+                  {sha && (
+                    <a
+                      href={c.url ?? undefined} target="_blank" rel="noopener noreferrer"
+                      className="num shrink-0 text-[11px] text-ink2 hover:text-accent"
+                    >
+                      {sha}
+                    </a>
+                  )}
+                  <span className="w-16 shrink-0 text-right text-[11px] text-muted">{timeAgo(c.ts)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </SectionCard>
+      )}
 
       {score.parts.length > 0 && (
         <SectionCard

@@ -534,6 +534,17 @@ async function main() {
           // and dedupe on (ts, type, title) via the table's unique index.
           for (const r of gs.releases) insEv.run(p.id, r.ts, "github_release", `${r.repo} ${r.tag}`, r.name, r.url);
 
+          // Commits from the busiest repo, replaced wholesale each run: an
+          // amended or rebased commit must not linger as a dangling old sha,
+          // and this is a rolling "recent" list rather than an append-only log.
+          // Repo and short sha are not stored separately — both are recoverable
+          // from `url` (.../<owner>/<repo>/commit/<sha>), which keeps this row
+          // the same four-column shape every other event type already uses.
+          d.prepare("DELETE FROM events WHERE project_id = ? AND type = 'github_commit'").run(p.id);
+          for (const c of gs.recentCommits) {
+            insEv.run(p.id, c.ts, "github_commit", c.message, c.author, c.url);
+          }
+
           // The REST and Atom sources timestamp the same release seconds apart,
           // so the table's (ts,type,title) index won't catch it — dedupe on the day.
           const seen = d.prepare(
