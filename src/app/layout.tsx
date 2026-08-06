@@ -25,6 +25,7 @@ const NAV = [
   { href: "/screener", label: "Screener" },
   { href: "/timeline", label: "Activity" },
   { href: "/observations", label: "Signals" },
+  { href: "/portfolio", label: "Portfolio" },
 ];
 
 export default function RootLayout({
