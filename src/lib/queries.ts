@@ -341,6 +341,19 @@ export interface ProjectDetail {
   holderHistory: { ts: number; holder_count: number | null; top10_pct: number | null; top20_pct: number | null }[];
   proposals: { number: number | null; title: string | null; state: string | null; created_ts: number | null; url: string | null; author: string | null }[];
   github: GithubSnapshot | null;
+  /**
+   * One row per ingest read, unfiltered. Early rows commonly carry nulls for
+   * the search-API fields (commits_90d, issue/PR counts) from ingests that ran
+   * before those calls existed or before GITHUB_TOKEN lifted the rate ceiling
+   * — real absences, not a query bug, so callers filter per-field rather than
+   * this function guessing which fields "count" as present.
+   */
+  githubHistory: {
+    ts: number; commits_90d: number | null; contributors: number | null;
+    stars: number | null; forks: number | null;
+    open_issues: number | null; closed_issues: number | null;
+    merged_prs: number | null; active_repos: number | null;
+  }[];
   observations: { ts: number; kind: string | null; text: string }[];
   treasuryValue: number | null;
   /**
@@ -352,6 +365,8 @@ export interface ProjectDetail {
   treasuryHistory: { ts: number; value_usd: number | null; last_seen_ts: number }[];
   /** When the vault was last read at all, regardless of whether it moved. */
   treasuryLastRead: number | null;
+  /** Pool depth at every ingest read — unlike treasury this moves continuously, so it is not deduped. */
+  liquidityHistory: { ts: number; liquidity_usd: number | null }[];
   /** `source` is the publisher (CoinDesk…); `type` is the event class. */
   news: { ts: number; title: string; url: string | null; source: string | null; type: string }[];
   /** Git tags from the project's repos — engineering output, not press. */
@@ -393,6 +408,11 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
            languages, code_frequency
     FROM github_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1
   `).get(id) as ProjectDetail["github"];
+  const githubHistory = d.prepare(`
+    SELECT ts, commits_90d, contributors, stars, forks,
+           open_issues, closed_issues, merged_prs, active_repos
+    FROM github_snapshots WHERE project_id = ? ORDER BY ts
+  `).all(id) as ProjectDetail["githubHistory"];
   const observations = d.prepare("SELECT ts,kind,text FROM observations WHERE project_id = ? ORDER BY ts DESC LIMIT 30").all(id) as ProjectDetail["observations"];
   const treasury = d.prepare("SELECT value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1").get(id) as { value_usd: number | null } | undefined;
   // recordTreasurySnapshot keeps this one-row-per-change going forward, but
@@ -416,6 +436,9 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   const treasuryLastRead = treasuryHistory.length
     ? treasuryHistory[treasuryHistory.length - 1].last_seen_ts
     : null;
+  const liquidityHistory = d.prepare(
+    "SELECT ts, liquidity_usd FROM price_snapshots WHERE project_id = ? ORDER BY ts"
+  ).all(id) as ProjectDetail["liquidityHistory"];
   // News and releases are kept apart. Folding git tags into "news" made the
   // News tab read "17" on a project with no press coverage at all, and half of
   // those tags were from a test repo — an availability claim we cannot support.
@@ -481,11 +504,11 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   }
   return {
     project, latest, quoteSource: quote?.source ?? null,
-    candles, events, topHolders, holderHistory, proposals, github, observations,
+    candles, events, topHolders, holderHistory, proposals, github, githubHistory, observations,
     // Live where the feed has it, the archived snapshot otherwise. Without
     // this, treasury/market-cap divided a six-day-old balance by a live cap.
     treasuryValue: liveTreasuryUsd ?? treasury?.value_usd ?? null,
-    treasuryHistory, treasuryLastRead,
+    treasuryHistory, treasuryLastRead, liquidityHistory,
     news, releases, listings, risk,
     ath, atl, athTs,
   };
