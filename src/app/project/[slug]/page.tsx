@@ -87,16 +87,20 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   ];
 
   const chartBlock = (
-    <section className="card p-4">
-      <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-[14px] font-semibold">
-          {p.symbol ?? p.name}<span className="text-muted"> / USD</span>
-        </h2>
-        <span className="text-[11px] text-muted">quoted in USD</span>
-      </div>
+    // The pair label, price and market figures now live inside the chart card's
+    // own header, so this section is the frame and nothing else.
+    <section className="card p-4 sm:p-5">
       <PriceChart
         candles={candles} events={chartEvents} slug={slug}
         circulatingSupply={p.circulating_supply}
+        name={p.name}
+        symbol={p.symbol ?? p.name}
+        imageUrl={p.image_url}
+        marketCap={latest?.mcap ?? null}
+        volume24h={latest?.vol24h ?? null}
+        change24h={latest?.change_24h ?? null}
+        // Freshness of the series on screen, which is the newest bar we hold.
+        lastUpdated={candles.length ? candles[candles.length - 1].ts : null}
       />
     </section>
   );
