@@ -58,7 +58,9 @@ const CURATED: DiscoveredProject[] = [
   {
     slug: "ranger", name: "Ranger", symbol: "RNGR",
     mint: "RNGRtJMbCveqCp7AC6U95KmrdKecFckaJZiWbPGmeta",
-    status: "live", category: "Perps / Trading", source: "curated",
+    status: "live", category: "Perps / Trading",
+    github: "https://github.com/ranger-finance",
+    source: "curated",
   },
   {
     slug: "zklsol", name: "ZKLSOL", symbol: "ZKFG",
@@ -70,29 +72,50 @@ const CURATED: DiscoveredProject[] = [
     status: "failed", category: "Payments",
     description:
       "First failed MetaDAO ICO — $2.0M committed against a $3M minimum (Feb 2026); every contribution was refunded and no token went live.",
+    github: "https://github.com/Hurupay",
     source: "curated",
   },
 ];
 
-/** Extra metadata for projects the tickers feed does list. */
+/**
+ * Extra metadata for projects the tickers feed does list.
+ *
+ * The `github` owners live here because no source publishes them: the tickers
+ * feed has no links field, DexScreener and GeckoTerminal carry socials but not
+ * repositories, and CoinGecko's `links.repos_url.github` is an empty array for
+ * every mint on this launchpad. They were previously typed straight into
+ * SQLite, so a rebuilt database silently lost the entire Development tab for
+ * twelve projects. Curation belongs in source; the database is a cache.
+ *
+ * Absent by verification, not oversight — AVICI, FUTARDIO, RAWR and GSIM
+ * publish no public code, and ZKFG's org exists but is empty. An owner here
+ * must resolve to a real account: an invented one yields a silent zero-star
+ * row rather than an error.
+ */
 const ENRICH: Record<string, Partial<DiscoveredProject>> = {
-  UMBRA: { category: "Privacy" },
+  UMBRA: { category: "Privacy", github: "https://github.com/umbra-defi" },
   AVICI: { category: "Banking" },
-  LOYAL: { category: "Consumer" },
-  PAYS: { category: "Payments / Streaming" },
-  SOLO: { category: "Credit" },
-  FAF: { category: "Perps DEX", website: "https://flash.trade" },
-  OMFG: { category: "Lending / AMM" },
+  LOYAL: { category: "Consumer", github: "https://github.com/loyal-labs" },
+  PAYS: { category: "Payments / Streaming", github: "https://github.com/paystreamfinance" },
+  SOLO: { category: "Credit", github: "https://github.com/solomonlabs" },
+  FAF: { category: "Perps DEX", website: "https://flash.trade", github: "https://github.com/flash-trade" },
+  OMFG: { category: "Lending / AMM", github: "https://github.com/omnipair" },
   FUTARDIO: { category: "Community / Cult" },
-  SUPER: { category: "Gaming" },
-  P2P: { category: "P2P Markets" },
+  SUPER: { category: "Gaming", github: "https://github.com/superclaworg" },
+  P2P: { category: "P2P Markets", github: "https://github.com/p2pdotme" },
   RAWR: { category: "Consumer" },
   GSIM: { category: "DePIN / eSIM" },
-  ARL: { category: "RWA / Real Estate" },
-  LASO: { category: "Lending" },
-  CRED: { category: "Credit / Lending" },
-  CARS: { category: "RWA / Consumer" },
-  META: { category: "Governance / Launchpad" },
+  ARL: { category: "RWA / Real Estate", github: "https://github.com/arealfinance" },
+  LASO: { category: "Lending", github: "https://github.com/lasofinance" },
+  CRED: { category: "Credit / Lending", github: "https://github.com/crediblefinance" },
+  CARS: { category: "RWA / Consumer", github: "https://github.com/ripcars" },
+  META: { category: "Governance / Launchpad", github: "https://github.com/metaDAOproject" },
+  // Only the landing page is public; the exchange itself is a private repo.
+  ORDR: { github: "https://github.com/CHA0S-LABS" },
+  // Declared on the launch record. The org is real but publishes nothing, so it
+  // reports zero stars rather than filling the Development tab — the same
+  // reading CARS and SUPER already give, and a truer answer than a blank.
+  KIMIA: { github: "https://github.com/kimia-labs" },
 };
 
 export async function fetchTickers(): Promise<Ticker[]> {

@@ -5,6 +5,22 @@
  */
 
 /**
+ * Minimum pool depth for a quoted price to be treated as a real market price.
+ * Below this, a handful of dollars moves the price arbitrarily, so returns
+ * computed against it are marked rather than read as fact.
+ *
+ * It lives here rather than beside the queries that apply it because the
+ * screener table is a client component and needs it to caption the marker —
+ * importing it from the query layer dragged better-sqlite3 into the browser
+ * bundle. This module is pure arithmetic and safe on both sides.
+ */
+export const MIN_LIQUIDITY_USD = 10_000;
+
+export function priceIsReliable(liquidityUsd: number | null | undefined): boolean {
+  return liquidityUsd != null && liquidityUsd >= MIN_LIQUIDITY_USD;
+}
+
+/**
  * Prefer MetaDAO's own supply figure over whatever the venue reports.
  * DexScreener reports FDV as `marketCap` for most of these tokens (team
  * packages are still locked), so where we know the circulating supply we

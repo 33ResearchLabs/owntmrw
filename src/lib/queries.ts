@@ -1,6 +1,33 @@
 import { db, Project, sameBalance } from "./db";
 import { applyQuote, liveQuotes, liveTreasury } from "./live";
-import { ICO_TOKENS_SOLD } from "./sources/raises";
+import { ICO_TOKENS_SOLD, raiseFor } from "./sources/raises";
+import { priceIsReliable } from "./quote";
+
+/**
+ * A raise figure that is absent by nature rather than by omission.
+ *
+ * `no_ico` — the token never ran a sale at all (Flash.Trade airdropped).
+ * `private_round` — raised off-launchpad, so no per-token sale price exists.
+ * `unpublished` — a sale happened but never published what it settled at.
+ */
+export type RaiseAbsence = "no_ico" | "private_round" | "unpublished" | null;
+
+/**
+ * Deriving the missing figure was tried and rejected for each of these, which
+ * is why they are labelled rather than computed. Omnipair is the clearest
+ * case: the uniform-price rule implies $1,120,000 accepted against $1,118,102
+ * ever committed — more than the book held — so the rule plainly does not
+ * apply to it, and the launch record settles nothing either.
+ */
+function raiseAbsenceOf(symbol: string | null | undefined): RaiseAbsence {
+  const r = raiseFor(symbol);
+  if (!r) return null;
+  if (r.noRaise) return "no_ico";
+  if (r.amountUnknown) return "unpublished";
+  // A launchpad sale has a track; anything else priced its tokens privately.
+  if (!r.track) return "private_round";
+  return null;
+}
 
 export interface ScreenerRow extends Project {
   price_usd: number | null; mcap: number | null; fdv: number | null;
@@ -8,6 +35,20 @@ export interface ScreenerRow extends Project {
   change_24h: number | null;
   /** Reconstructed from the raise rather than recorded — surface it as such. */
   raise_price_derived: boolean;
+  /**
+   * The pool behind this row's price is below `MIN_LIQUIDITY_USD`, so the
+   * return figures are arithmetic on a price the market cannot defend. They
+   * are still shown; this says not to trust them.
+   */
+  returns_thin: boolean;
+  /**
+   * Why this row has no raise figures, when the reason is a fact rather than a
+   * gap. A dash reads as "we failed to fetch this"; these rows have nothing to
+   * fetch — Flash.Trade never held an ICO, MetaDAO's round was private, and two
+   * launches closed without ever publishing a settled amount. Null means the
+   * ordinary case: the figures are present, or genuinely unknown.
+   */
+  raise_absence: RaiseAbsence;
   roi_since_raise: number | null;   // % vs raise price
   ath_return: number | null;        // % from raise price to ATH (peak return a raise buyer saw)
   from_ath: number | null;          // % current price vs ATH (drawdown)
@@ -84,23 +125,33 @@ export function tradingStart(
   return seen.length ? Math.min(...seen) : p.raise_end_ts ?? null;
 }
 
-/**
- * Minimum pool depth for a quoted price to be treated as a real market price.
- * Below this, a handful of dollars moves the price arbitrarily, so returns
- * computed against it would be noise presented as fact.
- */
-export const MIN_LIQUIDITY_USD = 10_000;
-
-export function priceIsReliable(liquidityUsd: number | null | undefined): boolean {
-  return liquidityUsd != null && liquidityUsd >= MIN_LIQUIDITY_USD;
-}
+// Re-exported so existing importers keep working; defined in ./quote because
+// client components need it too. See the note there.
+export { MIN_LIQUIDITY_USD, priceIsReliable } from "./quote";
 
 /**
  * Rows straight from the archive. Prices here are as of the last ingest run,
  * so every caller goes through `screenerRows`, which overlays live quotes
  * before the return metrics are computed from them.
  */
-function screenerSnapshot(): (ScreenerRow & { ath: number | null })[] {
+/**
+ * A 24h price change measured against our own candle history.
+ *
+ * DexScreener returns a bare `priceChange: {}` for a token nobody traded, and
+ * Jupiter omits the window entirely, so thinly-traded tokens showed no change
+ * at all — not because the price held, but because neither venue would say.
+ * The close from a day ago is stored, and the live price is in hand, so the
+ * figure is computable from data we already have rather than left blank.
+ *
+ * Strictly a fallback: a venue that reports its own change knows about trades
+ * inside the window that daily candles cannot see, so it always wins.
+ */
+function closeToClose24h(price: number | null, closeADayAgo: number | null): number | null {
+  if (price == null || !closeADayAgo) return null;
+  return ((price - closeADayAgo) / closeADayAgo) * 100;
+}
+
+function screenerSnapshot(): (ScreenerRow & { ath: number | null; close_24h_ago: number | null })[] {
   const d = db();
   const rows = d.prepare(`
     SELECT p.*,
@@ -108,6 +159,10 @@ function screenerSnapshot(): (ScreenerRow & { ath: number | null })[] {
       hs.holder_count,
       gh.stars AS gh_stars, gh.last_push_ts AS gh_last_push,
       (SELECT MAX(c.h) FROM candles c WHERE c.project_id = p.id) AS ath,
+      -- The close a day ago, so a 24h change can still be computed for a token
+      -- whose venue declines to report one. See closeToClose24h.
+      (SELECT c.c FROM candles c WHERE c.project_id = p.id
+        AND c.ts <= strftime('%s','now') - 86400 ORDER BY c.ts DESC LIMIT 1) AS close_24h_ago,
       (SELECT ts2.value_usd FROM treasury_snapshots ts2
         WHERE ts2.project_id = p.id ORDER BY ts2.ts DESC LIMIT 1) AS treasury_usd
     FROM projects p
@@ -118,7 +173,7 @@ function screenerSnapshot(): (ScreenerRow & { ath: number | null })[] {
     LEFT JOIN github_snapshots gh ON gh.project_id = p.id
       AND gh.ts = (SELECT MAX(ts) FROM github_snapshots WHERE project_id = p.id)
     ORDER BY ps.mcap DESC NULLS LAST, p.name
-  `).all() as (ScreenerRow & { ath: number | null })[];
+  `).all() as (ScreenerRow & { ath: number | null; close_24h_ago: number | null })[];
   return rows;
 }
 
@@ -126,12 +181,16 @@ function screenerSnapshot(): (ScreenerRow & { ath: number | null })[] {
 function withReturns(r: ScreenerRow & { ath: number | null }): ScreenerRow {
   const resolved = raisePriceOf(r);
   const rp = resolved?.usd ?? null;
-  // Returns are only meaningful against a price the market can actually
-  // support; a few thousand dollars of liquidity is not a real quote.
-  const tradable = priceIsReliable(r.liquidity_usd);
-  const roi = rp && r.price_usd && tradable ? ((r.price_usd - rp) / rp) * 100 : null;
-  const athRet = rp && r.ath && tradable ? ((r.ath - rp) / rp) * 100 : null;
-  const fromAth = r.ath && r.price_usd && tradable ? ((r.price_usd - r.ath) / r.ath) * 100 : null;
+  // A return computed against a $33 pool is arithmetic, not a market fact, so
+  // it used to be withheld outright. Withholding hid the arithmetic without
+  // explaining the pool, which reads as "we have no data" rather than "this
+  // price cannot bear the weight" — so the figure is now shown and marked
+  // instead, the same way a reconstructed raise price is. The threshold still
+  // decides; it just sets a flag now rather than a null.
+  const thin = !priceIsReliable(r.liquidity_usd);
+  const roi = rp && r.price_usd ? ((r.price_usd - rp) / rp) * 100 : null;
+  const athRet = rp && r.ath ? ((r.ath - rp) / rp) * 100 : null;
+  const fromAth = r.ath && r.price_usd ? ((r.price_usd - r.ath) / r.ath) * 100 : null;
   // raise_price on the row is the resolved figure, so every screener consumer
   // sees the same number the returns were computed from; the flag beside it
   // says whether it was recorded or reconstructed.
@@ -139,6 +198,8 @@ function withReturns(r: ScreenerRow & { ath: number | null }): ScreenerRow {
     ...r,
     raise_price: rp,
     raise_price_derived: resolved?.derived ?? false,
+    returns_thin: thin,
+    raise_absence: raiseAbsenceOf(r.symbol),
     roi_since_raise: roi, ath_return: athRet, from_ath: fromAth,
   };
 }
@@ -155,7 +216,8 @@ export async function screenerRows(): Promise<ScreenerRow[]> {
     // only after the next ingest.
     const ath = live.price_usd != null && (live.ath == null || live.price_usd > live.ath)
       ? live.price_usd : live.ath;
-    return withReturns({ ...live, ath, treasury_usd });
+    const change_24h = live.change_24h ?? closeToClose24h(live.price_usd, r.close_24h_ago);
+    return withReturns({ ...live, ath, treasury_usd, change_24h });
   });
 }
 

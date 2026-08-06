@@ -52,6 +52,17 @@ const FUTARD_ARCHIVE =
  * base units and reconcile to the cent against archived pages.
  */
 const ONCHAIN = "https://solscan.io/account/moontUzsdepotRGe5xsfip7vLPTJnVuafqdUWexVnPM";
+/**
+ * A single launch's record, live rather than archived. Append the *launch
+ * address* — the mint 404s. The page embeds the launch struct as JSON
+ * (`minimumRaise`, `approvedAmount`, `finalRaiseAmount`, `committedAmount`,
+ * `numFunders`, `isPermissionless`) and states its own price and FDV in prose,
+ * so nothing here needs deriving through the 10M-token rule.
+ *
+ * Read the meta description with care: it quotes *committed*, not settled. It
+ * calls ORDR a "$9.3M raise" where the project actually kept $150,000.
+ */
+const FUTARD_LAUNCH = "https://www.futard.io/launch/";
 
 /**
  * Per docs.metadao.fi/how-launches-work/sale: every launchpad ICO sells exactly
@@ -130,9 +141,9 @@ export const RAISES: RaiseRecord[] = [
   },
   {
     symbol: "LASO", goalUsd: 750_000, committedUsd: 25_637_316, contributors: 715,
-    fdvUsd: 3_000_000, closed: "2026-07-04",
+    fdvUsd: 3_000_000, price: 0.1, closed: "2026-07-04",
     track: "curated", amountUnknown: true,
-    note: "Blind-cap raise at a fixed $3M FDV regardless of amount raised, on a 30M-token supply — an exception to the standard 10M-token sale. 34× oversubscribed. The settled amount is not recorded on-chain, so it is left blank rather than estimated.",
+    note: "Blind-cap raise at a fixed $3M FDV regardless of amount raised, on a 30M-token supply — an exception to the standard 10M-token sale. 34× oversubscribed. The settled amount is not recorded on-chain, so it is left blank rather than estimated. The price is not estimated either: a fixed $3M FDV over the 29,999,942 tokens the chain reports fixes it at $0.10, which is why this row carries a price but no amount — the blind cap is exactly what severs the two.",
     sourceUrl: ONCHAIN,
   },
   {
@@ -184,6 +195,27 @@ export const RAISES: RaiseRecord[] = [
     track: "permissionless",
     note: "Areal attempted six raises; five failed to reach their minimum and refunded. This sixth attempt cleared a $10K minimum in a 60-minute window with a single funder.",
     sourceUrl: ONCHAIN,
+  },
+  {
+    symbol: "ORDR", amountUsd: 150_000, goalUsd: 150_000, committedUsd: 9_286_571,
+    price: 0.015, fdvUsd: 387_000, contributors: 293, closed: "2026-07-31",
+    track: "permissionless",
+    note: "62× oversubscribed — $9.29M committed against a $150K cap, so 98.4% was refunded. The launch page's own meta description reads \"$9.3M raised\", which is the committed figure; the settled raise was $150,000.",
+    sourceUrl: `${FUTARD_LAUNCH}HwvxqXHcRNKikH8RsqRRaV6NCpzxg1g5tHgnMfsdaaEj`,
+  },
+  {
+    symbol: "KIMIA", amountUsd: 60_000, goalUsd: 60_000, committedUsd: 727_114,
+    price: 0.006, fdvUsd: 154_800, contributors: 58, closed: "2026-08-05",
+    track: "permissionless",
+    note: "12× oversubscribed. CryptoRank reports $672,114 for this raise, which matches neither the committed nor the settled figure; the launch record is authoritative.",
+    sourceUrl: `${FUTARD_LAUNCH}FwCDgK9C8mjWr7wULPFzEv4QBt6koTnMQrKTC45TxWAk`,
+  },
+  {
+    symbol: "BASKET", amountUsd: 10_000, goalUsd: 10_000, committedUsd: 17_509,
+    price: 0.001, fdvUsd: 25_800, contributors: 29, closed: "2026-08-05",
+    track: "permissionless",
+    note: "The least oversubscribed launch on the platform at 1.75×, so only 42.9% was refunded — against 98%+ on most permissionless raises.",
+    sourceUrl: `${FUTARD_LAUNCH}AtBwB8fYsxLLSt3mwK9Ma4joCpG9yuPzxBEcSsEaiSAT`,
   },
   {
     symbol: "FAF", noRaise: true,
