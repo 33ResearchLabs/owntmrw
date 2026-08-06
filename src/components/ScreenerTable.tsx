@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Delta, Logo, StatusBadge } from "./ui";
 import { fmtUsd, fmtPrice, fmtNum, fmtPct, timeAgo } from "@/lib/format";
+import { MIN_LIQUIDITY_USD } from "@/lib/quote";
 
 export interface ScreenerRowDTO {
   slug: string; name: string; symbol: string | null; status: string | null;
@@ -13,6 +14,10 @@ export interface ScreenerRowDTO {
   raise_amount_usd: number | null; raise_price: number | null; raise_price_derived: boolean;
   roi_since_raise: number | null; ath_return: number | null;
   from_ath: number | null;
+  /** Returns computed off a pool too thin to defend the price — mark them. */
+  returns_thin: boolean;
+  /** Why the raise figures are absent, when absence is a fact not a gap. */
+  raise_absence: "no_ico" | "private_round" | "unpublished" | null;
   treasury_usd: number | null;
   holder_count: number | null;
   gh_stars: number | null; gh_last_push: number | null;
@@ -24,7 +29,7 @@ type SortKey = keyof ScreenerRowDTO;
 type LivePatch = Pick<
   ScreenerRowDTO,
   | "price_usd" | "mcap" | "fdv" | "liquidity_usd" | "vol24h" | "change_24h"
-  | "roi_since_raise" | "ath_return" | "from_ath"
+  | "roi_since_raise" | "ath_return" | "from_ath" | "returns_thin"
 > & { slug: string };
 
 const POLL_MS = 30_000;
@@ -77,6 +82,48 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="num mt-1 text-[18px] font-extrabold tracking-tight">{value}</div>
     </div>
   );
+}
+
+/**
+ * Why a return figure is marked. The pool size is named outright: "unreliable"
+ * invites the reader to discount it by some unknown amount, whereas $33 of
+ * depth tells them exactly how much weight it will bear.
+ */
+function thinTitle(r: ScreenerRowDTO): string | undefined {
+  if (!r.returns_thin) return undefined;
+  const depth = r.liquidity_usd == null ? "an unknown pool" : fmtUsd(r.liquidity_usd);
+  return `Priced off ${depth} of liquidity — below the ${fmtUsd(MIN_LIQUIDITY_USD)} needed for a return figure to mean much.`;
+}
+
+/**
+ * What to print where a raise figure will never arrive.
+ *
+ * A dash says "no data" and invites the reader to wait for a better ingest.
+ * These four rows are not waiting on anything: Flash.Trade ran no sale, MetaDAO
+ * raised privately, and Omnipair and Laso closed without publishing a settled
+ * amount. Naming the reason in the cell is the difference between a terminal
+ * that looks broken and one that has actually answered the question.
+ */
+const ABSENCE_LABEL: Record<string, { short: string; why: string }> = {
+  no_ico: {
+    short: "no ICO",
+    why: "This token never ran a sale — supply was distributed by airdrop, so there is no raise to measure against.",
+  },
+  private_round: {
+    short: "private",
+    why: "Raised off-launchpad in a private round, which published no per-token price. Dividing the total by a token count it never sold would invent one.",
+  },
+  unpublished: {
+    short: "unpublished",
+    why: "The sale closed without publishing what it settled at, and the launch record does not store one. Only the committed total is known.",
+  },
+};
+
+/** A cell that is empty for a reason, rendered as the reason. */
+function Absent({ kind }: { kind: string }) {
+  const a = ABSENCE_LABEL[kind];
+  if (!a) return <>—</>;
+  return <span className="text-faint italic" title={a.why}>{a.short}</span>;
 }
 
 const COLS: { key: SortKey; label: string; align?: "right" }[] = [
@@ -190,7 +237,9 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
                 <td className="num text-right">
                   {r.raise_amount_usd === 0
                     ? <span className="text-muted" title="Raise failed to reach its minimum; all contributions refunded">$0</span>
-                    : fmtUsd(r.raise_amount_usd)}
+                    : r.raise_amount_usd == null && r.raise_absence
+                      ? <Absent kind={r.raise_absence} />
+                      : fmtUsd(r.raise_amount_usd)}
                 </td>
                 <td
                   className="num text-right text-ink2"
@@ -199,11 +248,30 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
                     : undefined}
                 >
                   {r.raise_price_derived && <span className="text-faint">~</span>}
-                  {fmtPrice(r.raise_price)}
+                  {r.raise_price == null && r.raise_absence
+                    ? <Absent kind={r.raise_absence} />
+                    : fmtPrice(r.raise_price)}
                 </td>
-                <td className="text-right"><Delta v={r.roi_since_raise} /></td>
-                <td className="num text-right text-ink2">{fmtPct(r.ath_return)}</td>
-                <td className="text-right"><Delta v={r.from_ath} /></td>
+                <td className="text-right" title={thinTitle(r)}>
+                  {r.roi_since_raise == null && r.raise_absence
+                    ? <Absent kind={r.raise_absence} />
+                    : <>
+                        {r.returns_thin && r.roi_since_raise != null && <span className="text-faint">~</span>}
+                        <Delta v={r.roi_since_raise} />
+                      </>}
+                </td>
+                <td className="num text-right text-ink2" title={thinTitle(r)}>
+                  {r.ath_return == null && r.raise_absence
+                    ? <Absent kind={r.raise_absence} />
+                    : <>
+                        {r.returns_thin && r.ath_return != null && <span className="text-faint">~</span>}
+                        {fmtPct(r.ath_return)}
+                      </>}
+                </td>
+                <td className="text-right" title={thinTitle(r)}>
+                  {r.returns_thin && r.from_ath != null && <span className="text-faint">~</span>}
+                  <Delta v={r.from_ath} />
+                </td>
                 <td className="num text-right" title={r.treasury_usd != null ? `USDC AUM in the DAO vault: $${r.treasury_usd}` : undefined}>
                   {r.treasury_usd != null && r.treasury_usd < 1
                     ? <span className="text-muted">~0</span>
