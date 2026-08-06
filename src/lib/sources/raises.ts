@@ -223,9 +223,24 @@ export const RAISES: RaiseRecord[] = [
     sourceUrl: "https://solanafloor.com/news/flash-trade-faf-token-launch",
   },
   {
-    symbol: "META", amountUsd: 2_200_000, closed: "2024-08-01",
-    note: "Not a launchpad ICO — a private round led by Paradigm with Variant and 6th Man ($12.1M total across all rounds).",
-    sourceUrl: "https://icodrops.com/metadao/",
+    symbol: "META", amountUsd: 2_229_950, price: 0.5574875, fdvUsd: 11_600_000,
+    contributors: 31, closed: "2024-08-01",
+    // $2,229,950 bought exactly 4,000 pre-split META — 3,035 to Paradigm
+    // (14.6% of supply) and 965 across ~30 angels, per CoinDesk's announcement.
+    // The 1:1000 split (metadao.fi/migration) makes that 4,000,000 tokens in
+    // today's units, so the price is $2,229,950 ÷ 4,000,000 — held in the
+    // registry rather than derived at runtime because the 10M-token launchpad
+    // rule does not apply to a private round, and its tooltip would misstate
+    // where this number comes from. Aggregators list the round price as
+    // undisclosed; the token counts in the primary source pin it down.
+    // The valuation follows the same way: 3,035 ÷ 14.6% ≈ 20,788 pre-split
+    // tokens in existence, × $557.49 ≈ $11.6M — rounded to match the
+    // percentage's own precision. Contributors is Paradigm plus the article's
+    // "around 30" angels, so it carries that same softness. No committedUsd on
+    // purpose: a private round has no commitment book, so demand and
+    // oversubscription do not exist for it, undisclosed or otherwise.
+    note: "Not a launchpad ICO — a $2.23M round led by Paradigm (3,035 of 4,000 pre-split tokens; ~30 angels took the rest) at ~$11.6M implied valuation, $12.1M total across all rounds. Price is in post-split units: $557.49 a token then, ÷1000 for today's META.",
+    sourceUrl: "https://www.coindesk.com/tech/2024/08/01/crypto-vc-paradigm-invests-in-metadao-as-prediction-markets-boom",
   },
 ];
 
