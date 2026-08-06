@@ -13,6 +13,7 @@ const ITEMS = [
   { icon: "◎", label: "Screener", href: "/screener" },
   { icon: "↯", label: "Activity", href: "/timeline" },
   { icon: "◈", label: "Signals", href: "/observations" },
+  { icon: "◇", label: "Portfolio", href: "/portfolio" },
 ];
 
 export function SideRail() {

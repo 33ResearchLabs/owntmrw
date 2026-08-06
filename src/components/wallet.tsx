@@ -26,6 +26,11 @@ declare global {
 
 const RPC = "https://api.mainnet-beta.solana.com";
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+/** Original SPL Token, then Token-2022. A mint under either is a real balance. */
+const TOKEN_PROGRAMS = [
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+];
 
 async function rpc<T>(method: string, params: unknown[]): Promise<T | null> {
   try {
@@ -52,6 +57,8 @@ export interface WalletState {
   disconnect: () => Promise<void>;
   /** UI balance of an arbitrary SPL mint for the connected wallet. */
   tokenBalance: (mint: string) => Promise<number | null>;
+  /** Every non-zero SPL balance as mint -> amount. Null when the read failed. */
+  allTokenBalances: () => Promise<Map<string, number> | null>;
 }
 
 const Ctx = createContext<WalletState | null>(null);
@@ -137,9 +144,44 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return r.value.reduce((s, a) => s + (a.account.data.parsed.info.tokenAmount.uiAmount ?? 0), 0);
   }, [address]);
 
+  /**
+   * Every SPL balance the wallet holds, as mint → UI amount.
+   *
+   * Two calls rather than one per token: asking by `programId` returns the
+   * whole account list at once, so checking a wallet against twenty-one mints
+   * costs the same as checking it against one. Per-mint lookups would be
+   * twenty-one requests at a public RPC that rate-limits, which is how a
+   * portfolio ends up half-populated and looking like a loss.
+   *
+   * Both token programs, because a mint issued under Token-2022 is invisible
+   * to a query for the original program and would read as a zero balance.
+   */
+  const allTokenBalances = useCallback(async () => {
+    if (!address) return null;
+    const out = new Map<string, number>();
+    const results = await Promise.all(
+      TOKEN_PROGRAMS.map((programId) =>
+        rpc<{
+          value: { account: { data: { parsed: { info: { mint: string; tokenAmount: { uiAmount: number | null } } } } } }[];
+        }>("getTokenAccountsByOwner", [address, { programId }, { encoding: "jsonParsed" }])
+      )
+    );
+    // A null result is a failed call, not an empty wallet — surface nothing
+    // rather than an all-zero portfolio.
+    if (results.every((r) => r == null)) return null;
+    for (const r of results) {
+      for (const a of r?.value ?? []) {
+        const { mint, tokenAmount } = a.account.data.parsed.info;
+        const amt = tokenAmount.uiAmount ?? 0;
+        if (amt > 0) out.set(mint, (out.get(mint) ?? 0) + amt);
+      }
+    }
+    return out;
+  }, [address]);
+
   const value = useMemo(
-    () => ({ address, connecting, available, solBalance, usdcBalance, connect, disconnect, tokenBalance }),
-    [address, connecting, available, solBalance, usdcBalance, connect, disconnect, tokenBalance]
+    () => ({ address, connecting, available, solBalance, usdcBalance, connect, disconnect, tokenBalance, allTokenBalances }),
+    [address, connecting, available, solBalance, usdcBalance, connect, disconnect, tokenBalance, allTokenBalances]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
