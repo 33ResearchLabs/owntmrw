@@ -371,6 +371,8 @@ export interface ProjectDetail {
   news: { ts: number; title: string; url: string | null; source: string | null; type: string }[];
   /** Git tags from the project's repos — engineering output, not press. */
   releases: { ts: number; title: string; url: string | null; source: string | null }[];
+  /** `source` carries the git author name here, not a publisher — same column, same reason as `releases`. */
+  recentCommits: { ts: number; message: string; author: string | null; url: string | null }[];
   listings: ExchangeListing[];
   risk: RiskSnapshot | null;
   ath: number | null; atl: number | null;
@@ -454,6 +456,11 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
     WHERE project_id = ? AND type = 'github_release'
     ORDER BY ts DESC LIMIT 50
   `).all(id) as ProjectDetail["releases"];
+  const recentCommits = d.prepare(`
+    SELECT ts, title AS message, detail AS author, url FROM events
+    WHERE project_id = ? AND type = 'github_commit'
+    ORDER BY ts DESC LIMIT 5
+  `).all(id) as ProjectDetail["recentCommits"];
   const listings = d.prepare(`
     SELECT exchange, pair, volume_usd, trust, url, is_dex, ts FROM exchange_listings
     WHERE project_id = ? ORDER BY volume_usd DESC NULLS LAST
@@ -509,7 +516,7 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
     // this, treasury/market-cap divided a six-day-old balance by a live cap.
     treasuryValue: liveTreasuryUsd ?? treasury?.value_usd ?? null,
     treasuryHistory, treasuryLastRead, liquidityHistory,
-    news, releases, listings, risk,
+    news, releases, recentCommits, listings, risk,
     ath, atl, athTs,
   };
 }

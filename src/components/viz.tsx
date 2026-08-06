@@ -112,6 +112,41 @@ export function Sparkline({
 }
 
 /**
+ * The eyebrow-tag / title / subtitle header that introduces a row of
+ * `TrendCard`s — one per major section (Development, Treasury, Performance)
+ * rather than per card, so a reader lands on a heading before the numbers.
+ */
+export function TrendSectionHeader({
+  eyebrow, color, title, subtitle, action,
+}: {
+  /** Omit to drop the small uppercase tag + dot above the title. */
+  eyebrow?: string;
+  color?: string;
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <div>
+        {eyebrow && (
+          <div
+            className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em]"
+            style={{ color }}
+          >
+            {eyebrow}
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+          </div>
+        )}
+        <h2 className={`text-[19px] font-extrabold tracking-tight ${eyebrow ? "mt-1" : ""}`}>{title}</h2>
+        {subtitle && <p className="mt-0.5 text-[12.5px] text-ink2">{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/**
  * An icon, a headline figure, a period-over-period delta and the series
  * behind it — one card, reused everywhere a metric has real history to plot.
  *

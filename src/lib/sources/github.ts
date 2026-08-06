@@ -40,6 +40,8 @@ export interface OrgStats {
   codeFrequency: { week: number; additions: number; deletions: number }[];
   topRepos: { name: string; url: string; stars: number }[];
   releases: { tag: string; name: string; ts: number; url: string; repo: string }[];
+  /** Most recent commits on the busiest repo — the first line of the message only. */
+  recentCommits: { message: string; author: string; ts: number; url: string }[];
 }
 
 /** Extract "owner" from a github.com URL (org or user). */
@@ -129,6 +131,32 @@ export async function orgHeadline(owner: string): Promise<OrgHeadline | null> {
  * request gets the data. Giving up on the 202 means the very first ingest of a
  * repo always stores nothing, so this waits the job out.
  */
+/**
+ * The last few commits on one repo, real messages and all — distinct from the
+ * `?per_page=1` call elsewhere in this file, which reads only the newest
+ * commit's date and discards the message. `commit.author` is the raw git
+ * identity (always present); the GitHub account in the top-level `author` is
+ * nullable when unlinked, so the git name is what's shown, not a login.
+ */
+async function recentCommits(fullName: string): Promise<OrgStats["recentCommits"]> {
+  const commits = await getJSON<{
+    sha: string;
+    html_url: string;
+    commit: { message: string; author: { name: string; date: string } };
+  }[]>(
+    `https://api.github.com/repos/${fullName}/commits?per_page=5`,
+    { headers: HEADERS, retries: 1 }
+  );
+  await sleep(400);
+  if (!Array.isArray(commits)) return [];
+  return commits.map((c) => ({
+    message: c.commit.message.split("\n")[0],
+    author: c.commit.author.name,
+    ts: Math.floor(Date.parse(c.commit.author.date) / 1000),
+    url: c.html_url,
+  }));
+}
+
 async function codeFreq(fullName: string): Promise<OrgStats["codeFrequency"]> {
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
@@ -219,16 +247,12 @@ export async function orgStats(owner: string): Promise<OrgStats | null> {
   }
 
   // Last commit on the most recently pushed repo. pushed_at moves on any ref
-  // update (tags, branches), so the commit list is the accurate answer.
-  if (ranked[0]) {
-    const commits = await getJSON<{ commit: { author: { date: string } } }[]>(
-      `https://api.github.com/repos/${ranked[0].full_name}/commits?per_page=1`,
-      { headers: HEADERS, retries: 1 }
-    );
-    await sleep(400);
-    const iso = commits?.[0]?.commit?.author?.date;
-    if (iso) lastCommitTs = Math.floor(Date.parse(iso) / 1000);
-  }
+  // update (tags, branches), so the commit list is the accurate answer. Fetching
+  // 5 gives the message and author alongside the date this used to fetch alone
+  // (`?per_page=1`, discarding everything but the timestamp) — one call instead
+  // of two against a 60/hr ceiling.
+  const commits = ranked[0] ? await recentCommits(ranked[0].full_name) : [];
+  if (commits[0]) lastCommitTs = commits[0].ts;
 
   const codeFrequency = ranked[0] ? await codeFreq(ranked[0].full_name) : [];
 
@@ -262,6 +286,6 @@ export async function orgStats(owner: string): Promise<OrgStats | null> {
       .map(([name, bytes]) => ({ name, bytes }))
       .sort((a, b) => b.bytes - a.bytes),
     codeFrequency,
-    topRepos, releases,
+    topRepos, releases, recentCommits: commits,
   };
 }

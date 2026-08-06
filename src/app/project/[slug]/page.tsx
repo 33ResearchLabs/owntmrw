@@ -5,15 +5,15 @@ import {
   periodReturns,
 } from "@/lib/queries";
 import { healthScore, insights, developerScore } from "@/lib/analytics";
-import { DevelopmentPanel } from "@/components/Development";
+import { DevelopmentPanel, DevelopmentTrendCards } from "@/components/Development";
 import { buildMemo } from "@/lib/research";
 import { PriceChart } from "@/components/PriceChart";
 import { Tabs, type TabDef } from "@/components/Tabs";
 import { HealthScorePanel } from "@/components/HealthScore";
 import {
-  HoldersPanel, SmartMoneyPanel, TreasuryPanel, CompareRaisePanel, NewsPanel,
+  HoldersPanel, SmartMoneyPanel, TreasuryPanel, TreasuryTrendCards, CompareRaisePanel, NewsPanel,
   ResearchPanel, GovernancePanel, TimelinePanel, InsightList,
-  ListingsPanel, RiskPanel, SectionCard, Metric, DataGap, DenseMetricGrid,
+  ListingsPanel, RiskPanel, SectionCard, Metric, DataGap,
   DashboardCard, CardAction, CardTag, MetricGrid, MetricCell, CardNote,
 } from "@/components/panels";
 import { TradeTerminal } from "@/components/TradeTerminal";
@@ -21,7 +21,8 @@ import { PortfolioCard } from "@/components/PortfolioCard";
 import { ProjectBrief } from "@/components/ProjectBrief";
 import { MarketDepthPanel } from "@/components/MarketDepth";
 import { Delta, Logo, StatTile, StatusBadge } from "@/components/ui";
-import { fmtUsd, fmtPrice, fmtNum, fmtPct, fmtDate, timeAgo, shortAddr } from "@/lib/format";
+import { TrendSectionHeader } from "@/components/viz";
+import { fmtUsd, fmtPrice, fmtNum, fmtPct, fmtDate, shortAddr } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -111,49 +112,39 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   const overview = (
     <div className="space-y-5">
       <HealthScorePanel hs={hs} updatedAt={hsUpdatedAt} />
-      <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard title="AI Insights" right={<span className="text-[11px] text-muted">{signals.length} signal{signals.length === 1 ? "" : "s"}</span>}>
-          <InsightList items={signals} />
-        </SectionCard>
-        <SectionCard
-          title="Development"
-          right={<a href="#development" className="text-[11px] text-accent hover:underline">full breakdown →</a>}
-        >
-          {!github ? (
-            <div className="p-4">
-              <DataGap
-                title="No GitHub organisation linked"
-                why="Engineering output cannot be verified for this project because no public repository is recorded."
-              />
-            </div>
-          ) : github.commits_90d == null && github.contributors == null
-              && github.last_commit_ts == null && github.last_push_ts == null ? (
-            // A snapshot exists but carries only headline counters. Three bare
-            // dashes read as breakage; say which call was rate-limited instead.
-            <div className="p-4">
-              <DataGap
-                title="Repository counters not collected"
-                why={`Stars and repo count are on file${github.stars != null ? ` (★ ${fmtNum(github.stars)})` : ""}, but commit, contributor and push history need extra GitHub calls that were rate-limited on the last run.`}
-                unlock="Set GITHUB_TOKEN to lift the API ceiling from 60 to 5,000 requests an hour, then re-run npm run ingest."
-              />
-            </div>
-          ) : (
-            <DenseMetricGrid
-              tiles={[
-                github.commits_90d != null && { label: "Commits 90d", value: fmtNum(github.commits_90d) },
-                github.contributors != null && { label: "Contributors", value: fmtNum(github.contributors) },
-                github.stars != null && { label: "Stars", value: fmtNum(github.stars) },
-                (github.last_commit_ts ?? github.last_push_ts) != null && {
-                  label: "Last Commit", value: timeAgo(github.last_commit_ts ?? github.last_push_ts),
-                },
-              ]}
-            />
-          )}
-        </SectionCard>
-      </div>
-      <RiskPanel risk={d.risk} flags={parseRisks(d.risk)} />
-      <ListingsPanel listings={d.listings} />
       <CompareRaisePanel d={d} />
+      <RiskPanel risk={d.risk} flags={parseRisks(d.risk)} />
+      <SectionCard title="AI Insights" right={<span className="text-[11px] text-muted">{signals.length} signal{signals.length === 1 ? "" : "s"}</span>}>
+        <InsightList items={signals} />
+      </SectionCard>
+      {(treasuryValue != null || latest?.liquidity_usd != null) && (
+        <SectionCard
+          title="Treasury"
+          right={<a href="#treasury" className="text-[11px] text-accent hover:underline">full breakdown →</a>}
+        >
+          <div className="p-4">
+            <TreasuryTrendCards d={d} nowSec={nowSec} />
+          </div>
+        </SectionCard>
+      )}
+      <section className="card px-5 py-5 sm:px-6">
+        <TrendSectionHeader
+          title="Development at a Glance."
+          subtitle="Real-time overview of our GitHub activity and codebase health."
+          action={<a href="#development" className="text-[11px] text-accent hover:underline">full breakdown →</a>}
+        />
+        {!github ? (
+          <DataGap
+            title="No GitHub organisation linked"
+            why="Engineering output cannot be verified for this project because no public repository is recorded."
+          />
+        ) : (
+          <DevelopmentTrendCards
+            github={github} githubHistory={d.githubHistory} codeFrequency={codeFrequency} nowSec={nowSec}
+          />
+        )}
+      </section>
+      <ListingsPanel listings={d.listings} />
       {(p.raise_amount_usd != null || rp != null || p.circulating_supply != null || p.raise_note != null) && (
         <DashboardCard
           title="Raise & Supply"
@@ -232,8 +223,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       badge: devScore.overall ?? undefined,
       content: (
         <DevelopmentPanel
-          github={github} githubHistory={d.githubHistory} languages={languages} codeFrequency={codeFrequency}
-          score={devScore} githubUrl={p.github} releaseCount={d.releases.length} nowSec={nowSec}
+          github={github} languages={languages} codeFrequency={codeFrequency}
+          score={devScore} githubUrl={p.github} releaseCount={d.releases.length}
+          recentCommits={d.recentCommits}
         />
       ),
     },

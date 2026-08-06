@@ -15,7 +15,7 @@ import {
   shortAddr,
 } from "@/lib/format";
 import { Delta, StatusBadge } from "./ui";
-import { TrendCard } from "./viz";
+import { TrendCard, TrendSectionHeader } from "./viz";
 import { DAY, changeVsAgo, deltaVsAgo } from "@/lib/series";
 import { MoreRows } from "./MoreRows";
 import { CopyButton } from "./CopyButton";
@@ -941,21 +941,13 @@ export function SmartMoneyPanel({ d }: { d: ProjectDetail }) {
 
 // ---------------------------------------------------------------- treasury
 
-export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number }) {
-  const {
-    project: p,
-    treasuryValue,
-    treasuryHistory,
-    treasuryLastRead,
-    liquidityHistory,
-    latest,
-  } = d;
-  const vsRaise =
-    treasuryValue && p.raise_amount_usd
-      ? treasuryValue / p.raise_amount_usd
-      : null;
-  const vsMcap =
-    treasuryValue && latest?.mcap ? treasuryValue / latest.mcap : null;
+/**
+ * Just the two headline cards — split out so the Overview tab can show the
+ * same summary without pulling in the detail table and address link that
+ * belong to the full Treasury tab underneath it.
+ */
+export function TreasuryTrendCards({ d, nowSec }: { d: ProjectDetail; nowSec: number }) {
+  const { treasuryValue, treasuryHistory, liquidityHistory, latest } = d;
 
   // Real series, not derived figures: treasuryHistory is already deduped to
   // actual balance changes (see projectDetail), and liquidity is read raw
@@ -973,28 +965,65 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
     .filter((r): r is { ts: number; v: number } => r.v != null);
   const liquidityDelta = changeVsAgo(latest?.liquidity_usd, liquiditySeries, 7 * DAY, nowSec);
 
+  if (!treasurySeries.length && !liquiditySeries.length) return null;
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {treasurySeries.length > 0 && (
+        <TrendCard
+          color="var(--good)" label="Treasury Value"
+          value={treasuryValue != null ? (treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)) : "—"}
+          deltaPct={treasuryDelta} deltaLabel="vs 7d ago"
+          series={treasurySeries.map((s) => s.v)}
+        />
+      )}
+      {liquiditySeries.length > 0 && (
+        <TrendCard
+          color="var(--accent)" label="Available Liquidity"
+          value={fmtUsd(latest?.liquidity_usd ?? null)}
+          deltaPct={liquidityDelta} deltaLabel="vs 7d ago"
+          series={liquiditySeries.map((s) => s.v)}
+        />
+      )}
+    </div>
+  );
+}
+
+export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number }) {
+  const {
+    project: p,
+    treasuryValue,
+    treasuryHistory,
+    treasuryLastRead,
+    latest,
+  } = d;
+  const vsRaise =
+    treasuryValue && p.raise_amount_usd
+      ? treasuryValue / p.raise_amount_usd
+      : null;
+  const vsMcap =
+    treasuryValue && latest?.mcap ? treasuryValue / latest.mcap : null;
+
   return (
     <div className="space-y-5">
-      {(treasurySeries.length > 0 || liquiditySeries.length > 0) && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {treasurySeries.length > 0 && (
-            <TrendCard
-              color="var(--good)" label="Treasury Value"
-              value={treasuryValue != null ? (treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)) : "—"}
-              deltaPct={treasuryDelta} deltaLabel="vs 7d ago"
-              series={treasurySeries.map((s) => s.v)}
-            />
-          )}
-          {liquiditySeries.length > 0 && (
-            <TrendCard
-              color="var(--accent)" label="Available Liquidity"
-              value={fmtUsd(latest?.liquidity_usd ?? null)}
-              deltaPct={liquidityDelta} deltaLabel="vs 7d ago"
-              series={liquiditySeries.map((s) => s.v)}
-            />
-          )}
-        </div>
-      )}
+      <section className="card px-5 py-5 sm:px-6">
+        <TrendSectionHeader
+          title="Treasury at a Glance"
+          subtitle="Vault balance and pool depth, read on-chain as of the last ingest."
+          action={
+            p.treasury_address ? (
+              <a
+                href={`https://solscan.io/account/${p.treasury_address}`}
+                target="_blank" rel="noopener noreferrer"
+                className="rounded-lg border border-line px-3 py-1.5 text-[12px] font-medium text-ink2 hover:border-accent hover:text-accent"
+              >
+                View vault ↗
+              </a>
+            ) : undefined
+          }
+        />
+        <TreasuryTrendCards d={d} nowSec={nowSec} />
+      </section>
       <SectionCard
         title="Treasury"
         right={
@@ -1152,7 +1181,12 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   return (
     <div className="space-y-5">
       {(rp || treasuryGrowth != null || holderGrowth != null) && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <section className="card px-5 py-5 sm:px-6">
+          <TrendSectionHeader
+            title="Track this project from raise to today."
+            subtitle="Measure real performance, not just price. ROI, treasury growth, holder growth and market cap evolution, all since day one."
+          />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {rp && cur != null && candles.length > 0 && (
             <TrendCard
               color="var(--accent)" label="Raise vs Current"
@@ -1195,7 +1229,8 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
               series={treasurySeries}
             />
           )}
-        </div>
+          </div>
+        </section>
       )}
     <DashboardCard
       title="Performance Since Raise"
@@ -1209,8 +1244,6 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
             sub={rp.derived ? "derived: raise ÷ 10M sold" : undefined}
           />
         )}
-        {cur != null && <MetricCell label="Current Price" value={fmtPrice(cur)} />}
-        {roi != null && <MetricCell label="ROI Since Raise" value={<Delta v={roi} />} />}
         {drawdown != null && (
           <MetricCell label="Current Drawdown" value={<Delta v={drawdown} />} sub="from all-time high" />
         )}
@@ -1231,23 +1264,9 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
         {daysToAth != null && (
           <MetricCell label="Days to ATH" value={`${daysToAth}d`} sub={athTs ? fmtDate(athTs) : undefined} />
         )}
-        {treasuryValue != null && (
-          <MetricCell
-            label="Treasury Remaining"
-            value={treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)}
-            // Same expression and rounding as the Treasury dimension in
-            // `analytics.ts`, so the two places cannot print different figures.
-            sub={
-              p.raise_amount_usd
-                ? `${((treasuryValue / p.raise_amount_usd) * 100).toFixed(0)}% of raise still held`
-                : undefined
-            }
-          />
-        )}
         {p.raise_contributors != null && (
           <MetricCell label="Contributors at Raise" value={fmtNum(p.raise_contributors)} />
         )}
-        {holdersNow != null && <MetricCell label="Holders Now" value={fmtNum(holdersNow)} />}
         {p.raise_committed_usd != null && (
           <MetricCell
             label="Committed"
