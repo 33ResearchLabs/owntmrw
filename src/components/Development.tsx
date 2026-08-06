@@ -3,7 +3,7 @@ import type { DevScore } from "@/lib/analytics";
 import { scoreColor } from "@/lib/analytics";
 import { fmtNum, timeAgo } from "@/lib/format";
 import { SectionCard, DataGap } from "./panels";
-import { TrendCard, type IconName } from "./viz";
+import { TrendCard } from "./viz";
 import { DAY, changeVsAgo } from "@/lib/series";
 
 /** Distinct hues for the language bar; falls back to grey past the eighth. */
@@ -95,20 +95,19 @@ function CodeFrequency({ weeks }: { weeks: CodeWeek[] }) {
 interface TrendField {
   key: keyof ProjectDetail["githubHistory"][number] & string;
   label: string;
-  icon: IconName;
   color: string;
   sub?: string;
 }
 
 const TREND_FIELDS: TrendField[] = [
-  { key: "commits_90d", label: "Commits (90d)", icon: "chart", color: "var(--accent)", sub: "org-wide" },
-  { key: "contributors", label: "Contributors", icon: "users", color: "var(--good)", sub: "unique authors" },
-  { key: "stars", label: "Stars", icon: "target", color: "var(--warn)", sub: "across owned repos" },
-  { key: "forks", label: "Forks", icon: "layers", color: "var(--accent)" },
-  { key: "open_issues", label: "Open Issues", icon: "info", color: "var(--warn)" },
-  { key: "closed_issues", label: "Closed Issues", icon: "shield", color: "var(--good)" },
-  { key: "merged_prs", label: "Pull Requests", icon: "pie", color: "#9b7ae0", sub: "merged" },
-  { key: "active_repos", label: "Active Repositories", icon: "clock", color: "var(--accent)", sub: "pushed in 90d" },
+  { key: "commits_90d", label: "Commits (90d)", color: "var(--accent)", sub: "org-wide" },
+  { key: "contributors", label: "Contributors", color: "var(--good)", sub: "unique authors" },
+  { key: "stars", label: "Stars", color: "var(--warn)", sub: "across owned repos" },
+  { key: "forks", label: "Forks", color: "var(--accent)" },
+  { key: "open_issues", label: "Open Issues", color: "var(--warn)" },
+  { key: "closed_issues", label: "Closed Issues", color: "var(--good)" },
+  { key: "merged_prs", label: "Pull Requests", color: "#9b7ae0", sub: "merged" },
+  { key: "active_repos", label: "Active Repositories", color: "var(--accent)", sub: "pushed in 90d" },
 ];
 
 export function DevelopmentPanel({
@@ -180,7 +179,7 @@ export function DevelopmentPanel({
     return (
       <TrendCard
         key={f.key}
-        icon={f.icon} color={f.color} label={f.label}
+        color={f.color} label={f.label}
         value={fmtNum(current)}
         deltaPct={changeVsAgo(current, series, 30 * DAY, nowSec)}
         deltaLabel="vs 30d ago"
@@ -196,7 +195,7 @@ export function DevelopmentPanel({
           {trendCards}
           {weeklyTotals.length > 0 && (
             <TrendCard
-              icon="bars" color="var(--warn)" label="Code Changes (30d)"
+              color="var(--warn)" label="Code Changes (30d)"
               value={fmtNum(last4)}
               deltaPct={codeChangeDelta} deltaLabel="vs previous 30d"
               series={weeklyTotals}

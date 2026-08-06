@@ -123,9 +123,9 @@ export function Sparkline({
  * line that looks like a shape.
  */
 export function TrendCard({
-  icon, color, label, value, deltaPct, deltaLabel, series, title,
+  color, label, value, deltaPct, deltaLabel, series, title,
 }: {
-  icon: IconName;
+  /** Tints the sparkline stroke. */
   color: string;
   label: string;
   value: React.ReactNode;
@@ -145,13 +145,10 @@ export function TrendCard({
 }) {
   return (
     <div className="rounded-xl border border-line bg-surface2/30 p-4">
-      <div className="flex items-center gap-2" title={title}>
-        <IconBadge name={icon} color={color} size={26} />
-        <span className="text-[11px] uppercase tracking-[0.07em] text-muted">
-          {label}
-          {title && <span className="text-faint"> ⓘ</span>}
-        </span>
-      </div>
+      <span className="text-[11px] uppercase tracking-[0.07em] text-muted" title={title}>
+        {label}
+        {title && <span className="text-faint"> ⓘ</span>}
+      </span>
       <div className="num mt-2.5 text-[20px] font-semibold leading-none">{value}</div>
       {deltaPct !== undefined && (
         <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">

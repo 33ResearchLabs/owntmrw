@@ -979,7 +979,7 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {treasurySeries.length > 0 && (
             <TrendCard
-              icon="bank" color="var(--good)" label="Treasury Value"
+              color="var(--good)" label="Treasury Value"
               value={treasuryValue != null ? (treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)) : "—"}
               deltaPct={treasuryDelta} deltaLabel="vs 7d ago"
               series={treasurySeries.map((s) => s.v)}
@@ -987,7 +987,7 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
           )}
           {liquiditySeries.length > 0 && (
             <TrendCard
-              icon="droplet" color="var(--accent)" label="Available Liquidity"
+              color="var(--accent)" label="Available Liquidity"
               value={fmtUsd(latest?.liquidity_usd ?? null)}
               deltaPct={liquidityDelta} deltaLabel="vs 7d ago"
               series={liquiditySeries.map((s) => s.v)}
@@ -1155,7 +1155,7 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {rp && cur != null && candles.length > 0 && (
             <TrendCard
-              icon="token" color="var(--accent)" label="Raise vs Current"
+              color="var(--accent)" label="Raise vs Current"
               value={fmtPrice(cur)}
               deltaPct={roi} deltaLabel={`vs raise ${fmtPrice(rp.usd)}`}
               series={candles.map((c) => c.c)}
@@ -1163,7 +1163,7 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
           )}
           {roi != null && (
             <TrendCard
-              icon="percent" color="var(--good)" label="ROI Since Raise"
+              color="var(--good)" label="ROI Since Raise"
               value={fmtPct(roi)}
               deltaPct={roi} deltaLabel="vs raise price"
               series={candles.map((c) => ((c.c - rp!.usd) / rp!.usd) * 100)}
@@ -1171,7 +1171,7 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
           )}
           {mcapGrowth != null && (
             <TrendCard
-              icon="pie" color="var(--warn)" label="Market Cap Growth"
+              color="var(--warn)" label="Market Cap Growth"
               value={fmtUsd(curMcap)}
               deltaPct={mcapGrowth} deltaLabel={`vs raise ${fmtUsd(raiseMcap)}`}
               series={mcapSeries}
@@ -1180,7 +1180,7 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
           )}
           {holderGrowth != null && (
             <TrendCard
-              icon="users" color="var(--good)" label="Holder Growth"
+              color="var(--good)" label="Holder Growth"
               value={fmtNum(holdersNow)}
               deltaPct={holderGrowth} deltaLabel="since tracking began"
               series={hh.map((h) => h.holder_count!)}
@@ -1188,7 +1188,7 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
           )}
           {treasuryValue != null && (
             <TrendCard
-              icon="bank" color="var(--accent)" label="Treasury Growth"
+              color="var(--accent)" label="Treasury Growth"
               value={treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)}
               deltaPct={treasuryGrowth}
               deltaLabel={p.raise_amount_usd ? `vs raised ${fmtUsd(p.raise_amount_usd)}` : undefined}
