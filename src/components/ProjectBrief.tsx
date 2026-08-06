@@ -86,10 +86,19 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
           label: "Contributors",
           value: fmtNum(p.raise_contributors),
         },
-        p.raise_track != null && {
+        // A raise with money but no launchpad track was a private round, and
+        // "Private" is its track, not a gap. Gated on the amount so a token
+        // that never raised at all (Flash.Trade) doesn't inherit the label.
+        (p.raise_track != null || (p.raise_amount_usd != null && p.raise_amount_usd > 0)) && {
           label: "Track",
-          value: p.raise_track === "curated" ? "Curated" : "Permissionless",
-          sub: p.raise_track === "curated" ? "MetaDAO launchpad" : "via Futard",
+          value:
+            p.raise_track === "curated" ? "Curated"
+            : p.raise_track === "permissionless" ? "Permissionless"
+            : "Private",
+          sub:
+            p.raise_track === "curated" ? "MetaDAO launchpad"
+            : p.raise_track === "permissionless" ? "via Futard"
+            : "off-launchpad round",
         },
       ].filter(Boolean) as Tile[],
     },
