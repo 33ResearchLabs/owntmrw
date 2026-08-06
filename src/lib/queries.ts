@@ -129,6 +129,56 @@ export function tradingStart(
 // client components need it too. See the note there.
 export { MIN_LIQUIDITY_USD, priceIsReliable } from "./quote";
 
+export interface PeriodReturns {
+  d7: number | null;
+  d30: number | null;
+  d90: number | null;
+  ytd: number | null;
+  allTime: number | null;
+}
+
+/**
+ * Close-to-close returns for the chart footer's period strip, measured
+ * against the same live price the 24h figure already uses — so every column
+ * in that row reads from the same "now" rather than mixing a live quote with
+ * a stale last candle.
+ *
+ * A period a token's history does not reach renders null, not a number from
+ * whatever data happens to exist. A 5-candle-old launch has no honest 30D
+ * figure; showing one anyway is exactly the "wrong number is worse than an
+ * absent one" case this file already guards for 24h, extended to the rest of
+ * the row instead of leaving it hardcoded blank.
+ */
+export function periodReturns(
+  candles: { ts: number; c: number }[],
+  price: number | null,
+  nowSec: number
+): PeriodReturns {
+  const empty: PeriodReturns = { d7: null, d30: null, d90: null, ytd: null, allTime: null };
+  if (!candles.length || price == null) return empty;
+
+  // candles is ts-ascending (see the query below), so the last close seen
+  // before the scan passes the target is the close at-or-before it.
+  const closeAtOrBefore = (target: number): number | null => {
+    let found: number | null = null;
+    for (const c of candles) {
+      if (c.ts > target) break;
+      found = c.c;
+    }
+    return found;
+  };
+  const ret = (base: number | null) => (base ? ((price - base) / base) * 100 : null);
+  const yearStart = Math.floor(Date.UTC(new Date(nowSec * 1000).getUTCFullYear(), 0, 1) / 1000);
+
+  return {
+    d7: ret(closeAtOrBefore(nowSec - 7 * 86400)),
+    d30: ret(closeAtOrBefore(nowSec - 30 * 86400)),
+    d90: ret(closeAtOrBefore(nowSec - 90 * 86400)),
+    ytd: ret(closeAtOrBefore(yearStart)),
+    allTime: ret(candles[0].c),
+  };
+}
+
 /**
  * Rows straight from the archive. Prices here are as of the last ingest run,
  * so every caller goes through `screenerRows`, which overlays live quotes
