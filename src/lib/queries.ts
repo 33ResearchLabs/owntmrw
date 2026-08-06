@@ -550,16 +550,16 @@ export function searchAll(q: string) {
 
 export function globalTimeline(limit = 120) {
   return db().prepare(`
-    SELECT e.ts, e.type, e.title, e.detail, e.url, p.slug, p.name, p.symbol
+    SELECT e.ts, e.type, e.title, e.detail, e.url, p.slug, p.name, p.symbol, p.image_url
     FROM events e JOIN projects p ON p.id = e.project_id
     ORDER BY e.ts DESC LIMIT ?
-  `).all(limit) as { ts: number; type: string; title: string; detail: string | null; url: string | null; slug: string; name: string; symbol: string | null }[];
+  `).all(limit) as { ts: number; type: string; title: string; detail: string | null; url: string | null; slug: string; name: string; symbol: string | null; image_url: string | null }[];
 }
 
 export function allObservations(limit = 100) {
   return db().prepare(`
-    SELECT o.ts, o.kind, o.text, p.slug, p.name FROM observations o
+    SELECT o.ts, o.kind, o.text, p.slug, p.name, p.image_url FROM observations o
     LEFT JOIN projects p ON p.id = o.project_id
     ORDER BY o.ts DESC LIMIT ?
-  `).all(limit) as { ts: number; kind: string | null; text: string; slug: string | null; name: string | null }[];
+  `).all(limit) as { ts: number; kind: string | null; text: string; slug: string | null; name: string | null; image_url: string | null }[];
 }

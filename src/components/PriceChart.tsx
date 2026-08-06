@@ -45,6 +45,13 @@ type Mode = "candles" | "area";
  * pitch in CSS pixels, and a floor so a narrow phone still gets a readable
  * chart rather than three fat candles.
  */
+/**
+ * Intervals the toolbar offers. A presentation subset of `TIMEFRAMES` — the
+ * shared constant still carries 1m, so the candle API, `TF_SECONDS` and the
+ * fold-from-daily logic are all untouched; it is simply not offered as a button.
+ */
+const OFFERED_TIMEFRAMES: readonly Timeframe[] = TIMEFRAMES.filter((tf) => tf !== "1m");
+
 const BAR_PX = 8;
 const MIN_BARS = 24;
 /** A little air on the right, the way desk charts leave room ahead of price. */
@@ -366,7 +373,6 @@ export function PriceChart({
   const [metric, setMetric] = useState<Metric>("price");
   const [hover, setHover] = useState<Candle | null>(null);
   const [hoverEvents, setHoverEvents] = useState<ChartEvent[]>([]);
-  const [off, setOff] = useState<Set<string>>(new Set());
   const [fullscreen, setFullscreen] = useState(false);
   /** Plot height while expanded. Null whenever the card sits inline. */
   const [fsHeight, setFsHeight] = useState<number | null>(null);
@@ -502,23 +508,12 @@ export function PriceChart({
     ts.setVisibleLogicalRange({ from: n - capacity, to: n - 1 + RIGHT_PAD_BARS });
   }, []);
 
-  /** Event families actually present in this project's data. */
-  const presentGroups = useMemo(() => {
-    const keys = new Set<string>();
-    for (const e of events) {
-      const g = e.type ? GROUP_OF.get(e.type) : undefined;
-      if (g) keys.add(g.key);
-    }
-    return EVENT_GROUPS.filter((g) => keys.has(g.key));
-  }, [events]);
-
-  const visibleEvents = useMemo(
-    () => events.filter((e) => {
-      const g = e.type ? GROUP_OF.get(e.type) : undefined;
-      return g ? !off.has(g.key) : true;
-    }),
-    [events, off]
-  );
+  /**
+   * Every event family renders. The legend that used to switch a family off is
+   * gone, so there is nothing left to filter by — the markers themselves, and
+   * the hover cards behind them, are unchanged.
+   */
+  const visibleEvents = events;
 
   const last = data.length ? data[data.length - 1] : null;
   const shown = hover ?? last;
@@ -953,16 +948,6 @@ export function PriceChart({
               lastUpdated == null ? "—" : `${fmtUtcStamp(lastUpdated)} (UTC)`
             }
           />
-          <MarketStat
-            label="Currency"
-            value={
-              // Every figure on the platform is quoted in USD, so this states
-              // the unit rather than offering a switch that has nowhere to go.
-              <span className="inline-flex items-center rounded-md border border-line bg-surface2/50 px-2 py-0.5 text-[11px] font-medium text-ink2">
-                USD
-              </span>
-            }
-          />
         </div>
       </div>
 
@@ -1000,7 +985,7 @@ export function PriceChart({
               so it is the one that scrolls rather than wrapping. */}
           <div className="scroll-x-quiet min-w-0 flex-1 lg:flex-none">
             <SegGroup label="Candle interval" className="w-max">
-              {TIMEFRAMES.map((tf) => (
+              {OFFERED_TIMEFRAMES.map((tf) => (
                 <SegButton key={tf} active={timeframe === tf} onClick={() => setTimeframe(tf)}>
                   {tf}
                 </SegButton>
@@ -1061,37 +1046,6 @@ export function PriceChart({
         )}
       </div>
 
-      {presentGroups.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3">
-          <span className="text-[11px] uppercase tracking-[0.08em] text-muted">Events</span>
-          {presentGroups.map((g) => {
-            const on = !off.has(g.key);
-            return (
-              <button
-                key={g.key}
-                onClick={() =>
-                  setOff((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(g.key)) next.delete(g.key); else next.add(g.key);
-                    return next;
-                  })
-                }
-                className={`flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px] transition-opacity ${
-                  on ? "text-ink2" : "text-muted opacity-50"
-                } hover:bg-white/5`}
-                aria-pressed={on}
-              >
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ background: on ? g.color : "var(--ink-muted)" }}
-                />
-                {g.label}
-              </button>
-            );
-          })}
-          <span className="text-[11px] text-muted">· hover a marker for detail</span>
-        </div>
-      )}
 
       {/* Period strip. 24h comes from the live quote (`price_snapshots.change_24h`);
           the rest are close-to-close against our own candle history, computed

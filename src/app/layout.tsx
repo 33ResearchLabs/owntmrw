@@ -7,6 +7,7 @@ import { SideRail } from "@/components/SideRail";
 import { WalletProvider } from "@/components/wallet";
 import { ConnectButton } from "@/components/ConnectButton";
 import { TopNav } from "@/components/TopNav";
+import { AnnouncementBar } from "@/components/AnnouncementBar";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -35,6 +36,7 @@ export default function RootLayout({
     <html lang="en" className={`${inter.className} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <WalletProvider>
+        <AnnouncementBar />
         {/* Opaque, not just the bar: the padding around the bar is a gap the
             page scrolls through, so a transparent wrapper leaks content above
             and beside the floating pill even when the pill itself is solid.
