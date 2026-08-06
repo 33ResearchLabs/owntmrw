@@ -8,6 +8,7 @@
  * shape the reader will mistake for a trend.
  */
 import { fmtPct } from "@/lib/format";
+import { Delta } from "./ui";
 
 // ------------------------------------------------------------------- icons
 
@@ -107,6 +108,61 @@ export function Sparkline({
       <polyline points={line} fill="none" stroke={stroke} strokeWidth="1.5"
         vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
+  );
+}
+
+/**
+ * An icon, a headline figure, a period-over-period delta and the series
+ * behind it — one card, reused everywhere a metric has real history to plot.
+ *
+ * Nothing here computes: `value`, `deltaPct` and `series` all arrive already
+ * derived, so a caller with no genuine trend for a metric simply has nothing
+ * to pass rather than reaching for a placeholder. `Sparkline`'s own
+ * `MIN_SERIES_POINTS` gate still applies underneath — a metric with real but
+ * thin history renders its "needs more history" state rather than a two-dot
+ * line that looks like a shape.
+ */
+export function TrendCard({
+  icon, color, label, value, deltaPct, deltaLabel, series, title,
+}: {
+  icon: IconName;
+  color: string;
+  label: string;
+  value: React.ReactNode;
+  /** Percent change vs. the start of the window `deltaLabel` names. */
+  deltaPct?: number | null;
+  /** What the delta is measured against, e.g. "vs 30d ago". */
+  deltaLabel?: string;
+  series: number[];
+  /**
+   * A methodology note, shown as a hover tooltip on the label. For a figure
+   * whose method could disagree with a plainer-looking number shown
+   * elsewhere on the same page — e.g. a growth rate computed with a supply
+   * held constant, next to a valuation that used the supply at the time —
+   * the gap reads as a bug unless the card says why.
+   */
+  title?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-line bg-surface2/30 p-4">
+      <div className="flex items-center gap-2" title={title}>
+        <IconBadge name={icon} color={color} size={26} />
+        <span className="text-[11px] uppercase tracking-[0.07em] text-muted">
+          {label}
+          {title && <span className="text-faint"> ⓘ</span>}
+        </span>
+      </div>
+      <div className="num mt-2.5 text-[20px] font-semibold leading-none">{value}</div>
+      {deltaPct !== undefined && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
+          <Delta v={deltaPct} />
+          {deltaLabel && <span className="text-muted">{deltaLabel}</span>}
+        </div>
+      )}
+      <div className="mt-3">
+        <Sparkline values={series} height={32} color={color} />
+      </div>
+    </div>
   );
 }
 

@@ -226,14 +226,14 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     { key: "overview", label: "Overview", content: overview },
     { key: "holders", label: "Holders", badge: latestHolders?.holder_count ? fmtNum(latestHolders.holder_count) : undefined, content: <HoldersPanel d={d} /> },
     { key: "smart", label: "Smart Money", content: <SmartMoneyPanel d={d} /> },
-    { key: "treasury", label: "Treasury", content: <TreasuryPanel d={d} /> },
+    { key: "treasury", label: "Treasury", content: <TreasuryPanel d={d} nowSec={nowSec} /> },
     {
       key: "development", label: "Development",
       badge: devScore.overall ?? undefined,
       content: (
         <DevelopmentPanel
-          github={github} languages={languages} codeFrequency={codeFrequency}
-          score={devScore} githubUrl={p.github} releaseCount={d.releases.length}
+          github={github} githubHistory={d.githubHistory} languages={languages} codeFrequency={codeFrequency}
+          score={devScore} githubUrl={p.github} releaseCount={d.releases.length} nowSec={nowSec}
         />
       ),
     },
