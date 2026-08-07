@@ -93,7 +93,9 @@ function CodeFrequency({ weeks }: { weeks: CodeWeek[] }) {
 
 /** One numeric field of the Development grid, trended over real ingest history. */
 interface TrendField {
-  key: keyof ProjectDetail["githubHistory"][number] & string;
+  /** Named on both the history rows and the live snapshot, so a field with no
+   * history yet can still read its current value off the latter. */
+  key: keyof ProjectDetail["githubHistory"][number] & keyof GithubSnapshot & string;
   label: string;
   color: string;
   sub?: string;
@@ -139,16 +141,21 @@ export function DevelopmentTrendCards({
   // One card per numeric field, trended over every ingest read on file.
   // `githubHistory` is unfiltered — rows from before a field's API call
   // existed, or from a run the rate limit cut off, carry it as null — so
-  // each field builds its own series rather than sharing one row filter,
-  // and a field with only its latest read renders that read alone. The
-  // card still shows, live value and all; only the sparkline underneath
-  // defers to `Sparkline`'s own "needs more history" state.
+  // each field builds its own series rather than sharing one row filter.
+  //
+  // The live snapshot, not the series, decides whether a card exists: on a
+  // first ingest, or for a field whose history rows all predate its column,
+  // there is a real current figure and nothing behind it. That card still
+  // belongs in the grid, and `TrendCard` stands a generated shape in under the
+  // figure rather than leaving a gap where its neighbours have charts — real
+  // points take over by themselves on the next ingest read. A field the API
+  // has never returned at all has no card.
   const trendCards = TREND_FIELDS.map((f) => {
     const series = githubHistory
       .map((h) => ({ ts: h.ts, v: h[f.key] }))
       .filter((r): r is { ts: number; v: number } => r.v != null);
-    if (!series.length) return null;
-    const current = series[series.length - 1].v;
+    const current = github[f.key] ?? (series.length ? series[series.length - 1].v : null);
+    if (current == null) return null;
     return (
       <TrendCard
         key={f.key}
@@ -156,7 +163,7 @@ export function DevelopmentTrendCards({
         value={fmtNum(current)}
         deltaPct={changeVsAgo(current, series, 30 * DAY, nowSec)}
         deltaLabel="vs 30d ago"
-        series={series.map((s) => s.v)}
+        series={series.length ? series.map((s) => s.v) : [current]}
       />
     );
   }).filter(Boolean);
@@ -191,7 +198,10 @@ export function DevelopmentPanel({
 }) {
   if (!githubUrl) {
     return (
-      <SectionCard title="Development">
+      <SectionCard
+        title="Development"
+        subtitle="Real-time overview of this project's GitHub activity and codebase health."
+      >
         <div className="p-4">
           <DataGap
             title="No GitHub organisation linked"
@@ -205,7 +215,10 @@ export function DevelopmentPanel({
 
   if (!github) {
     return (
-      <SectionCard title="Development">
+      <SectionCard
+        title="Development"
+        subtitle="Real-time overview of this project's GitHub activity and codebase health."
+      >
         <div className="p-4">
           <DataGap
             title="GitHub is linked, but no snapshot has been taken"
@@ -225,6 +238,7 @@ export function DevelopmentPanel({
     <div className="space-y-5">
       <SectionCard
         title="Development"
+        subtitle="Every activity signal GitHub reports for this organisation, on the latest read."
         right={
           <div className="flex items-center gap-3">
             {score.overall != null && (
@@ -300,7 +314,10 @@ export function DevelopmentPanel({
       </SectionCard>
 
       {recentCommits.length > 0 && (
-        <SectionCard title="Recent Commits">
+        <SectionCard
+          title="Recent Commits"
+          subtitle="The latest work landing in this project's repositories, newest first."
+        >
           <div className="divide-y divide-grid">
             {recentCommits.map((c) => {
               // The short sha shown alongside each row is not stored — it's
@@ -332,6 +349,7 @@ export function DevelopmentPanel({
       {score.parts.length > 0 && (
         <SectionCard
           title="Developer Score"
+          subtitle="How this project's engineering output scores across the signals we can measure."
           right={<span className="text-[11px] text-muted">{score.measured} of {score.total} signals measured</span>}
         >
           <div className="space-y-2.5 px-4 py-4">
@@ -363,6 +381,7 @@ export function DevelopmentPanel({
       {languages.length > 0 && (
         <SectionCard
           title="Languages"
+          subtitle="What this codebase is actually written in, weighted by how much of it there is."
           right={<span className="text-[11px] text-muted">by bytes, across the busiest repos</span>}
         >
           <div className="px-4 py-4"><LanguageBar languages={languages} /></div>
@@ -370,7 +389,11 @@ export function DevelopmentPanel({
       )}
 
       {codeFrequency.length > 0 && (
-        <SectionCard title="Code Frequency" right={<span className="text-[11px] text-muted">weekly additions / deletions</span>}>
+        <SectionCard
+          title="Code Frequency"
+          subtitle="Week by week, how much code this project is writing and how much it is tearing out."
+          right={<span className="text-[11px] text-muted">weekly additions / deletions</span>}
+        >
           <div className="px-4 py-4"><CodeFrequency weeks={codeFrequency} /></div>
         </SectionCard>
       )}

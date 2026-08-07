@@ -23,6 +23,7 @@ import { fetchWire, matchProject, searchNews, filterForProject } from "../src/li
 import { tokenReport } from "../src/lib/sources/rugcheck";
 import { jupTokenSearch, jupPrices, jupVolume } from "../src/lib/sources/jupiter";
 import { raiseFor, refundRate } from "../src/lib/sources/raises";
+import { profileFor, PROFILE_FIELDS } from "../src/lib/sources/profiles";
 import { sleep } from "../src/lib/sources/http";
 import { discoverFeed, fetchFeed, githubFeeds } from "../src/lib/sources/feeds";
 import { KNOWN_WALLETS } from "../src/lib/sources/wallets";
@@ -115,6 +116,10 @@ async function main() {
       team_package: s.teamPackage ?? undefined,
       liquidity_tokens: s.liquidity ?? undefined,
       launch_address: s.launchAddress ?? undefined,
+      // The DAO account in its own right, not just as a treasury stand-in. It
+      // was read all along but only ever consumed as the fallback below, which
+      // left dao_address empty for every project while the value sat in hand.
+      dao_address: s.daoAddress ?? undefined,
       treasury_address: p.treasury_address ?? s.daoAddress ?? undefined,
       team_address: s.teamAddress ?? undefined,
       amm_vault_address: s.ammVaultAddress ?? undefined,
@@ -166,6 +171,28 @@ async function main() {
     );
   }
   console.log(`      ${raiseCount} projects with raise data`);
+
+  // 1d. curated identity + links. Runs before the market step on purpose: that
+  // step fills socials from DexScreener with `p.website ?? s.website`, so
+  // anything written here is already in place and wins over an aggregator
+  // submission that may be stale or missing. Fields absent from a record stay
+  // absent — upsertProject skips undefined, so this never blanks a column the
+  // automated path filled correctly.
+  console.log("[1d] curated profiles…");
+  let profileFields = 0;
+  for (const p of allProjects()) {
+    const prof = profileFor(p.slug);
+    if (!prof) continue;
+    const written = PROFILE_FIELDS.filter((k) => prof[k] != null);
+    if (!written.length) continue;
+    upsertProject({
+      slug: p.slug, name: p.name,
+      ...Object.fromEntries(written.map((k) => [k, prof[k]])),
+    });
+    profileFields += written.length;
+    console.log(`      ${p.name}: ${written.join(", ")}`);
+  }
+  console.log(`      ${profileFields} curated field(s) applied`);
 
   // 2. market data
   console.log("[2/5] market data…");
@@ -630,6 +657,10 @@ async function main() {
   }
 
   generateObservations();
+
+  const pruned = pruneDeadLinks();
+  if (pruned) console.log(`      ${pruned} dead link(s) cleared`);
+
   console.log("done.");
 }
 
@@ -687,6 +718,38 @@ function generateObservations() {
       ins.run(p.id, ts, "github", "Active development: code pushed within the last 3 days.");
     }
   }
+}
+
+/**
+ * Clear links a PROFILES record marks dead.
+ *
+ * Runs last on purpose. DexScreener and GeckoTerminal both re-supply whatever
+ * the team once submitted to them, so a dead link cleared in step 1d is simply
+ * written back minutes later by step 2 — the aggregator has no idea the invite
+ * has been revoked or the domain dropped. Clearing after every writer has run
+ * is what makes it stick for the rest of the cycle.
+ *
+ * upsertProject cannot express this: it skips nulls by design, which is what
+ * lets a partial record leave good columns alone. Blanking a column therefore
+ * has to be its own statement.
+ */
+function pruneDeadLinks(): number {
+  const d = db();
+  let cleared = 0;
+  for (const p of allProjects()) {
+    const prof = profileFor(p.slug);
+    if (!prof?.dead?.length) continue;
+    for (const col of prof.dead) {
+      // Only report a column that still held something, so a re-run is quiet.
+      const had = (p as unknown as Record<string, unknown>)[col];
+      d.prepare(`UPDATE projects SET ${col} = NULL WHERE slug = ?`).run(p.slug);
+      if (had != null && had !== "") {
+        cleared++;
+        console.log(`      ${p.name}: cleared dead ${col} (${String(had).slice(0, 48)})`);
+      }
+    }
+  }
+  return cleared;
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

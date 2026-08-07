@@ -28,14 +28,15 @@ function Tile({
 /**
  * Liquidity and valuation at a glance.
  *
- * The series here are rebuilt from the candle history rather than from price
- * snapshots: snapshots are written once per ingest run, so they cluster into
- * whichever hours the ingest happened to run, while candles are daily and
- * actually span time. Liquidity has no candle equivalent and so has no series
- * until pool depth is archived per day.
+ * The valuation series here are rebuilt from the candle history rather than
+ * from price snapshots: snapshots are written once per ingest run, so they
+ * cluster into whichever hours the ingest happened to run, while candles are
+ * daily and actually span time. Liquidity has no candle equivalent, so it
+ * comes off `liquidityHistory` — the same rows the treasury cards plot, read
+ * raw because a pool's depth genuinely moves on every read.
  */
 export function MarketDepthPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number }) {
-  const { project: p, latest, candles, quoteSource } = d;
+  const { project: p, latest, candles, quoteSource, liquidityHistory } = d;
 
   /**
    * Jupiter prices tokens that trade only on MetaDAO's own AMM, and it reports
@@ -57,6 +58,9 @@ export function MarketDepthPanel({ d, nowSec }: { d: ProjectDetail; nowSec: numb
   // quote carries no volume — its v is 0 meaning "unknown", not "nothing
   // traded". Left in, it reads as a total collapse in volume every single day.
   const volSeries = candles.filter((c) => c.v > 0).map((c) => ({ ts: c.ts, v: c.v }));
+  const liqSeries = liquidityHistory
+    .map((l) => ({ ts: l.ts, v: l.liquidity_usd }))
+    .filter((r): r is { ts: number; v: number } => r.v != null);
 
   const turnover = latest?.vol24h && latest.liquidity_usd
     ? latest.vol24h / latest.liquidity_usd : null;
@@ -101,18 +105,30 @@ export function MarketDepthPanel({ d, nowSec }: { d: ProjectDetail; nowSec: numb
         <Tile
           label="Liquidity"
           value={fmtUsd(latest?.liquidity_usd)} sub="pool depth, USD"
-        />
+        >
+          <Sparkline values={liqSeries.map((s) => s.v)} color="var(--good)" fallback />
+          <div className="mt-1.5">
+            <DeltaChip
+              pct={changeVsAgo(latest?.liquidity_usd, liqSeries, 7 * DAY, nowSec)}
+              period="7d"
+              reason={latest?.liquidity_usd == null ? "no live depth to compare" : undefined}
+            />
+          </div>
+        </Tile>
 
         <Tile
           label="24h Volume"
           value={fmtUsd(latest?.vol24h)}
           sub={noVolumeNote ?? "traded, USD"}
         >
-          <DeltaChip
-            pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, nowSec)}
-            period="7d"
-            reason={latest?.vol24h == null ? "no live volume to compare" : undefined}
-          />
+          <Sparkline values={volSeries.map((s) => s.v)} color="#9b7ae0" fallback />
+          <div className="mt-1.5">
+            <DeltaChip
+              pct={changeVsAgo(latest?.vol24h, volSeries, 7 * DAY, nowSec)}
+              period="7d"
+              reason={latest?.vol24h == null ? "no live volume to compare" : undefined}
+            />
+          </div>
         </Tile>
 
         <Tile
@@ -137,7 +153,7 @@ export function MarketDepthPanel({ d, nowSec }: { d: ProjectDetail; nowSec: numb
           label="Market Cap"
           value={fmtUsd(latest?.mcap)} sub="circulating supply"
         >
-          <Sparkline values={mcapSeries.map((s) => s.v)} color="#e08a3c" />
+          <Sparkline values={mcapSeries.map((s) => s.v)} color="#e08a3c" fallback />
           <div className="mt-1.5">
             <DeltaChip pct={changeVsAgo(latest?.mcap, mcapSeries, 7 * DAY, nowSec)} period="7d" />
           </div>
@@ -147,7 +163,7 @@ export function MarketDepthPanel({ d, nowSec }: { d: ProjectDetail; nowSec: numb
           label="FDV"
           value={fmtUsd(latest?.fdv)} sub="total supply"
         >
-          <Sparkline values={fdvSeries.map((s) => s.v)} color="var(--accent)" />
+          <Sparkline values={fdvSeries.map((s) => s.v)} color="var(--accent)" fallback />
           <div className="mt-1.5">
             <DeltaChip pct={changeVsAgo(latest?.fdv, fdvSeries, 7 * DAY, nowSec)} period="7d" />
           </div>
