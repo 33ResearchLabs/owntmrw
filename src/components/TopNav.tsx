@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useWallet } from "./wallet";
+import { useSignIn } from "./SignInProvider";
 
 export interface NavItem {
   href: string;
@@ -18,6 +20,8 @@ export interface NavItem {
  */
 export function TopNav({ items }: { items: NavItem[] }) {
   const path = usePathname();
+  const { session } = useWallet();
+  const signIn = useSignIn();
 
   return (
     <nav className="hidden items-center gap-0.5 sm:flex lg:gap-1.5">
@@ -28,6 +32,17 @@ export function TopNav({ items }: { items: NavItem[] }) {
             key={n.href}
             href={n.href}
             aria-current={on ? "page" : undefined}
+            onClick={(e) => {
+              // Signed out and aimed at a gated route: open the dialog instead
+              // of letting the navigation happen, get redirected by the proxy
+              // and land on the login page. The redirect still exists and is
+              // still what protects the route — this just spares the reader a
+              // round trip when they are already here.
+              if (!session && signIn.gated(n.href)) {
+                e.preventDefault();
+                signIn.open(n.href);
+              }
+            }}
             className={`relative rounded-lg px-2.5 py-2 text-[13px] transition-colors duration-150 lg:px-3.5 ${
               on
                 ? "font-semibold text-ink"

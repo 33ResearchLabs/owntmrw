@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "./wallet";
+import { useSignIn } from "./SignInProvider";
 import { fmtUsd, shortAddr } from "@/lib/format";
 
 function WalletGlyph() {
@@ -20,18 +21,11 @@ function WalletGlyph() {
 export function ConnectButton() {
   const w = useWallet();
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  const signIn = async () => {
-    setError(null);
-    const err = await w.login();
-    if (err) return setError(err);
-    // Server components rendered before the cookie existed still hold their
-    // signed-out output, so the cache has to be dropped for the nav and any
-    // gated page to see the session.
-    router.refresh();
-  };
+  // The dialog is mounted once at the root; this only asks for it. Signing in
+  // from the header leaves the reader exactly where they were.
+  const signIn = useSignIn();
 
   const signOut = async () => {
     setOpen(false);
@@ -60,7 +54,7 @@ export function ConnectButton() {
     return (
       <div className="relative">
       <button
-        onClick={() => void signIn()}
+        onClick={() => signIn.open()}
         disabled={w.signingIn}
         className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-white transition-[filter,box-shadow] duration-150 hover:brightness-[1.08] active:brightness-95 disabled:opacity-60 sm:px-4"
         style={{
@@ -71,11 +65,6 @@ export function ConnectButton() {
         <WalletGlyph />
         {w.signingIn ? "Check your wallet…" : stale ? "Wallet changed — sign in" : w.available ? "Sign in" : "Get Phantom"}
       </button>
-      {error && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-bad/40 bg-surface px-3 py-2 text-[11.5px] text-bad shadow-2xl">
-          {error}
-        </div>
-      )}
       </div>
     );
   }
