@@ -330,7 +330,11 @@ export default async function Home() {
         {/* how a score is built, and what it produces */}
         <ResearchSection board={board} />
 
-        {/* banner */}
+        {/* faq */}
+        <FaqSection />
+
+        {/* banner — last on the page, so the closing call to action follows the
+            questions rather than interrupting them */}
         <Link href="/screener" className="hero block px-10 pb-12 pt-10">
           <div className="hero-glow" />
           <h3 className="relative m-0 text-[30px] font-extrabold leading-tight tracking-[-0.02em] text-ink">
@@ -343,9 +347,6 @@ export default async function Home() {
             Explore now
           </span>
         </Link>
-
-        {/* faq */}
-        <FaqSection />
     </div>
   );
 }

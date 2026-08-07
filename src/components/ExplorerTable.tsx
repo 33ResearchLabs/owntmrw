@@ -155,76 +155,82 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
   };
 
   return (
-    <div className="card relative overflow-hidden">
-      {/* Heading inside the container, like the Treasury and Development
-          sections — a title floating above a bordered card read as a caption
-          for the whole page rather than a header for this one table. */}
-      <div className="px-5 pt-5 sm:px-6">
-        <TrendSectionHeader
-          eyebrow="Market Explorer"
-          color="#9b7ae0"
-          title="The most powerful explorer in crypto."
-          subtitle="Ranked by traded volume, market cap, pool depth, treasury and holders. Sort any column."
-          action={<Link href="/screener" className="text-[11px] text-accent hover:underline">full screener →</Link>}
-        />
-      </div>
-      <div className="scroll-x border-t border-grid">
-        <table className="itable text-[13px]">
-          <thead><tr>{COLS.map(th)}</tr></thead>
-          <tbody>
-            {shown.map((r, i) => (
-              <tr key={r.slug}>
-                <td>
-                  <div className="flex items-center gap-3">
-                    {/* Rank follows the sort, so it reads as a position in the
-                        current ranking rather than a fixed project number. */}
-                    <span className="num w-4 shrink-0 text-right text-[12px] text-faint">{i + 1}</span>
-                    <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-accent">
-                      <Logo src={r.image_url} name={r.name} size={22} />
-                      <span className="max-w-[150px] truncate font-medium">{r.name}</span>
-                      {r.symbol && (
-                        <span className="rounded bg-surface2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted">
-                          {r.symbol}
-                        </span>
-                      )}
-                    </Link>
-                  </div>
-                </td>
-                {COLS.slice(1).map((c) => (
-                  <td
-                    key={c.key}
-                    title={shortWindow(r, c)}
-                    className={`${c.kind === "text" ? "max-w-[170px] truncate text-ink2" : "num"} ${
-                      c.align === "right" ? "text-right" : ""
-                    }`}
-                  >
-                    {c.kind === "text"
-                      ? (r[c.key] as string | null) ?? <span className="text-muted">—</span>
-                      : cell(r, c)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <section>
+      {/* Section heading, outside the card and matching Top Movers above it —
+          same size, weight and `mb-4` gap, so the two read as siblings on the
+          page rather than one being a tag and the other a heading. */}
+      <h2 className="mb-4 text-[18px] font-bold">Market Explorer</h2>
 
-      {/* The reference design fades the table into the page rather than ending
-          it on a hard rule. Nothing is withheld by it — the footer link goes to
-          the full screener — so it stays purely decorative and click-through. */}
-      <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-28"
-        style={{ background: "linear-gradient(to top, var(--surface) 22%, transparent)" }}
-        aria-hidden
-      />
-      <div className="relative flex items-center justify-between px-4 py-3">
-        <span className="text-[11.5px] text-faint">
-          Volume summed from daily candles · {rows.length} projects tracked
-        </span>
-        <Link href="/screener" className="text-[12.5px] font-medium text-accent hover:underline">
-          View all →
-        </Link>
+      <div className="card relative overflow-hidden">
+        {/* Title and subtitle stay inside the container, like the Treasury and
+            Development sections. Only the eyebrow moved out: dropping it also
+            drops the dot, since `TrendSectionHeader` renders the pair or
+            neither, which is why `color` goes with it. */}
+        <div className="px-5 pt-5 sm:px-6">
+          <TrendSectionHeader
+            title="The most powerful explorer in crypto."
+            subtitle="Ranked by traded volume, market cap, pool depth, treasury and holders. Sort any column."
+            action={<Link href="/screener" className="text-[11px] text-accent hover:underline">full screener →</Link>}
+          />
+        </div>
+        <div className="scroll-x border-t border-grid">
+          <table className="itable text-[13px]">
+            <thead><tr>{COLS.map(th)}</tr></thead>
+            <tbody>
+              {shown.map((r, i) => (
+                <tr key={r.slug}>
+                  <td>
+                    <div className="flex items-center gap-3">
+                      {/* Rank follows the sort, so it reads as a position in the
+                          current ranking rather than a fixed project number. */}
+                      <span className="num w-4 shrink-0 text-right text-[12px] text-faint">{i + 1}</span>
+                      <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-accent">
+                        <Logo src={r.image_url} name={r.name} size={22} />
+                        <span className="max-w-[150px] truncate font-medium">{r.name}</span>
+                        {r.symbol && (
+                          <span className="rounded bg-surface2 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted">
+                            {r.symbol}
+                          </span>
+                        )}
+                      </Link>
+                    </div>
+                  </td>
+                  {COLS.slice(1).map((c) => (
+                    <td
+                      key={c.key}
+                      title={shortWindow(r, c)}
+                      className={`${c.kind === "text" ? "max-w-[170px] truncate text-ink2" : "num"} ${
+                        c.align === "right" ? "text-right" : ""
+                      }`}
+                    >
+                      {c.kind === "text"
+                        ? (r[c.key] as string | null) ?? <span className="text-muted">—</span>
+                        : cell(r, c)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* The reference design fades the table into the page rather than ending
+            it on a hard rule. Nothing is withheld by it — the footer link goes to
+            the full screener — so it stays purely decorative and click-through. */}
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-28"
+          style={{ background: "linear-gradient(to top, var(--surface) 22%, transparent)" }}
+          aria-hidden
+        />
+        <div className="relative flex items-center justify-between px-4 py-3">
+          <span className="text-[11.5px] text-faint">
+            Volume summed from daily candles · {rows.length} projects tracked
+          </span>
+          <Link href="/screener" className="text-[12.5px] font-medium text-accent hover:underline">
+            View all →
+          </Link>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }

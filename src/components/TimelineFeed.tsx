@@ -133,7 +133,6 @@ export function TimelineFeed({ events }: { events: TimelineEventDTO[] }) {
                     style={{
                       borderColor: `color-mix(in srgb, ${accent} 45%, transparent)`,
                       color: accent,
-                      boxShadow: `0 0 14px -4px ${accent}`,
                     }}
                   >
                     <Icon name={icon} size={13} />

@@ -36,11 +36,16 @@ export function TopNav({ items }: { items: NavItem[] }) {
           >
             {n.label}
             {/* The mark is a real element rather than a border so it can carry a
-                glow without the glow bleeding onto the link's hover surface. */}
+                glow without the glow bleeding onto the link's hover surface.
+
+                The inset runs past the link's own padding — 6px into the label
+                on each side — so the mark sits shorter than the word and stays
+                centred under it. Insetting rather than fixing a width keeps it
+                proportional, so it reads the same under "Home" as "Portfolio". */}
             {on && (
               <span
                 aria-hidden
-                className="absolute inset-x-2.5 bottom-0 h-[2px] rounded-full bg-accent lg:inset-x-3.5"
+                className="absolute inset-x-4 bottom-0 h-[2px] rounded-full bg-accent lg:inset-x-5"
                 style={{ boxShadow: "0 0 9px 0 var(--accent)" }}
               />
             )}
