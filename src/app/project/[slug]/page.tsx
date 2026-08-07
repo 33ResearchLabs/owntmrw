@@ -37,7 +37,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
   const d = await projectDetail(slug);
   if (!d) notFound();
   const {
-    project: p, latest, candles, events, holderHistory, github, observations,
+    project: p, latest, candles, events, holderHistory, github,
     treasuryValue, ath, athTs,
   } = d;
 
@@ -361,29 +361,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       {/* readable brief — everything, in plain rows */}
       <ProjectBrief d={d} />
 
-      {/* research tabs */}
-      <div className="flex gap-5">
-        <div className="min-w-0 flex-1">
-          <Tabs tabs={tabs} />
-        </div>
-        <aside className="hidden w-[300px] shrink-0 xl:block">
-          <div className="space-y-4">
-            {/* <PortfolioCard /> */}
-            {observations.length > 0 && (
-              <div className="card">
-                <div className="border-b border-grid px-4 py-3">
-                  <h3 className="text-[14px] font-semibold">Latest Signals</h3>
-                </div>
-                <ul className="divide-y divide-grid">
-                  {observations.slice(0, 5).map((o, i) => (
-                    <li key={i} className="px-4 py-2.5 text-[12px] leading-relaxed text-ink2">{o.text}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </aside>
-      </div>
+      {/* research tabs — full width. The Latest Signals rail that used to take
+          300px of this row at `xl` is gone, and with it the flex wrapper that
+          existed only to seat the two side by side. */}
+      <Tabs tabs={tabs} />
     </div>
   );
 }

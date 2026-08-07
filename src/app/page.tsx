@@ -32,20 +32,38 @@ export default async function Home() {
   const activity = globalTimeline(6);
   const signals = allObservations(4);
 
+  /*
+   * The section rhythm is one scale applied twice: `space-y` between the main
+   * column's sections, and the same steps on the root gap, so the rail — which
+   * sits below the column until `xl` — is spaced like another section rather
+   * than tucked against the last one. At `xl` that root gap becomes the
+   * horizontal gutter beside the rail, so it resets to its original value.
+   */
   return (
-    <div className="flex flex-col gap-6 xl:flex-row">
-      <div className="min-w-0 flex-1 space-y-8">
+    <div className="flex flex-col gap-10 md:gap-14 lg:gap-16 xl:flex-row xl:gap-6">
+      <div className="min-w-0 flex-1 space-y-10 md:space-y-14 lg:space-y-16">
         {/* hero */}
-        <section className="hero hero-banner px-10 pb-16 pt-12">
+        {/* Padding is deliberately asymmetric — the plate's own vertical wash
+            darkens toward the foot, so an equal `pb` reads as heavier than the
+            `pt` above it. The pair is tuned to land the panel near the height
+            of the Most Traded card beside it rather than overshooting it by a
+            third, which is what the old pt-12/pb-16 did. */}
+        {/* `mb-4` opts this one gap out of the column's section rhythm to match
+            the rail's own `space-y-4`, so the market strip starts level with
+            Live Activity instead of a section-gap below it. It overrides the
+            rhythm rather than fighting it: Tailwind's `space-y-*` sets
+            `margin-block-end` on every child but the last from inside a
+            zero-specificity `:where()`, which any margin utility outranks. */}
+        <section className="hero hero-banner mb-4 px-10 pb-9 pt-8">
           <div className="hero-glow" />
           <h1 className="relative m-0 text-[64px] font-extrabold leading-[1.02] tracking-[-0.03em]">
             Own<br />Tomorrow<span className="text-accent">.</span>
           </h1>
-          <p className="relative mt-6 max-w-[400px] text-[16.5px] leading-relaxed text-ink2">
+          <p className="relative mt-5 max-w-[400px] text-[16.5px] leading-relaxed text-ink2">
             Trade tomorrow&apos;s companies, today.<br />
             The public market for private innovation.
           </p>
-          <div className="relative mt-7 flex flex-wrap gap-3">
+          <div className="relative mt-6 flex flex-wrap gap-3">
             <Link href="/screener" className="btn-primary">Explore markets</Link>
             <Link href="/timeline" className="btn-ghost">
               <span className="text-[11px]">▶</span> Live activity
