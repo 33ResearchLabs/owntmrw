@@ -54,26 +54,43 @@ export function WalletModal({
       onClick={(e) => { if (e.target === ref.current) onClose(); }}
       className="wallet-modal"
     >
-      <div className="w-[min(92vw,400px)] rounded-2xl border border-line bg-surface p-6 shadow-2xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 id="wallet-modal-title" className="text-[17px] font-extrabold tracking-tight">
-              Sign in with your wallet
-            </h2>
-            <p className="mt-1 text-[12px] leading-relaxed text-ink2">
-              No password, no email. Your wallet signature is the login.
-            </p>
-          </div>
+      <div className="w-[min(92vw,392px)] overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl">
+        {/* Crest. The accent glow sits behind the mark rather than washing the
+            whole panel, so the eye lands on the brand and then on the button
+            below it — not on a gradient. */}
+        <div className="relative px-6 pb-5 pt-7 text-center">
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-32"
+            style={{ background: "radial-gradient(60% 100% at 50% 0%, rgba(57,135,229,0.20), transparent 70%)" }}
+            aria-hidden
+          />
           <button
             onClick={onClose}
             aria-label="Close"
-            className="-mr-1 -mt-1 shrink-0 rounded-lg px-2 py-1 text-[16px] leading-none text-muted transition-colors hover:bg-white/5 hover:text-ink"
+            className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-lg text-[15px] leading-none text-muted transition-colors hover:bg-white/8 hover:text-ink"
           >
             ×
           </button>
+
+          <span
+            className="relative mx-auto flex h-11 w-11 items-center justify-center rounded-2xl text-[18px] font-black text-white"
+            style={{
+              background: "linear-gradient(180deg, var(--accent-hi), var(--accent))",
+              boxShadow: "0 10px 24px -10px rgba(57,135,229,0.9)",
+            }}
+            aria-hidden
+          >
+            ∞
+          </span>
+          <h2 id="wallet-modal-title" className="relative mt-3.5 text-[18px] font-extrabold tracking-tight">
+            Sign in with your wallet
+          </h2>
+          <p className="relative mx-auto mt-1.5 max-w-[280px] text-[12px] leading-relaxed text-ink2">
+            No password, no email. Your wallet signature is the login.
+          </p>
         </div>
 
-        <div className="mt-5">
+        <div className="border-t border-grid px-6 pb-6 pt-5">
           <SignInContent
             compact
             onDone={() => {

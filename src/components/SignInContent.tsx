@@ -26,7 +26,13 @@ const GATED: { icon: IconName; color: string; name: string; what: string }[] = [
   { icon: "pie", color: "#e08a3c", name: "Portfolio", what: "Your holdings against what each project raised" },
 ];
 
+/**
+ * The modal panel is 392px wide, where the full labels wrap to a second line.
+ * Shorter ones there keep the sequence on one row; the page has the room for
+ * the fuller wording.
+ */
 const STEPS = ["Connect Phantom", "Sign a message", "You're in"];
+const STEPS_COMPACT = ["Connect", "Sign", "You're in"];
 
 export function SignInContent({
   onDone,
@@ -60,8 +66,8 @@ export function SignInContent({
       {/* Wraps rather than stretches: three nowrap labels on one row are wider
           than a 390px viewport, and a step list that pushes the page sideways
           is worse than one that takes two lines. */}
-      <ol className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        {STEPS.map((s, i) => (
+      <ol className={`flex flex-wrap items-center gap-x-4 gap-y-2 ${compact ? "justify-center" : ""}`}>
+        {(compact ? STEPS_COMPACT : STEPS).map((s, i) => (
           <li key={s} className="flex items-center gap-2">
             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line2 text-[10px] font-bold text-ink2">
               {i + 1}
@@ -80,8 +86,15 @@ export function SignInContent({
         {signingIn ? "Check your wallet…" : available ? "Connect wallet" : "Install Phantom"}
       </button>
 
-      <p className="mt-2.5 text-center text-[11px] leading-relaxed text-faint">
-        Signature only. It approves no transaction and cannot move funds.
+      {/* The scope note carries a lock because it is the one line on this
+          screen a hurried reader most needs to have seen. */}
+      <p className="mt-2.5 flex items-center justify-center gap-1.5 text-[11px] leading-relaxed text-faint">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden>
+          <rect x="4" y="10.5" width="16" height="10" rx="2" />
+          <path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" />
+        </svg>
+        Signature only — no transaction, no fund access.
       </p>
 
       {error && (
