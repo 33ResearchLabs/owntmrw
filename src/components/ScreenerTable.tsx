@@ -92,7 +92,12 @@ function Stat({ label, value, icon }: { label: string; value: string; icon: Icon
         <Icon name={icon} size={13} />
         <span className="text-[10.5px] uppercase tracking-[0.09em]">{label}</span>
       </div>
-      <div className="num mt-2.5 text-[22px] font-extrabold leading-none tracking-tight text-ink">
+      {/* Indented onto the label's text edge rather than the card's, so the
+          figure reads as belonging to the words above it and not to the icon.
+          21px is the icon's own 13px box plus the row's gap-2 — the two values
+          the label is already offset by, so the pair stays flush if either
+          changes only by changing them here too. */}
+      <div className="num mt-2.5 pl-[21px] text-[22px] font-extrabold leading-none tracking-tight text-ink">
         {value}
       </div>
     </div>
@@ -217,8 +222,11 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
 
     <div className="card">
       <div className="flex flex-wrap items-center gap-2 border-b border-grid px-4 py-3">
+        {/* Chips are capitalised in CSS rather than in the string: `s` is the
+            status value the filter compares against, so the label reads as a
+            title without the data behind it changing shape. */}
         {statuses.map((s) => (
-          <button key={s} onClick={() => setStatusFilter(s)} className="chip" data-on={statusFilter === s}>
+          <button key={s} onClick={() => setStatusFilter(s)} className="chip capitalize" data-on={statusFilter === s}>
             {s === "all" ? "All projects" : s}
           </button>
         ))}

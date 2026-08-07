@@ -77,19 +77,37 @@ export default async function Home() {
      * thirds of the page to leave room for a column that had already stopped.
      */
     <div className="space-y-8">
-      <div className="flex flex-col gap-6 xl:flex-row">
-        <div className="min-w-0 flex-1 space-y-8">
+      {/*
+       * The section rhythm is one scale applied twice: `space-y` between this
+       * column's sections, and the same steps on the gap around it, so the rail
+       * — which sits below the column until `xl` — is spaced like another
+       * section rather than tucked against the last one. At `xl` that gap
+       * becomes the horizontal gutter beside the rail, so it resets there.
+       */}
+      <div className="flex flex-col gap-10 md:gap-14 lg:gap-16 xl:flex-row xl:gap-6">
+        <div className="min-w-0 flex-1 space-y-10 md:space-y-14 lg:space-y-16">
           {/* hero */}
-          <section className="hero hero-banner px-10 pb-16 pt-12">
+          {/* Padding is deliberately asymmetric — the plate's own vertical wash
+              darkens toward the foot, so an equal `pb` reads as heavier than
+              the `pt` above it. The pair is tuned to land the panel near the
+              height of the Most Traded card beside it rather than overshooting
+              it by a third, which is what the old pt-12/pb-16 did. */}
+          {/* `mb-4` opts this one gap out of the column's section rhythm to
+              match the rail's own `space-y-4`, so the market strip starts level
+              with Live Activity instead of a section-gap below it. It overrides
+              the rhythm rather than fighting it: Tailwind's `space-y-*` sets
+              `margin-block-end` on every child but the last from inside a
+              zero-specificity `:where()`, which any margin utility outranks. */}
+          <section className="hero hero-banner mb-4 px-10 pb-9 pt-8">
             <div className="hero-glow" />
             <h1 className="relative m-0 text-[64px] font-extrabold leading-[1.02] tracking-[-0.03em]">
               Own<br />Tomorrow<span className="text-accent">.</span>
             </h1>
-            <p className="relative mt-6 max-w-[400px] text-[16.5px] leading-relaxed text-ink2">
+            <p className="relative mt-5 max-w-[400px] text-[16.5px] leading-relaxed text-ink2">
               Trade tomorrow&apos;s companies, today.<br />
               The public market for private innovation.
             </p>
-            <div className="relative mt-7 flex flex-wrap gap-3">
+            <div className="relative mt-6 flex flex-wrap gap-3">
               <Link href="/screener" className="btn-primary">Explore markets</Link>
               <Link href="/timeline" className="btn-ghost">
                 <span className="text-[11px]">▶</span> Live activity
@@ -303,76 +321,6 @@ export default async function Home() {
 
         {/* faq */}
         <FaqSection />
-      </div>
-
-      {/* right rail — portfolio, trending, activity */}
-      <aside className="w-full shrink-0 space-y-4 xl:w-[340px]">
-        <PortfolioCard hideWhenDisconnected />
-
-        {trending.length > 0 && (
-          <div className="card px-5 pb-2.5 pt-4">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[14.5px] font-bold">Most Traded</span>
-              <Link href="/screener" className="text-[12px] text-faint hover:text-ink2">View all</Link>
-            </div>
-            {trending.map((r, i) => (
-              <Link
-                key={r.slug}
-                href={`/project/${r.slug}#trade`}
-                className="flex items-center gap-3 border-t border-grid py-2.5"
-              >
-                <span className="num w-3 text-[12.5px] text-faint">{i + 1}</span>
-                <Logo src={r.image_url} name={r.name} size={32} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-semibold">{r.name}</span>
-                  <span className="num block text-[11px] text-faint">{fmtUsd(r.vol24h)} 24h</span>
-                </span>
-                <span className={`num text-[12.5px] font-bold ${(r.change_24h ?? 0) >= 0 ? "text-good" : "text-bad"}`}>
-                  {fmtPct(r.change_24h)}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {activity.length > 0 && (
-          <div className="card px-5 pb-2.5 pt-4">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="flex items-center gap-2 text-[14.5px] font-bold">
-                <span className="h-[7px] w-[7px] rounded-full bg-good pulse" />
-                Live Activity
-              </span>
-              <Link href="/timeline" className="text-[12px] text-faint hover:text-ink2">View all</Link>
-            </div>
-            {activity.map((e, i) => (
-              <Link key={i} href={`/project/${e.slug}`} className="flex items-center gap-3 border-t border-grid py-2.5">
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12.5px] font-semibold">{e.title}</span>
-                  <span className="block text-[11px] text-faint">{e.name} · {timeAgo(e.ts)}</span>
-                </span>
-                <span className="shrink-0 rounded-md bg-surface2 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted">
-                  {e.type.replace(/_/g, " ")}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {signals.length > 0 && (
-          <div className="card px-5 pb-2.5 pt-4">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[14.5px] font-bold">Signals</span>
-              <Link href="/observations" className="text-[12px] text-faint hover:text-ink2">View all</Link>
-            </div>
-            {signals.map((o, i) => (
-              <div key={i} className="border-t border-grid py-2.5 text-[12px] leading-relaxed text-ink2">
-                {o.name && <span className="font-semibold text-ink">{o.name} · </span>}
-                {o.text}
-              </div>
-            ))}
-          </div>
-        )}
-      </aside>
     </div>
   );
 }

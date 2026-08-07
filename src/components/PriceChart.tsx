@@ -13,6 +13,7 @@ import {
 } from "@/lib/candles";
 import { DeltaChip } from "@/components/viz";
 import { Delta, Logo } from "@/components/ui";
+import { fmtNum, fmtUsd } from "@/lib/format";
 
 export type { Candle };
 export interface ChartEvent {
@@ -306,13 +307,23 @@ function PeriodStat({ label, value }: { label: string; value: number | null | un
   );
 }
 
+/** One figure in the header's market pair. */
+function MarketStat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="whitespace-nowrap text-[11px] text-muted">{label}</div>
+      <div className="num mt-1 truncate text-[13px] font-medium text-ink">{value}</div>
+    </div>
+  );
+}
+
 /** What the y-axis measures. Market cap is price scaled by circulating supply. */
 type Metric = "price" | "mcap";
 
 export function PriceChart({
   candles, events = [], height = CHART_HEIGHT, slug, circulatingSupply = null,
   name, symbol, imageUrl = null,
-  change24h = null,
+  volume24h = null, change24h = null,
   periods = null,
 }: {
   candles: Candle[];
@@ -331,14 +342,15 @@ export function PriceChart({
   /** Ticker shown in the pair label and against the supply figure. */
   symbol: string;
   imageUrl?: string | null;
-  /* Accepted but no longer rendered: the header's market row (market cap,
-     24h volume, circulating supply, last updated) has been removed. Kept on
-     the type so existing call sites keep type-checking unchanged. */
+  /* Accepted but not rendered: market cap and last updated were dropped from
+     the header and were not restored with the other two. Kept on the type so
+     existing call sites keep type-checking unchanged. */
   marketCap?: number | null;
+  lastUpdated?: number | null;
+  /** Shown in the header's market pair, beside circulating supply. */
   volume24h?: number | null;
   /** 24h change for the footer strip. */
   change24h?: number | null;
-  lastUpdated?: number | null;
   /** 7D/30D/90D/YTD/all-time for the rest of the footer strip. */
   periods?: { d7: number | null; d30: number | null; d90: number | null; ytd: number | null; allTime: number | null } | null;
 }) {
@@ -855,10 +867,12 @@ export function PriceChart({
           : undefined
       }
     >
-      {/* Identity and price. The market figures that used to sit opposite have
-          been removed, so this is a single full-width block rather than one
-          half of a two-column split. */}
-      <div className="flex flex-col gap-3 border-b border-line pb-3">
+      {/* Identity on the left, the market pair opposite it on the right. The
+          split lands at `lg` rather than the `2xl` the four-figure row needed:
+          two stats ask for roughly a third of that width, so there is room for
+          both long before a wide desktop. Below it the pair drops beneath the
+          identity rather than squeezing the price into a wrap. */}
+      <div className="flex flex-col gap-3 border-b border-line pb-3 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <Logo src={imageUrl} name={name} size={38} />
           <div className="min-w-0">
@@ -903,6 +917,17 @@ export function PriceChart({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Market pair. `flex-wrap` rather than a fixed column count so the two
+            stay side by side wherever they fit and wrap as a unit — still
+            aligned to the same left edge — only when they genuinely cannot. */}
+        <div className="flex shrink-0 flex-wrap gap-x-7 gap-y-3">
+          <MarketStat label="Volume (24h)" value={volume24h == null ? "—" : fmtUsd(volume24h, { compact: true })} />
+          <MarketStat
+            label="Circulating Supply"
+            value={circulatingSupply == null ? "—" : `${fmtNum(circulatingSupply)} ${symbol}`}
+          />
         </div>
       </div>
 
