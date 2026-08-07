@@ -191,8 +191,29 @@ function migrate(d: Database.Database) {
 
   CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 
+  /*
+   * Wallet sign-in. A nonce is issued per login attempt, consumed exactly
+   * once, and kept only long enough to be signed — storing it server-side is
+   * what stops a captured signature being replayed, which is the whole point
+   * of the challenge.
+   */
+  CREATE TABLE IF NOT EXISTS auth_nonces (
+    nonce TEXT PRIMARY KEY,
+    address TEXT NOT NULL,
+    issued_ts INTEGER NOT NULL,
+    used_ts INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    address TEXT NOT NULL,
+    created_ts INTEGER NOT NULL,
+    expires_ts INTEGER NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_snap_proj ON price_snapshots(project_id, ts DESC);
   CREATE INDEX IF NOT EXISTS idx_events_proj ON events(project_id, ts DESC);
+  CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_ts);
   `);
 
   // additive column migrations for databases created by an earlier schema

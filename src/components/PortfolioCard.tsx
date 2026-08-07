@@ -30,7 +30,7 @@ export function PortfolioCard({
 
   // After the hooks, never before — an early return above them would change
   // the hook order between connected and disconnected renders.
-  if (hideWhenDisconnected && !w.address) return null;
+  if (hideWhenDisconnected && !w.session) return null;
 
   return (
     <div className="card p-5">
@@ -46,28 +46,28 @@ export function PortfolioCard({
       </div>
 
       <div className="num mt-1.5 text-[28px] font-extrabold tracking-tight">
-        {w.address
+        {w.session
           ? hidden ? "••••••" : total != null ? fmtUsd(total) : "…"
           : <span className="text-faint">—</span>}
       </div>
       <div className="mt-1 text-[12px] text-muted">
-        {w.address ? "USDC in wallet" : "No wallet connected"}
+        {w.session ? "USDC in wallet" : "No wallet connected"}
       </div>
 
       <div className="mt-4 flex justify-between border-t border-grid pt-4">
         {([
-          ["USDC", w.address && w.usdcBalance != null ? fmtUsd(w.usdcBalance) : "—"],
-          ["SOL", w.address && w.solBalance != null ? w.solBalance.toFixed(3) : "—"],
-          ["Positions", w.address ? "soon" : "—"],
+          ["USDC", w.session && w.usdcBalance != null ? fmtUsd(w.usdcBalance) : "—"],
+          ["SOL", w.session && w.solBalance != null ? w.solBalance.toFixed(3) : "—"],
+          ["Positions", w.session ? "soon" : "—"],
         ] as const).map(([k, v]) => (
           <div key={k}>
             <div className="text-[10.5px] uppercase tracking-[0.07em] text-faint">{k}</div>
-            <div className="num mt-0.5 text-[13.5px] font-bold">{hidden && w.address ? "•••" : v}</div>
+            <div className="num mt-0.5 text-[13.5px] font-bold">{hidden && w.session ? "•••" : v}</div>
           </div>
         ))}
       </div>
 
-      {!w.address && (
+      {!w.session && (
         <button
           onClick={() => void w.connect()}
           disabled={w.connecting}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useWallet } from "./wallet";
 import { fmtUsd, shortAddr } from "@/lib/format";
 
@@ -19,12 +20,48 @@ function WalletGlyph() {
 export function ConnectButton() {
   const w = useWallet();
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-  if (!w.address) {
+  const signIn = async () => {
+    setError(null);
+    const err = await w.login();
+    if (err) return setError(err);
+    // Server components rendered before the cookie existed still hold their
+    // signed-out output, so the cache has to be dropped for the nav and any
+    // gated page to see the session.
+    router.refresh();
+  };
+
+  const signOut = async () => {
+    setOpen(false);
+    await w.logout();
+    await w.disconnect();
+    router.refresh();
+  };
+
+  /*
+   * Gated on the session, not on `address`.
+   *
+   * Phantom reconnects silently on mount for a site it already trusts, so
+   * `address` goes true with nobody having signed in — the header was showing
+   * a connected wallet, balances and all, for a visitor the server had never
+   * authenticated. A connected wallet is not a signed-in one.
+   */
+  /*
+   * A session names one wallet. If the user switches accounts in Phantom
+   * afterwards, `address` moves and `session` does not — leaving the header
+   * showing a signed-in address the wallet is no longer on. Treat that as
+   * signed out, so the only way forward is to sign the new key in.
+   */
+  const stale = w.session != null && w.address != null && w.address !== w.session;
+
+  if (!w.session || stale) {
     return (
+      <div className="relative">
       <button
-        onClick={() => void w.connect()}
-        disabled={w.connecting}
+        onClick={() => void signIn()}
+        disabled={w.signingIn}
         className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-white transition-[filter,box-shadow] duration-150 hover:brightness-[1.08] active:brightness-95 disabled:opacity-60 sm:px-4"
         style={{
           background: "linear-gradient(180deg, var(--accent-hi) 0%, var(--accent) 100%)",
@@ -32,8 +69,14 @@ export function ConnectButton() {
         }}
       >
         <WalletGlyph />
-        {w.connecting ? "Connecting…" : w.available ? "Connect wallet" : "Get Phantom"}
+        {w.signingIn ? "Check your wallet…" : stale ? "Wallet changed — sign in" : w.available ? "Sign in" : "Get Phantom"}
       </button>
+      {error && (
+        <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-xl border border-bad/40 bg-surface px-3 py-2 text-[11.5px] text-bad shadow-2xl">
+          {error}
+        </div>
+      )}
+      </div>
     );
   }
 
@@ -44,7 +87,7 @@ export function ConnectButton() {
         className="flex items-center gap-2 rounded-xl border border-line2 bg-white/5 px-3 py-2.5 text-[12.5px] font-semibold transition-colors duration-150 hover:bg-white/10"
       >
         <span className="h-1.5 w-1.5 rounded-full bg-good" />
-        <span className="num">{shortAddr(w.address)}</span>
+        <span className="num">{shortAddr(w.session)}</span>
         {w.usdcBalance != null && (
           <span className="num text-muted">{fmtUsd(w.usdcBalance)}</span>
         )}
@@ -52,8 +95,8 @@ export function ConnectButton() {
       {open && (
         <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-line bg-surface shadow-2xl">
           <div className="border-b border-grid px-4 py-3">
-            <div className="text-[10.5px] uppercase tracking-[0.08em] text-faint">Connected</div>
-            <div className="num mt-0.5 break-all text-[12px] text-ink2">{w.address}</div>
+            <div className="text-[10.5px] uppercase tracking-[0.08em] text-faint">Signed in</div>
+            <div className="num mt-0.5 break-all text-[12px] text-ink2">{w.session}</div>
           </div>
           <div className="flex justify-between px-4 py-3 text-[12.5px]">
             <span className="text-muted">USDC</span>
@@ -64,10 +107,10 @@ export function ConnectButton() {
             <span className="num font-semibold">{w.solBalance != null ? w.solBalance.toFixed(3) : "—"}</span>
           </div>
           <button
-            onClick={() => { setOpen(false); void w.disconnect(); }}
+            onClick={() => void signOut()}
             className="w-full border-t border-grid px-4 py-2.5 text-left text-[12.5px] text-bad transition-colors hover:bg-white/5"
           >
-            Disconnect
+            Sign out
           </button>
         </div>
       )}

@@ -1,10 +1,15 @@
+import { requireSession } from "@/lib/session";
 import { allObservations } from "@/lib/queries";
 import { fmtDate, timeAgo } from "@/lib/format";
 import { SignalsFeed } from "@/components/SignalsFeed";
 
 export const dynamic = "force-dynamic";
 
-export default function ObservationsPage() {
+export default async function ObservationsPage() {
+  // The real gate. `proxy.ts` only saw that a cookie existed; this is where
+  // a forged or expired one is turned away.
+  await requireSession("/observations");
+
   const obs = allObservations(150);
 
   // The clock is read once, here. This page is force-dynamic and renders per

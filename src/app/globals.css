@@ -316,3 +316,41 @@ a { color: inherit; text-decoration: none; }
 
 @keyframes pulseDot { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
 .pulse { animation: pulseDot 2s infinite; }
+
+/* ---------- token ticker ---------- */
+
+/*
+ * The track holds two identical copies of the token list and slides exactly
+ * half its own width. At the moment the first copy leaves the frame the second
+ * is sitting precisely where the first began, so the loop restarts on an
+ * identical pixel. Any other distance leaves a visible jump.
+ */
+@keyframes tickerScroll {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: tickerScroll linear infinite;
+  will-change: transform;
+}
+
+/* Pausing on hover is what makes the cards clickable — a target moving under
+   the cursor cannot be hit. focus-within does the same for keyboard users. */
+.ticker:hover .ticker-track,
+.ticker:focus-within .ticker-track { animation-play-state: paused; }
+
+/* A permanently moving strip is a problem for vestibular disorders, so the
+   motion stops and the strip becomes an ordinary scroller. The duplicate copy
+   exists only to serve the loop, so it goes with it. */
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation: none; }
+  .ticker-dup { display: none; }
+  .ticker {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .ticker::-webkit-scrollbar { display: none; }
+}
