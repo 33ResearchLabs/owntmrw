@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "./wallet";
-import { WalletModal } from "./WalletModal";
+import { useSignIn } from "./SignInProvider";
 import { fmtUsd, shortAddr } from "@/lib/format";
 
 function WalletGlyph() {
@@ -23,10 +23,9 @@ export function ConnectButton() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
-  // Opens the modal instead of firing the wallet call from here, so signing in
-  // from the header does not throw the reader off whatever they were reading.
-  // `SignInContent` owns the login call and the cache refresh.
-  const [modal, setModal] = useState(false);
+  // The dialog is mounted once at the root; this only asks for it. Signing in
+  // from the header leaves the reader exactly where they were.
+  const signIn = useSignIn();
 
   const signOut = async () => {
     setOpen(false);
@@ -55,7 +54,7 @@ export function ConnectButton() {
     return (
       <div className="relative">
       <button
-        onClick={() => setModal(true)}
+        onClick={() => signIn.open()}
         disabled={w.signingIn}
         className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-white transition-[filter,box-shadow] duration-150 hover:brightness-[1.08] active:brightness-95 disabled:opacity-60 sm:px-4"
         style={{
@@ -66,7 +65,6 @@ export function ConnectButton() {
         <WalletGlyph />
         {w.signingIn ? "Check your wallet…" : stale ? "Wallet changed — sign in" : w.available ? "Sign in" : "Get Phantom"}
       </button>
-      <WalletModal open={modal} onClose={() => setModal(false)} />
       </div>
     );
   }

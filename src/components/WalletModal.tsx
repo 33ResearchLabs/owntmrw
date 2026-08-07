@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { SignInContent } from "./SignInContent";
 
 /**
@@ -17,8 +18,16 @@ import { SignInContent } from "./SignInContent";
  * and the pages themselves still call `requireSession`. Nothing here is
  * load-bearing for security — closing it grants nothing.
  */
-export function WalletModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function WalletModal({
+  open, onClose, next = null,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Where the click was aimed before it was intercepted, if anywhere. */
+  next?: string | null;
+}) {
   const ref = useRef<HTMLDialogElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const d = ref.current;
@@ -65,7 +74,15 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
         </div>
 
         <div className="mt-5">
-          <SignInContent onDone={onClose} compact />
+          <SignInContent
+            compact
+            onDone={() => {
+              onClose();
+              // Opened from a gated link: finish the journey it started.
+              // Opened from the header: stay exactly where the reader was.
+              if (next) router.push(next);
+            }}
+          />
         </div>
       </div>
     </dialog>

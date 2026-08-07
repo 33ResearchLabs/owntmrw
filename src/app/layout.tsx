@@ -6,6 +6,7 @@ import { GlobalSearch } from "@/components/GlobalSearch";
 import { SideRail } from "@/components/SideRail";
 import { WalletProvider } from "@/components/wallet";
 import { ConnectButton } from "@/components/ConnectButton";
+import { SignInProvider } from "@/components/SignInProvider";
 import { TopNav } from "@/components/TopNav";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
 
@@ -36,6 +37,7 @@ export default function RootLayout({
     <html lang="en" className={`${inter.className} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <WalletProvider>
+        <SignInProvider>
         <AnnouncementBar />
         {/* Opaque, not just the bar: the padding around the bar is a gap the
             page scrolls through, so a transparent wrapper leaks content above
@@ -89,6 +91,7 @@ export default function RootLayout({
             Figures are indexed from public sources and may lag. Not financial advice.
           </div>
         </footer>
+        </SignInProvider>
         </WalletProvider>
       </body>
     </html>
