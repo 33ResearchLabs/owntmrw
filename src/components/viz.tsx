@@ -216,7 +216,7 @@ export function Sparkline({
  * rather than per card, so a reader lands on a heading before the numbers.
  */
 export function TrendSectionHeader({
-  eyebrow, color, title, subtitle, action,
+  eyebrow, color, title, subtitle, action, divider = false,
 }: {
   /** Omit to drop the small uppercase tag + dot above the title. */
   eyebrow?: string;
@@ -224,9 +224,21 @@ export function TrendSectionHeader({
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
+  /**
+   * Rule between the header and what it introduces. For a header sitting
+   * inside a card, where the title otherwise runs straight into the first row
+   * of content with nothing marking where one ends and the other begins.
+   *
+   * Inset to the card's padding rather than bled to its edges, because the
+   * content underneath is inset too — a full-width rule under an inset heading
+   * reads as the card being cut in half.
+   */
+  divider?: boolean;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div className={`flex flex-wrap items-start justify-between gap-3 ${
+      divider ? "mb-5 border-b border-grid pb-4" : "mb-4"
+    }`}>
       <div>
         {eyebrow && (
           <div
