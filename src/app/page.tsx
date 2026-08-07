@@ -8,6 +8,7 @@ import { scoreboard } from "@/lib/scoreboard";
 import { PerformanceSection, TreasurySection, DevelopmentSection } from "@/components/HomeSections";
 import { homeAggregates } from "@/lib/aggregates";
 import { PortfolioCard } from "@/components/PortfolioCard";
+import { FaqSection } from "@/components/FaqSection";
 import { Logo } from "@/components/ui";
 import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 
@@ -299,6 +300,79 @@ export default async function Home() {
             Explore now
           </span>
         </Link>
+
+        {/* faq */}
+        <FaqSection />
+      </div>
+
+      {/* right rail — portfolio, trending, activity */}
+      <aside className="w-full shrink-0 space-y-4 xl:w-[340px]">
+        <PortfolioCard hideWhenDisconnected />
+
+        {trending.length > 0 && (
+          <div className="card px-5 pb-2.5 pt-4">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[14.5px] font-bold">Most Traded</span>
+              <Link href="/screener" className="text-[12px] text-faint hover:text-ink2">View all</Link>
+            </div>
+            {trending.map((r, i) => (
+              <Link
+                key={r.slug}
+                href={`/project/${r.slug}#trade`}
+                className="flex items-center gap-3 border-t border-grid py-2.5"
+              >
+                <span className="num w-3 text-[12.5px] text-faint">{i + 1}</span>
+                <Logo src={r.image_url} name={r.name} size={32} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold">{r.name}</span>
+                  <span className="num block text-[11px] text-faint">{fmtUsd(r.vol24h)} 24h</span>
+                </span>
+                <span className={`num text-[12.5px] font-bold ${(r.change_24h ?? 0) >= 0 ? "text-good" : "text-bad"}`}>
+                  {fmtPct(r.change_24h)}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {activity.length > 0 && (
+          <div className="card px-5 pb-2.5 pt-4">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-2 text-[14.5px] font-bold">
+                <span className="h-[7px] w-[7px] rounded-full bg-good pulse" />
+                Live Activity
+              </span>
+              <Link href="/timeline" className="text-[12px] text-faint hover:text-ink2">View all</Link>
+            </div>
+            {activity.map((e, i) => (
+              <Link key={i} href={`/project/${e.slug}`} className="flex items-center gap-3 border-t border-grid py-2.5">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px] font-semibold">{e.title}</span>
+                  <span className="block text-[11px] text-faint">{e.name} · {timeAgo(e.ts)}</span>
+                </span>
+                <span className="shrink-0 rounded-md bg-surface2 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-muted">
+                  {e.type.replace(/_/g, " ")}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {signals.length > 0 && (
+          <div className="card px-5 pb-2.5 pt-4">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-[14.5px] font-bold">Signals</span>
+              <Link href="/observations" className="text-[12px] text-faint hover:text-ink2">View all</Link>
+            </div>
+            {signals.map((o, i) => (
+              <div key={i} className="border-t border-grid py-2.5 text-[12px] leading-relaxed text-ink2">
+                {o.name && <span className="font-semibold text-ink">{o.name} · </span>}
+                {o.text}
+              </div>
+            ))}
+          </div>
+        )}
+      </aside>
     </div>
   );
 }

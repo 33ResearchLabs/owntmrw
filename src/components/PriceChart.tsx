@@ -13,7 +13,6 @@ import {
 } from "@/lib/candles";
 import { DeltaChip } from "@/components/viz";
 import { Delta, Logo } from "@/components/ui";
-import { fmtNum, fmtUsd } from "@/lib/format";
 
 export type { Candle };
 export interface ChartEvent {
@@ -114,18 +113,6 @@ function expandedPlotHeight(): number {
   const CHROME_PX = 330;
   const MIN_PLOT_PX = 260;
   return Math.max(MIN_PLOT_PX, window.innerHeight - CHROME_PX);
-}
-
-/** "Aug 6, 2026 14:30" in UTC, for the header's freshness stamp. */
-function fmtUtcStamp(ts: number): string {
-  const d = new Date(ts * 1000);
-  const date = d.toLocaleDateString("en-US", {
-    month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
-  });
-  const time = d.toLocaleTimeString("en-US", {
-    hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC",
-  });
-  return `${date} ${time}`;
 }
 
 /** Compact span for the header, e.g. 5400s → "1h", 950400s → "11d". */
@@ -302,16 +289,6 @@ function SegButton({
   );
 }
 
-/** One figure in the header's market row. */
-function MarketStat({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="min-w-0">
-      <div className="whitespace-nowrap text-[11px] text-muted">{label}</div>
-      <div className="num mt-1 truncate text-[13px] font-medium text-ink">{value}</div>
-    </div>
-  );
-}
-
 /**
  * One cell of the footer period strip.
  *
@@ -335,7 +312,7 @@ type Metric = "price" | "mcap";
 export function PriceChart({
   candles, events = [], height = CHART_HEIGHT, slug, circulatingSupply = null,
   name, symbol, imageUrl = null,
-  marketCap = null, volume24h = null, change24h = null, lastUpdated = null,
+  change24h = null,
   periods = null,
 }: {
   candles: Candle[];
@@ -354,11 +331,13 @@ export function PriceChart({
   /** Ticker shown in the pair label and against the supply figure. */
   symbol: string;
   imageUrl?: string | null;
+  /* Accepted but no longer rendered: the header's market row (market cap,
+     24h volume, circulating supply, last updated) has been removed. Kept on
+     the type so existing call sites keep type-checking unchanged. */
   marketCap?: number | null;
   volume24h?: number | null;
   /** 24h change for the footer strip. */
   change24h?: number | null;
-  /** Unix seconds of the newest snapshot behind these figures. */
   lastUpdated?: number | null;
   /** 7D/30D/90D/YTD/all-time for the rest of the footer strip. */
   periods?: { d7: number | null; d30: number | null; d90: number | null; ytd: number | null; allTime: number | null } | null;
@@ -876,13 +855,10 @@ export function PriceChart({
           : undefined
       }
     >
-      {/* Identity, price and the market row. Stacks on narrow screens and only
-          splits into two columns once there is width for both to breathe. */}
-      {/* Identity and market figures sit side by side only once the card is wide
-          enough for both. Below that they stack, which is what keeps the pair,
-          price and change on a single line at ordinary desktop widths — the
-          alternative was a two-column split that crushed the price into a wrap. */}
-      <div className="flex flex-col gap-3 border-b border-line pb-3 2xl:flex-row 2xl:items-start 2xl:justify-between 2xl:gap-8">
+      {/* Identity and price. The market figures that used to sit opposite have
+          been removed, so this is a single full-width block rather than one
+          half of a two-column split. */}
+      <div className="flex flex-col gap-3 border-b border-line pb-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <Logo src={imageUrl} name={name} size={38} />
           <div className="min-w-0">
@@ -927,27 +903,6 @@ export function PriceChart({
               </div>
             )}
           </div>
-        </div>
-
-        {/* Market row. Two columns on a phone, three once there is room, and a
-            single line only on a genuinely wide desktop — flattening it earlier
-            eats the width the pair/price/change row needs to stay on one line. */}
-        <div className="grid shrink-0 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 2xl:flex 2xl:items-start 2xl:gap-7">
-          <MarketStat label="Market Cap" value={marketCap == null ? "—" : fmtUsd(marketCap, { compact: true })} />
-          <MarketStat label="Volume (24h)" value={volume24h == null ? "—" : fmtUsd(volume24h, { compact: true })} />
-          <MarketStat
-            label="Circulating Supply"
-            value={circulatingSupply == null ? "—" : `${fmtNum(circulatingSupply)} ${symbol}`}
-          />
-          <MarketStat
-            label="Last updated"
-            value={
-              // Date and time are formatted separately and joined with a space:
-              // asking toLocaleString for both yields "Aug 6, 2026, 00:00", and
-              // the second comma reads as a typo.
-              lastUpdated == null ? "—" : `${fmtUtcStamp(lastUpdated)} (UTC)`
-            }
-          />
         </div>
       </div>
 

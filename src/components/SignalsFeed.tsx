@@ -152,7 +152,7 @@ export function SignalsFeed({
     <div className="space-y-5">
       {/* Summary. One card per family actually present, plus the total — a
           "Risk 0" tile for a family the ingest never emits is noise, not data. */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           label="Total Signals"
           value={String(signals.length)}
@@ -174,7 +174,7 @@ export function SignalsFeed({
             />
           );
         })}
-      </div>
+      </div> */}
 
       {/* Toolbar. Chips scroll rather than wrap so the row keeps its shape. */}
       <div className="rounded-2xl border border-line bg-surface2/30 p-2.5">

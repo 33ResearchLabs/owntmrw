@@ -27,16 +27,22 @@ export function AnnouncementBar() {
           {/* Ellipsises on a phone, wraps rather than overflows once there is
               room for a second line, and sits on one line on a desktop. */}
           <span className="min-w-0 truncate text-ink md:whitespace-normal">
-            OwnTMRW delivers institutional-grade intelligence. Analyze every project through
-            holders, treasury, development and performance—all from a
-            single workspace.
+            <span className="rounded border border-zinc-600 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
+              NEW
+            </span>{" "}
+            OwnTMRW delivers institutional-grade intelligence. Analyze every
+            project through holders, treasury, development and performance—all
+            from a single workspace.
           </span>
-          <Link
+          <span className="ml-1 cursor-pointer font-medium text-yellow-400 transition-colors hover:text-yellow-300">
+            Learn more →
+          </span>
+          {/* <Link
             href="/screener"
             className="shrink-0 font-medium text-accent transition-colors hover:text-accenthi hover:underline"
           >
             Explore →
-          </Link>
+          </Link> */}
         </p>
       </div>
 
