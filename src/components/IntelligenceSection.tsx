@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ScreenerRow } from "@/lib/queries";
 import { Logo } from "./ui";
-import { IconBadge, TrendSectionHeader, type IconName } from "./viz";
+import { IconBadge, type IconName } from "./viz";
 import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 
 /**
@@ -45,13 +45,19 @@ export function pickFeatured(rows: ScreenerRow[]): ScreenerRow | null {
   return best && score(best) >= 3 ? best : null;
 }
 
+/*
+ * A row is its own bordered card rather than a rule-separated band. Same link,
+ * same figures — the border moves from between the rows to around each of them,
+ * which is what lets the padding grow without the card reading as one long
+ * ruled table.
+ */
 function FacetRow({ slug, f }: { slug: string; f: Facet }) {
   return (
     <Link
       href={`/project/${slug}#${f.tab}`}
-      className="flex items-center gap-3 border-t border-grid px-4 py-3 transition-colors first:border-t-0 hover:bg-surface2/40"
+      className="flex items-center gap-3.5 rounded-xl border border-line bg-surface2/40 px-4 py-3.5 transition-colors duration-150 hover:border-line2 hover:bg-surface2"
     >
-      <IconBadge name={f.icon} color={f.color} size={32} />
+      <IconBadge name={f.icon} color={f.color} size={38} />
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-semibold">{f.title}</div>
         <div className="truncate text-[11.5px] text-muted">{f.blurb}</div>
@@ -60,10 +66,48 @@ function FacetRow({ slug, f }: { slug: string; f: Facet }) {
         <div className="num text-[13.5px] font-semibold">{f.value}</div>
         <div className="text-[10.5px] text-muted">{f.unit}</div>
       </div>
-      <span className="shrink-0 text-[13px] text-faint" aria-hidden>›</span>
+      <span className="shrink-0 text-[15px] text-faint" aria-hidden>›</span>
     </Link>
   );
 }
+
+/** Eyebrow tag above each card's heading — the label and its dot. */
+function Eyebrow({ label, color }: { label: string; color: string }) {
+  return (
+    <div
+      className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em]"
+      style={{ color }}
+    >
+      {label}
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+    </div>
+  );
+}
+
+/** The shared footer action, as a full-width button rather than a ruled strip. */
+function CardCta({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="mt-auto flex items-center justify-center gap-2 rounded-xl border border-line bg-surface2/40 px-4 py-3.5 text-[13px] font-medium text-ink2 transition-colors duration-150 hover:border-line2 hover:bg-surface2 hover:text-ink"
+    >
+      {children} <span aria-hidden>→</span>
+    </Link>
+  );
+}
+
+/**
+ * The trust strip under the two cards. Static copy about the platform, so it
+ * takes no data — it sits here rather than in its own file because it only
+ * ever appears directly beneath these two.
+ */
+const FEATURES: { icon: IconName; color: string; title: string; blurb: string }[] = [
+  { icon: "shield", color: "var(--accent)", title: "Verified data", blurb: "All data is verified and cross-checked" },
+  { icon: "info", color: "var(--good)", title: "No hidden gaps", blurb: "Every gap is disclosed, not estimated" },
+  { icon: "layers", color: "#9b7ae0", title: "On-chain first", blurb: "Data read directly from blockchain & public sources" },
+  { icon: "bank", color: "#e08a3c", title: "Institutional grade", blurb: "Built for analysts, investors & DAOs" },
+  { icon: "token", color: "var(--warn)", title: "Multi-chain coverage", blurb: "100+ chains and L2s supported" },
+];
 
 /**
  * What every project page is built from. Static because it describes the
@@ -137,67 +181,102 @@ export function IntelligenceSection({ featured }: { featured: ScreenerRow | null
      * many rows each carries, and the footer links are pinned with `mt-auto`
      * so they still end on the same line.
      */
-    <section className="grid items-stretch gap-6 lg:grid-cols-2">
-      <div className="card flex h-full flex-col overflow-hidden">
-        <div className="px-5 pt-5">
-          <TrendSectionHeader
-            eyebrow="Project Intelligence"
-            color="var(--accent)"
-            title="Institutional-grade project intelligence."
-            subtitle="Go beyond token prices — fundraising, treasury, holders, developers and governance in one workspace."
-            divider
-          />
-        </div>
-        <div>
-          <div className="flex items-center gap-3 border-y border-grid px-4 py-3.5">
-            <Logo src={r.image_url} name={r.name} size={34} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[15px] font-bold">{r.name}</div>
-              <div className="truncate text-[11.5px] text-muted">{r.category ?? "Project"}</div>
+    <section className="space-y-6">
+      <div className="grid items-stretch gap-6 lg:grid-cols-2">
+        <div className="card flex h-full flex-col gap-6 p-5 sm:p-6">
+          {/*
+           * Header block, identical in shape to the methodology card's so the
+           * two line up: an eyebrow row of a fixed height, then the heading and
+           * the description on the same margins. The row is sized to the
+           * selector, which only the left card carries — without the floor the
+           * right card's eyebrow would collapse to its text height and pull its
+           * heading a selector's worth of space higher.
+           */}
+          <div>
+            <div className="flex min-h-[42px] items-center justify-between gap-4">
+              <Eyebrow label="Project Intelligence" color="var(--accent)" />
+              <div className="inline-flex max-w-[210px] shrink-0 items-center gap-2.5 rounded-xl border border-line bg-surface2/60 py-1.5 pl-1.5 pr-3">
+                <Logo src={r.image_url} name={r.name} size={28} />
+                <span className="min-w-0 text-left">
+                  <span className="block truncate text-[12.5px] font-bold leading-tight">{r.name}</span>
+                  <span className="block truncate text-[10.5px] text-muted">{r.category ?? "Project"}</span>
+                </span>
+              </div>
             </div>
-            <div className="shrink-0 text-right">
-              <div className="text-[10.5px] text-muted">Last updated</div>
-              <div className="text-[11.5px] text-ink2">{timeAgo(r.updated_ts)}</div>
-            </div>
+            {/* Broken explicitly rather than left to wrap: the break has to land
+                after "Institutional-grade" at every width the card takes. */}
+            <h2 className="mt-4 text-[26px] font-extrabold leading-[1.12] tracking-[-0.02em] sm:text-[30px]">
+              Institutional-grade<br />project intelligence.
+            </h2>
+            {/* Two lines' worth of floor on both descriptions, so the rule under
+                them lands at the same height however the shorter one wraps. */}
+            <p className="mt-4 min-h-[41px] text-[12.5px] leading-relaxed text-ink2">
+              Go beyond token prices — fundraising, treasury, holders, developers and governance in one workspace.
+            </p>
           </div>
+
+          <div className="flex flex-col gap-2.5 border-t border-line pt-3">
+            {facets.map((f) => <FacetRow key={f.title} slug={r.slug} f={f} />)}
+          </div>
+
+          {/* mt-auto pins the footer to the bottom of the stretched card, so
+              two cards with different row counts still end on the same line. */}
+          <CardCta href={`/project/${r.slug}`}>Explore project intelligence</CardCta>
         </div>
-        {facets.map((f) => <FacetRow key={f.title} slug={r.slug} f={f} />)}
-        {/* mt-auto pins the footer to the bottom of the stretched card, so
-            two cards with different row counts still end on the same line. */}
-        <Link
-          href={`/project/${r.slug}`}
-          className="mt-auto flex items-center justify-center gap-2 border-t border-grid px-4 py-3.5 text-[13px] font-medium text-accent hover:underline"
-        >
-          Explore project intelligence <span aria-hidden>→</span>
-        </Link>
+
+        <div className="card flex h-full flex-col gap-6 p-5 sm:p-6">
+          {/* Mirrors the intelligence card's header exactly — same eyebrow-row
+              floor, same margins — so both headings, descriptions and rules sit
+              on the same lines. */}
+          <div>
+            <div className="flex min-h-[42px] items-center">
+              <Eyebrow label="Methodology" color="#9b7ae0" />
+            </div>
+            <h2 className="mt-4 text-[26px] font-extrabold leading-[1.12] tracking-[-0.02em] sm:text-[30px]">
+              Transparent<br />research methodology.
+            </h2>
+            <p className="mt-4 min-h-[41px] text-[12.5px] leading-relaxed text-ink2">
+              Every figure is read from public sources, and every gap is named rather than filled.
+            </p>
+          </div>
+
+          {/* One rule above the list, where the header ends — the per-row rules
+              this replaces were six lines doing the work of spacing. The row
+              padding matches the facet cards opposite, less the 1px those spend
+              on their border, so the first row of each starts on one line. */}
+          <div className="flex flex-col gap-1 border-t border-line pt-3">
+            {METHOD.map((m) => (
+              <div key={m.title} className="flex items-center gap-3.5 rounded-xl px-2 py-3.5">
+                <IconBadge name={m.icon} color={m.color} size={38} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold">{m.title}</div>
+                  <div className="truncate text-[11.5px] text-muted">{m.blurb}</div>
+                </div>
+                <Check />
+              </div>
+            ))}
+          </div>
+
+          <CardCta href="/screener">See it applied across every project</CardCta>
+        </div>
       </div>
 
-      <div className="card flex h-full flex-col overflow-hidden">
-        <div className="px-5 pt-5">
-          <TrendSectionHeader
-            eyebrow="Methodology"
-            color="#9b7ae0"
-            title="Transparent research methodology."
-            subtitle="Every figure is read from public sources, and every gap is named rather than filled."
-            divider
-          />
-        </div>
-        {METHOD.map((m) => (
-          <div key={m.title} className="flex items-center gap-3 border-t border-grid px-4 py-3 first:border-t-0">
-            <IconBadge name={m.icon} color={m.color} size={32} />
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-semibold">{m.title}</div>
-              <div className="truncate text-[11.5px] text-muted">{m.blurb}</div>
+      {/*
+       * Trust strip. Five across on a desktop with hairlines between, two up on
+       * a tablet and stacked on a phone — the rules are `lg`-only because
+       * `divide-x` borders every child but the first in DOM order, which is the
+       * divider you want in one row and the wrong one entirely once it wraps.
+       */}
+      <div className="card grid grid-cols-1 gap-6 px-5 py-6 sm:grid-cols-2 sm:px-6 lg:grid-cols-5 lg:gap-0 lg:divide-x lg:divide-line">
+        {FEATURES.map((f) => (
+          <div key={f.title} className="flex items-start gap-3 lg:px-5 lg:first:pl-0 lg:last:pr-0">
+            <IconBadge name={f.icon} color={f.color} size={34} />
+            <div className="min-w-0">
+              <div className="text-[13px] font-semibold">{f.title}</div>
+              <div className="mt-0.5 text-[11.5px] leading-relaxed text-muted">{f.blurb}</div>
             </div>
-            <Check />
           </div>
         ))}
-        <Link
-          href="/screener"
-          className="mt-auto flex items-center justify-center gap-2 border-t border-grid px-4 py-3.5 text-[13px] font-medium text-accent hover:underline"
-        >
-          See it applied across every project <span aria-hidden>→</span>
-        </Link>
       </div>
     </section>
   );

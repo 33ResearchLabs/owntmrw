@@ -282,7 +282,6 @@ export function SignalsFeed({
                     style={{
                       borderColor: `color-mix(in srgb, ${lead.color} 45%, transparent)`,
                       color: lead.color,
-                      boxShadow: `0 0 14px -4px ${lead.color}`,
                     }}
                   >
                     <Icon name={lead.icon} size={13} />
