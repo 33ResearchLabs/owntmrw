@@ -354,3 +354,41 @@ a { color: inherit; text-decoration: none; }
   }
   .ticker::-webkit-scrollbar { display: none; }
 }
+
+/* ---------- wallet modal ---------- */
+
+/*
+ * A native <dialog> comes with a white page-box and a top-left position by
+ * default, so it has to be reset to a transparent, centred shell — the panel
+ * inside carries the surface, border and radius.
+ */
+.wallet-modal {
+  margin: auto;
+  padding: 0;
+  border: 0;
+  max-width: 100vw;
+  max-height: 100dvh;
+  background: transparent;
+  color: inherit;
+  overflow: visible;
+}
+
+.wallet-modal::backdrop {
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(3px);
+}
+
+/* Scale-in is small on purpose: a login dialog that makes an entrance reads
+   as a promotion rather than as a security step. */
+.wallet-modal[open] { animation: modalIn 140ms ease-out; }
+.wallet-modal[open]::backdrop { animation: backdropIn 140ms ease-out; }
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes backdropIn { from { opacity: 0 } to { opacity: 1 } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wallet-modal[open], .wallet-modal[open]::backdrop { animation: none; }
+}
