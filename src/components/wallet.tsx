@@ -14,6 +14,8 @@ interface InjectedProvider {
   publicKey?: { toString(): string } | null;
   connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: { toString(): string } }>;
   disconnect(): Promise<void>;
+  /** Phantom returns the detached signature over the raw message bytes. */
+  signMessage?(message: Uint8Array, encoding?: string): Promise<{ signature: Uint8Array }>;
   on?(event: string, cb: (...args: unknown[]) => void): void;
 }
 
@@ -31,6 +33,17 @@ const TOKEN_PROGRAMS = [
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
 ];
+
+/**
+ * Signature bytes for the wire. Base64 rather than the base58 Solana usually
+ * uses, because base58 would mean shipping an encoder to the browser to
+ * serialise one 64-byte array — the server decodes either just as easily.
+ */
+function toBase64(bytes: Uint8Array): string {
+  let s = "";
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s);
+}
 
 async function rpc<T>(method: string, params: unknown[]): Promise<T | null> {
   try {
@@ -55,6 +68,18 @@ export interface WalletState {
   usdcBalance: number | null;
   connect: () => Promise<void>;
   disconnect: () => Promise<void>;
+  /** Address of the signed-in session, or null. Distinct from `address`,
+   *  which only says a wallet is connected in this browser. */
+  session: string | null;
+  /** True while a login is in flight, including the wallet popup. */
+  signingIn: boolean;
+  /**
+   * Connect if needed, then prove control of the key: fetch a challenge,
+   * sign it, and hand the signature back for verification. Resolves to an
+   * error string, or null on success.
+   */
+  login: () => Promise<string | null>;
+  logout: () => Promise<void>;
   /** UI balance of an arbitrary SPL mint for the connected wallet. */
   tokenBalance: (mint: string) => Promise<number | null>;
   /** Every non-zero SPL balance as mint -> amount. Null when the read failed. */
@@ -67,6 +92,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [available, setAvailable] = useState(false);
+  const [session, setSession] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
   const [solBalance, setSol] = useState<number | null>(null);
   const [usdcBalance, setUsdc] = useState<number | null>(null);
 
@@ -110,6 +137,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     });
   }, [provider, refreshBalances]);
 
+  // A session lives in an httpOnly cookie, which script cannot read — so the
+  // signed-in state has to be asked for once on mount rather than inferred.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then((j: { address: string | null }) => { if (!cancelled) setSession(j.address); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const connect = useCallback(async () => {
     const p = provider();
     if (!p) {
@@ -133,6 +171,63 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     try { await provider()?.disconnect(); } catch { /* noop */ }
     setAddress(null); setSol(null); setUsdc(null);
   }, [provider]);
+
+  /**
+   * Sign in.
+   *
+   * Connecting alone proves nothing — a public key is public, and any page can
+   * ask for one. The signature over a server-issued nonce is the only step
+   * here that demonstrates control of the key, so the session is opened by the
+   * server on the strength of that and nothing else.
+   */
+  const login = useCallback(async (): Promise<string | null> => {
+    const p = provider();
+    if (!p) {
+      window.open("https://phantom.com", "_blank", "noopener");
+      return "No Solana wallet detected in this browser.";
+    }
+    setSigningIn(true);
+    try {
+      const addr = p.publicKey?.toString() ?? (await p.connect()).publicKey.toString();
+      setAddress(addr);
+      void refreshBalances(addr);
+
+      if (!p.signMessage) return "This wallet cannot sign messages.";
+
+      const nRes = await fetch("/api/auth/nonce", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address: addr }),
+      });
+      if (!nRes.ok) return "Could not start sign-in. Try again.";
+      const { nonce, message } = (await nRes.json()) as { nonce: string; message: string };
+
+      const { signature } = await p.signMessage(new TextEncoder().encode(message), "utf8");
+
+      const vRes = await fetch("/api/auth/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address: addr, nonce, signature: toBase64(signature) }),
+      });
+      if (!vRes.ok) {
+        const { error } = (await vRes.json().catch(() => ({}))) as { error?: string };
+        return error ?? "Signature rejected.";
+      }
+      setSession(addr);
+      return null;
+    } catch {
+      // Rejecting the popup lands here, and is not an error worth shouting
+      // about — the user changed their mind.
+      return "Sign-in cancelled.";
+    } finally {
+      setSigningIn(false);
+    }
+  }, [provider, refreshBalances]);
+
+  const logout = useCallback(async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    setSession(null);
+  }, []);
 
   const tokenBalance = useCallback(async (mint: string) => {
     if (!address) return null;
@@ -180,8 +275,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [address]);
 
   const value = useMemo(
-    () => ({ address, connecting, available, solBalance, usdcBalance, connect, disconnect, tokenBalance, allTokenBalances }),
-    [address, connecting, available, solBalance, usdcBalance, connect, disconnect, tokenBalance, allTokenBalances]
+    () => ({ address, connecting, available, solBalance, usdcBalance, session, signingIn, connect, disconnect, login, logout, tokenBalance, allTokenBalances }),
+    [address, connecting, available, solBalance, usdcBalance, session, signingIn, connect, disconnect, login, logout, tokenBalance, allTokenBalances]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

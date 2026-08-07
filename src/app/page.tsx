@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { screenerRows, explorerRows, globalTimeline, allObservations } from "@/lib/queries";
 import { ProjectCard } from "@/components/ProjectCard";
+import { TokenTicker } from "@/components/TokenTicker";
 import { ExplorerTable } from "@/components/ExplorerTable";
 import { IntelligenceSection, pickFeatured } from "@/components/IntelligenceSection";
 import { ResearchSection } from "@/components/ResearchSection";
@@ -34,6 +35,16 @@ export default async function Home() {
     .filter((r) => r.vol24h != null)
     .sort((a, b) => (b.vol24h ?? 0) - (a.vol24h ?? 0))
     .slice(0, 5);
+
+  // Every tracked token, biggest first, so the strip opens on names a reader
+  // recognises rather than whatever sorted to the top.
+  const ticker = [...rows]
+    .filter((r) => r.price_usd != null)
+    .sort((a, b) => (b.mcap ?? 0) - (a.mcap ?? 0))
+    .map((r) => ({
+      slug: r.slug, name: r.name, symbol: r.symbol, image_url: r.image_url,
+      price_usd: r.price_usd, change_24h: r.change_24h,
+    }));
 
   const activity = globalTimeline(6);
   const signals = allObservations(4);
@@ -154,32 +165,45 @@ export default async function Home() {
             </Link>
           </div>
 
-          {/* newest */}
-          {newest.length > 0 && (
-            <section>
-              <div className="mb-4 flex items-baseline justify-between">
-                <h2 className="flex items-center gap-2 text-[18px] font-bold">
-                  <span className="text-accent">⚡</span> Just Launched
-                </h2>
-                <Link href="/screener" className="text-[12.5px] text-muted hover:text-ink">View all</Link>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {newest.map((r, i) => (
-                  <ProjectCard
-                    key={r.slug}
-                    badge={i === 0 ? "NEW" : undefined}
-                    p={{
-                      slug: r.slug, name: r.name, symbol: r.symbol, category: r.category,
-                      image_url: r.image_url, status: r.status,
-                      price_usd: r.price_usd, mcap: r.mcap, change_24h: r.change_24h,
-                      raise_amount_usd: r.raise_amount_usd, roi_since_raise: r.roi_since_raise,
-                      holder_count: r.holder_count, treasury_usd: r.treasury_usd,
-                    }}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
+          {/* The price strip belongs to Just Launched rather than standing on
+              its own: grouped, the two set their own 16px rhythm instead of
+              inheriting the page's 32px section gap on both sides of a 40px
+              band.
+
+              The gap above is set inline, and as `margin-block-start` rather
+              than `margin-top`: `space-y-8` on the parent sets the logical
+              property, so a physical `margin-top` — utility or inline — does
+              not override it and the strip keeps the full section gap. */}
+          <div className="space-y-4" style={{ marginBlockStart: "1rem" }}>
+            <TokenTicker tokens={ticker} />
+
+            {/* newest */}
+            {newest.length > 0 && (
+              <section>
+                <div className="mb-4 flex items-baseline justify-between">
+                  <h2 className="flex items-center gap-2 text-[18px] font-bold">
+                    <span className="text-accent">⚡</span> Just Launched
+                  </h2>
+                  <Link href="/screener" className="text-[12.5px] text-muted hover:text-ink">View all</Link>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {newest.map((r, i) => (
+                    <ProjectCard
+                      key={r.slug}
+                      badge={i === 0 ? "NEW" : undefined}
+                      p={{
+                        slug: r.slug, name: r.name, symbol: r.symbol, category: r.category,
+                        image_url: r.image_url, status: r.status,
+                        price_usd: r.price_usd, mcap: r.mcap, change_24h: r.change_24h,
+                        raise_amount_usd: r.raise_amount_usd, roi_since_raise: r.roi_since_raise,
+                        holder_count: r.holder_count, treasury_usd: r.treasury_usd,
+                      }}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
 
           {/* movers — a trading board, not a table */}
           {movers.length > 0 && (

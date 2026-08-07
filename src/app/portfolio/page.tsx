@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/session";
 import { screenerRows } from "@/lib/queries";
 import { Portfolio, type PortfolioToken } from "@/components/Portfolio";
 
@@ -16,6 +17,10 @@ export const metadata = {
  * no reason to reach the server at all.
  */
 export default async function PortfolioPage() {
+  // The real gate. `proxy.ts` only saw that a cookie existed; this is where
+  // a forged or expired one is turned away.
+  await requireSession("/portfolio");
+
   const tokens: PortfolioToken[] = (await screenerRows())
     .filter((r): r is typeof r & { mint: string } => !!r.mint)
     .map((r) => ({

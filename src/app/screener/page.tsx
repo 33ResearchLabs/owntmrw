@@ -1,3 +1,4 @@
+import { requireSession } from "@/lib/session";
 import { screenerRows } from "@/lib/queries";
 import { ScreenerTable } from "@/components/ScreenerTable";
 import { fmtUsd, fmtNum } from "@/lib/format";
@@ -10,6 +11,10 @@ export const metadata = {
 };
 
 export default async function ScreenerPage() {
+  // The real gate. `proxy.ts` only saw that a cookie existed; this is where
+  // a forged or expired one is turned away.
+  await requireSession("/screener");
+
   const rows = await screenerRows();
   const totalRaised = rows.reduce((s, r) => s + (r.raise_amount_usd ?? 0), 0);
 
