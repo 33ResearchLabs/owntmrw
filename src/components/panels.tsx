@@ -1216,13 +1216,20 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
     ? ((treasuryValue - p.raise_amount_usd) / p.raise_amount_usd) * 100 : null;
   const treasurySeries = treasuryHistory.map((t) => t.value_usd).filter((v): v is number => v != null);
 
+  // The trend cards and the detail grid are the same story told twice over —
+  // glanceable first, then itemised — so they share one card. Two stacked
+  // containers read as two unrelated sections that happen to be adjacent.
+  const showTrends = rp || treasuryGrowth != null || holderGrowth != null;
+
   return (
-    <div className="space-y-5">
-      {(rp || treasuryGrowth != null || holderGrowth != null) && (
-        <section className="card px-5 py-5 sm:px-6">
+    <section className="card overflow-hidden">
+      {showTrends && (
+        <div className="px-5 py-5 sm:px-6">
           <TrendSectionHeader
-            title="Track this project from raise to today."
-            subtitle="Measure real performance, not just price. ROI, treasury growth, holder growth and market cap evolution, all since day one."
+            title="Track this token from raise to today."
+            subtitle="ROI, treasury growth, holder growth and market cap evolution, all since day one."
+            action={<CardAction href={p.raise_source_url}>Data source</CardAction>}
+            divider
           />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {rp && cur != null && candles.length > 0 && (
@@ -1268,13 +1275,15 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
             />
           )}
           </div>
-        </section>
+        </div>
       )}
-    <DashboardCard
-      title="Performance Since Raise"
-      subtitle="How the token has actually done against the price its backers paid."
-      right={<CardAction href={p.raise_source_url}>Data source</CardAction>}
-    >
+
+      <div className="border-t border-grid px-5 py-3.5 sm:px-6">
+        <h3 className="text-[14px] font-semibold">Performance Since Raise</h3>
+        <p className="mt-0.5 text-[12px] text-ink2">
+          How the token has actually done against the price its backers paid.
+        </p>
+      </div>
       <MetricGrid>
         {rp && (
           <MetricCell
@@ -1326,8 +1335,7 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
           and are omitted rather than shown empty.
         </CardNote>
       )}
-    </DashboardCard>
-    </div>
+    </section>
   );
 }
 

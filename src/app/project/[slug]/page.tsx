@@ -5,15 +5,15 @@ import {
   periodReturns,
 } from "@/lib/queries";
 import { healthScore, insights, developerScore } from "@/lib/analytics";
-import { DevelopmentPanel, DevelopmentTrendCards } from "@/components/Development";
+import { DevelopmentPanel } from "@/components/Development";
 import { buildMemo } from "@/lib/research";
 import { PriceChart } from "@/components/PriceChart";
 import { Tabs, type TabDef } from "@/components/Tabs";
 import { HealthScorePanel } from "@/components/HealthScore";
 import {
-  HoldersPanel, SmartMoneyPanel, TreasuryPanel, TreasuryTrendCards, CompareRaisePanel, NewsPanel,
+  HoldersPanel, SmartMoneyPanel, TreasuryPanel, CompareRaisePanel, NewsPanel,
   ResearchPanel, GovernancePanel, TimelinePanel, InsightList,
-  ListingsPanel, RiskPanel, SectionCard, Metric, DataGap,
+  ListingsPanel, RiskPanel, SectionCard, Metric,
   DashboardCard, CardAction, CardTag, MetricGrid, MetricCell, CardNote,
 } from "@/components/panels";
 import { TradeTerminal } from "@/components/TradeTerminal";
@@ -21,7 +21,6 @@ import { PortfolioCard } from "@/components/PortfolioCard";
 import { ProjectBrief } from "@/components/ProjectBrief";
 import { MarketDepthPanel } from "@/components/MarketDepth";
 import { Delta, Logo, StatTile, StatusBadge } from "@/components/ui";
-import { TrendSectionHeader } from "@/components/viz";
 import { fmtUsd, fmtPrice, fmtNum, fmtPct, fmtDate, shortAddr } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -121,34 +120,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       >
         <InsightList items={signals} />
       </SectionCard>
-      {(treasuryValue != null || latest?.liquidity_usd != null) && (
-        <SectionCard
-          title="Treasury"
-          subtitle="What the project holds and how deep its pools run, read on-chain."
-          right={<a href="#treasury" className="text-[11px] text-accent hover:underline">full breakdown →</a>}
-        >
-          <div className="p-4">
-            <TreasuryTrendCards d={d} nowSec={nowSec} />
-          </div>
-        </SectionCard>
-      )}
-      <section className="card px-5 py-5 sm:px-6">
-        <TrendSectionHeader
-          title="Development at a Glance."
-          subtitle="Real-time overview of our GitHub activity and codebase health."
-          action={<a href="#development" className="text-[11px] text-accent hover:underline">full breakdown →</a>}
-        />
-        {!github ? (
-          <DataGap
-            title="No GitHub organisation linked"
-            why="Engineering output cannot be verified for this project because no public repository is recorded."
-          />
-        ) : (
-          <DevelopmentTrendCards
-            github={github} githubHistory={d.githubHistory} codeFrequency={codeFrequency} nowSec={nowSec}
-          />
-        )}
-      </section>
+      {/* The Treasury and Development summaries used to sit here. They are the
+          same cards their own tabs open with, so the overview was repeating
+          two full sections a click away — dropped rather than duplicated. */}
       <ListingsPanel listings={d.listings} />
       {(p.raise_amount_usd != null || rp != null || p.circulating_supply != null || p.raise_note != null) && (
         <DashboardCard
