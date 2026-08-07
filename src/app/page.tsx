@@ -2,6 +2,7 @@ import Link from "next/link";
 import { screenerRows, globalTimeline, allObservations } from "@/lib/queries";
 import { ProjectCard } from "@/components/ProjectCard";
 import { PortfolioCard } from "@/components/PortfolioCard";
+import { FaqSection } from "@/components/FaqSection";
 import { Logo } from "@/components/ui";
 import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 
@@ -164,6 +165,9 @@ export default async function Home() {
             Explore now
           </span>
         </Link>
+
+        {/* faq */}
+        <FaqSection />
       </div>
 
       {/* right rail — portfolio, trending, activity */}
