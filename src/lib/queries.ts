@@ -271,6 +271,134 @@ export async function screenerRows(): Promise<ScreenerRow[]> {
   });
 }
 
+/**
+ * Traded volume over a window, and how that window compares with the one
+ * before it.
+ */
+export interface VolumeWindow {
+  /** Summed candle volume inside the window. Null when no candle covers it. */
+  usd: number | null;
+  /**
+   * Percent change against the immediately preceding window of equal length.
+   *
+   * A project we started tracking six weeks ago has no 180-day predecessor, so
+   * rather than leave the cell empty — or report a rise from zero, which would
+   * put it top of the table — the window's own candles are split down the
+   * middle and the later half compared with the earlier one. That is a real
+   * momentum reading over a shorter span, and `trendPartial` says so.
+   */
+  trend: number | null;
+  /**
+   * True when `trend` came from splitting the window rather than comparing it
+   * with a full prior window. The span it actually covers is `trendDays`.
+   */
+  trendPartial: boolean;
+  /** Days the comparison spans, for the cell's tooltip. */
+  trendDays: number;
+}
+
+export interface ExplorerRow extends ScreenerRow {
+  vol7d: VolumeWindow;
+  vol30d: VolumeWindow;
+  vol180d: VolumeWindow;
+  /**
+   * Days of candle history on file. The 30- and 180-day columns are windows,
+   * not promises: a project with 40 days of history has a real 30-day figure
+   * and a 180-day one that only covers 40. The count lets the table say so
+   * rather than presenting a short window as a full one.
+   */
+  candleDays: number;
+}
+
+const WINDOWS = [7, 30, 180] as const;
+
+/**
+ * Volume by window for every project, in one pass over the candle table.
+ *
+ * Summed from daily candles rather than from the `vol24h` on a price snapshot:
+ * snapshots are written once per ingest run and carry a rolling 24-hour figure,
+ * so adding thirty of them would double-count every overlapping hour. Candles
+ * are discrete days and sum honestly.
+ */
+function volumeWindows(): Map<number, { windows: VolumeWindow[]; days: number }> {
+  const d = db();
+  // SQL's clock, not the caller's — the same way `close_24h_ago` above does it.
+  // A page reading `Date.now()` to pass one in would be calling an impure
+  // function during render.
+  const now = (d.prepare("SELECT strftime('%s','now') AS n").get() as { n: string }).n;
+  const nowSec = Number(now);
+
+  // Every candle in one read — 3k rows — because the split-the-window fallback
+  // below needs the individual days, not a pre-aggregated sum.
+  const rows = d.prepare(
+    "SELECT project_id AS pid, ts, v FROM candles ORDER BY ts"
+  ).all() as { pid: number; ts: number; v: number }[];
+
+  const byProject = new Map<number, { ts: number; v: number }[]>();
+  for (const r of rows) {
+    if (!byProject.has(r.pid)) byProject.set(r.pid, []);
+    byProject.get(r.pid)!.push({ ts: r.ts, v: r.v });
+  }
+
+  const sum = (xs: { v: number }[]) => xs.reduce((t, x) => t + x.v, 0);
+  const mean = (xs: { v: number }[]) => (xs.length ? sum(xs) / xs.length : 0);
+
+  const out = new Map<number, { windows: VolumeWindow[]; days: number }>();
+  for (const [pid, candles] of byProject) {
+    out.set(pid, {
+      days: candles.length,
+      windows: WINDOWS.map((n) => {
+        const from = nowSec - n * 86400;
+        const prevFrom = nowSec - 2 * n * 86400;
+        const inWindow = candles.filter((c) => c.ts >= from);
+        const inPrev = candles.filter((c) => c.ts >= prevFrom && c.ts < from);
+        // Zero volume across days we have candles for is a real zero; no
+        // candles at all is a null.
+        const usd = candles.length ? sum(inWindow) : null;
+
+        // Preferred: two equal-length windows, so their sums are comparable.
+        const prev = sum(inPrev);
+        if (inPrev.length > 0 && prev > 0) {
+          const cur = sum(inWindow);
+          return { usd, trend: ((cur - prev) / prev) * 100, trendPartial: false, trendDays: n };
+        }
+
+        // Fallback: split this window's own candles. Compared as daily means
+        // rather than sums, because an odd number of days leaves the halves
+        // unequal and a sum would read that as growth.
+        if (inWindow.length >= 4) {
+          const mid = Math.floor(inWindow.length / 2);
+          const a = mean(inWindow.slice(0, mid));
+          const b = mean(inWindow.slice(mid));
+          if (a > 0) {
+            const span = Math.round((inWindow[inWindow.length - 1].ts - inWindow[0].ts) / 86400);
+            return { usd, trend: ((b - a) / a) * 100, trendPartial: true, trendDays: span || inWindow.length };
+          }
+        }
+
+        return { usd, trend: null, trendPartial: false, trendDays: 0 };
+      }),
+    });
+  }
+  return out;
+}
+
+/**
+ * Screener rows with traded volume broken out by window — the home page's
+ * explorer table. Everything here is measured, not modelled: the figures are
+ * candle sums and period-over-period changes on them.
+ */
+export async function explorerRows(): Promise<ExplorerRow[]> {
+  const rows = await screenerRows();
+  const vols = volumeWindows();
+  const empty: VolumeWindow = { usd: null, trend: null, trendPartial: false, trendDays: 0 };
+  return rows.map((r) => {
+    const v = vols.get(r.id);
+    const [vol7d, vol30d, vol180d] = v?.windows ?? [empty, empty, empty];
+    return { ...r, vol7d, vol30d, vol180d, candleDays: v?.days ?? 0 };
+  });
+}
+
 /** One reading of a project's public engineering output. */
 export interface GithubSnapshot {
   ts: number;

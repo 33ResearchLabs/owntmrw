@@ -4,8 +4,11 @@
  * Every one of these has an explicit not-enough-data state, because the series
  * behind them accumulate at ingest time and are frequently too short to plot.
  * A sparkline drawn through four points looks exactly like one drawn through
- * four hundred, so the thin case has to announce itself rather than render a
- * shape the reader will mistake for a trend.
+ * four hundred, so a standalone thin case announces itself rather than render
+ * a shape the reader will mistake for a trend. Inside a `TrendCard` the
+ * sparkline is subordinate to the figure above it and always draws (see
+ * `Sparkline`'s `fallback`); only a series with nothing in it at all shows an
+ * empty state, and a single reading draws a generated stand-in shape.
  */
 import { fmtPct } from "@/lib/format";
 import { Delta } from "./ui";
@@ -76,25 +79,121 @@ function EmptySeries({ height, label }: { height: number; label: string }) {
 }
 
 /**
+ * A small string hash. Everything derived from it has to survive being
+ * computed twice — once on the server, once on the client — so nothing here
+ * may reach for `Math.random`.
+ */
+function hash(seed: string) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  // Avalanche. Without it seeds differing in one digit hash to neighbouring
+  // numbers, and `fallbackSeries` turns its hash into a fraction of a
+  // rotation — so "58" and "25" would come out a ten-millionth of a radian
+  // apart and two cards in the same grid would trace the identical curve.
+  h ^= h >>> 16; h = Math.imul(h, 0x7feb352d);
+  h ^= h >>> 15; h = Math.imul(h, 0x846ca68b);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
+/**
+ * A stable id for the wash gradient, derived from everything that decides what
+ * the gradient looks like. Two sparklines on one page that happen to share a
+ * first value and a length are common once single-reading cards plot — two
+ * counts sitting at zero, say — and an id collision makes the second tile
+ * inherit the first one's colour.
+ */
+const gradientId = (seed: string) => `sp${hash(seed).toString(36)}`;
+
+/** Enough points to read as a line, few enough to stay calm. */
+const FALLBACK_POINTS = 6;
+
+/**
+ * A stand-in shape for a metric whose series carries no shape of its own —
+ * one reading on file, or a count that has not moved across all of them.
+ *
+ * Derived from the reading rather than randomised, so a card draws the same
+ * line on every render and the server and the client agree on the markup, and
+ * phased off the value so that eight single-reading cards in one grid do not
+ * all draw the identical squiggle. The last point is the reading itself: the
+ * right-hand end of a sparkline is "now", and "now" is the figure printed
+ * directly above it.
+ *
+ * The ±2% amplitude is nominal. The drawing normalises whatever range it is
+ * handed, so the numbers here do not control how loud the result looks — the
+ * damped band in `Sparkline` does.
+ */
+function fallbackSeries(v: number) {
+  // Hashed rather than taken modulo the value itself: small counts sit close
+  // together, and a plain modulus hands adjacent metrics the same phase — a
+  // grid where half the cards trace the identical curve reads as one chart
+  // repeated, which is exactly the impression a stand-in must not give.
+  const phase = (hash(`phase${v}`) / 0xffffffff) * Math.PI * 2;
+  // A zero reading has no percentage to vary; any non-zero range will do,
+  // since only the shape survives normalisation.
+  const amp = (Math.abs(v) || 1) * 0.02;
+  const out = Array.from({ length: FALLBACK_POINTS }, (_, i) => {
+    const t = (i / (FALLBACK_POINTS - 1)) * Math.PI * 2;
+    return v + amp * (Math.sin(t + phase) * 0.6 + Math.sin(t * 2.3 + phase) * 0.4);
+  });
+  out[out.length - 1] = v;
+  return out;
+}
+
+/**
  * A line + wash sparkline. Colour follows the series' own direction rather than
  * a fixed hue, so the shape and the colour cannot tell different stories.
  */
 export function Sparkline({
-  values, height = 34, color, label = "needs more history",
+  values, height = 34, color, label = "needs more history", fallback = false,
 }: {
   values: number[]; height?: number; color?: string; label?: string;
+  /**
+   * Plot whatever the series has instead of gating on `MIN_SERIES_POINTS`: a
+   * thin history draws its real points, and a series with no spread in it
+   * draws the generated shape from `fallbackSeries` rather than a baseline.
+   *
+   * For metric cards, where the chart sits directly under a live figure. The
+   * gate exists so a four-point line is not mistaken for a trend, but on a
+   * card the reader has the number right above it and an empty chart slot
+   * beside eight filled ones reads as a rendering fault rather than as an
+   * honest statement about history. Standalone sparklines — a price path, a
+   * market-cap tile — keep the gate, since there the shape is the whole point.
+   */
+  fallback?: boolean;
 }) {
   const pts = values.filter((v) => Number.isFinite(v));
-  if (pts.length < MIN_SERIES_POINTS) return <EmptySeries height={height} label={label} />;
+  if (!pts.length) return <EmptySeries height={height} label={fallback ? "No data available" : label} />;
+  if (!fallback && pts.length < MIN_SERIES_POINTS) return <EmptySeries height={height} label={label} />;
 
-  const min = Math.min(...pts), max = Math.max(...pts);
-  const span = max - min || 1;
+  // A series with no spread has no shape to draw. That is one reading on file,
+  // but also a count that has not moved across every read of it — stars and
+  // forks sit still for weeks at a time. Either way the card would show a bare
+  // baseline under a live figure, which reads as a chart that failed rather
+  // than as a metric holding steady, so stand in a generated shape. Real
+  // points take over on their own the moment the series moves.
+  const synthetic = fallback && pts.every((v) => v === pts[0]);
+  const plot = synthetic ? fallbackSeries(pts[0]) : pts;
+
+  const min = Math.min(...plot), max = Math.max(...plot);
+  const span = max - min;
   const w = 100;
-  const step = w / (pts.length - 1);
-  const y = (v: number) => height - 3 - ((v - min) / span) * (height - 6);
-  const line = pts.map((v, i) => `${i * step},${y(v)}`).join(" ");
-  const stroke = color ?? (pts[pts.length - 1] >= pts[0] ? "var(--good)" : "var(--bad)");
-  const gid = `sp${Math.round(pts[0] * 1e6)}-${pts.length}`;
+  const step = w / (plot.length - 1);
+  // Real series get the full box. A synthetic one is damped into a band around
+  // the middle instead: the scale stretches min→max to fill whatever room it is
+  // given, so a ±2% invention drawn at full height would read exactly like a
+  // real doubling. Taking away the room is what keeps it quiet.
+  const top = synthetic ? height * 0.3 : 3;
+  const base = synthetic ? height * 0.7 : height - 3;
+  // A genuinely flat series would otherwise pin to the floor of the box, where
+  // the line is indistinguishable from the rule EmptySeries draws.
+  const y = (v: number) => (span === 0 ? height / 2 : base - ((v - min) / span) * (base - top));
+  const line = plot.map((v, i) => `${i * step},${y(v)}`).join(" ");
+  const stroke = color ?? (plot[plot.length - 1] >= plot[0] ? "var(--good)" : "var(--bad)");
+  const gid = gradientId(`${stroke}|${plot.length}|${min}|${max}|${plot[0]}|${plot[plot.length - 1]}`);
 
   return (
     <svg width="100%" height={height} viewBox={`0 0 ${w} ${height}`} preserveAspectRatio="none" aria-hidden>
@@ -117,7 +216,7 @@ export function Sparkline({
  * rather than per card, so a reader lands on a heading before the numbers.
  */
 export function TrendSectionHeader({
-  eyebrow, color, title, subtitle, action,
+  eyebrow, color, title, subtitle, action, divider = false,
 }: {
   /** Omit to drop the small uppercase tag + dot above the title. */
   eyebrow?: string;
@@ -125,9 +224,21 @@ export function TrendSectionHeader({
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
+  /**
+   * Rule between the header and what it introduces. For a header sitting
+   * inside a card, where the title otherwise runs straight into the first row
+   * of content with nothing marking where one ends and the other begins.
+   *
+   * Inset to the card's padding rather than bled to its edges, because the
+   * content underneath is inset too — a full-width rule under an inset heading
+   * reads as the card being cut in half.
+   */
+  divider?: boolean;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div className={`flex flex-wrap items-start justify-between gap-3 ${
+      divider ? "mb-5 border-b border-grid pb-4" : "mb-4"
+    }`}>
       <div>
         {eyebrow && (
           <div
@@ -152,10 +263,18 @@ export function TrendSectionHeader({
  *
  * Nothing here computes: `value`, `deltaPct` and `series` all arrive already
  * derived, so a caller with no genuine trend for a metric simply has nothing
- * to pass rather than reaching for a placeholder. `Sparkline`'s own
- * `MIN_SERIES_POINTS` gate still applies underneath — a metric with real but
- * thin history renders its "needs more history" state rather than a two-dot
- * line that looks like a shape.
+ * to pass rather than reaching for a placeholder.
+ *
+ * The sparkline runs in `fallback` mode, so a card that has a figure always
+ * has a chart under it: a series that moves draws its real trend however few
+ * points it has, and one that does not — a single reading, or a count that
+ * held still — draws a generated shape. Only a genuinely empty series falls
+ * back to "No data available".
+ *
+ * That last shape is one the data did not earn, so nothing else on the card
+ * pretends alongside it. The delta is computed from the real series and reads
+ * `—` when there is nothing to compare against or nothing changed, which
+ * leaves the reader a signal that the line above it is decoration.
  */
 export function TrendCard({
   color, label, value, deltaPct, deltaLabel, series, title,
@@ -192,7 +311,7 @@ export function TrendCard({
         </div>
       )}
       <div className="mt-3">
-        <Sparkline values={series} height={32} color={color} />
+        <Sparkline values={series} height={32} color={color} fallback />
       </div>
     </div>
   );
