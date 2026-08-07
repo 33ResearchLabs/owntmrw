@@ -93,9 +93,9 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 export function FaqSection() {
-  // The reference opens on the first question, and an accordion that starts
-  // fully closed reads as an unloaded block at this size.
-  const [open, setOpen] = useState<number | null>(0);
+  // Starts fully closed: every question reads at the same weight until the
+  // reader picks one.
+  const [open, setOpen] = useState<number | null>(null);
 
   return (
     <section
@@ -103,128 +103,91 @@ export function FaqSection() {
       className="card px-5 py-8 sm:px-8 sm:py-10 lg:px-10 lg:py-12"
       style={PANEL_SHADOW}
     >
+      {/* ---- heading, centred over the column ---- */}
+      <div className="flex flex-col items-center text-center">
+        <span className="inline-flex items-center rounded-lg border border-line bg-surface2 px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-ink2">
+          FAQs
+        </span>
+
+        <h2
+          id="faq-heading"
+          className="mt-5 text-[30px] font-extrabold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[34px] lg:text-[38px]"
+        >
+          Frequently Asked Questions
+        </h2>
+      </div>
+
       {/*
-       * Two columns from `md` up, with the accordion given the larger share —
-       * the questions are the long lines here, and an even split wrapped most
-       * of them. Below that the pair stacks and each card runs full width.
+       * One column, centred and capped. Without the cap the rows would run the
+       * full width of the panel, which leaves a short question stranded against
+       * a chevron most of a screen away — the measure is what keeps the trigger
+       * and its arrow readable as one row.
        */}
-      <div className="grid grid-cols-1 gap-8 md:grid-cols-[0.85fr_1fr] md:gap-7 lg:gap-12">
-        {/* ---- left: identity and support ---- */}
-        <div className="flex min-w-0 flex-col">
-          <span className="inline-flex w-fit items-center rounded-lg border border-line bg-surface2 px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.11em] text-ink2">
-            FAQs
-          </span>
-
-          <h2
-            id="faq-heading"
-            className="mt-5 text-[30px] font-extrabold leading-[1.08] tracking-[-0.03em] text-ink sm:text-[34px] lg:text-[38px]"
-          >
-            Frequently Asked Questions
-          </h2>
-
-          {/*
-           * Pushed to the foot of the column on a desktop so it sits against
-           * the bottom of the accordion as in the reference, and simply
-           * follows the heading once the layout stacks.
-           */}
-          <div
-            className="mt-8 rounded-2xl border border-line bg-page/60 px-5 py-5 md:mt-auto md:pt-8"
-            style={CARD_SHADOW}
-          >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-line bg-surface2 text-muted">
-              <svg viewBox="0 0 24 24" aria-hidden className="h-[17px] w-[17px]">
-                <path
-                  d="M20 12a8 8 0 1 1-3.2-6.4M20 4v5h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </span>
-
-            <div className="mt-4 text-[14.5px] font-bold text-ink">Need assistance?</div>
-            <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted">
-              Contact our team for support.
-            </p>
-
-            <a
-              href="mailto:support@owntmrw.com"
-              className="mt-5 inline-flex items-center rounded-lg border border-line2 bg-white/[0.04] px-4 py-2.5 text-[10.5px] font-bold uppercase tracking-[0.12em] text-ink transition-colors duration-150 hover:bg-white/[0.09]"
+      <div className="mx-auto mt-9 flex w-full max-w-[820px] min-w-0 flex-col gap-2.5 sm:mt-10">
+        {FAQS.map((f, i) => {
+          const isOpen = open === i;
+          return (
+            <div
+              key={f.q}
+              className={`rounded-2xl border transition-colors duration-200 ${
+                isOpen
+                  ? "border-line2 bg-surface2"
+                  : "border-line bg-surface2/60 hover:border-line2 hover:bg-surface2"
+              }`}
+              style={isOpen ? CARD_SHADOW : undefined}
             >
-              Contact Us
-            </a>
-          </div>
-        </div>
-
-        {/* ---- right: accordion ---- */}
-        <div className="flex min-w-0 flex-col gap-2.5">
-          {FAQS.map((f, i) => {
-            const isOpen = open === i;
-            return (
-              <div
-                key={f.q}
-                className={`rounded-2xl border transition-colors duration-200 ${
-                  isOpen
-                    ? "border-line2 bg-surface2"
-                    : "border-line bg-surface2/60 hover:border-line2 hover:bg-surface2"
-                }`}
-                style={isOpen ? CARD_SHADOW : undefined}
-              >
-                <h3>
-                  <button
-                    type="button"
-                    // Closing the open row is a click on the same row, so the
-                    // set collapses to nothing rather than trapping one open.
-                    onClick={() => setOpen(isOpen ? null : i)}
-                    aria-expanded={isOpen}
-                    aria-controls={`faq-panel-${i}`}
-                    id={`faq-trigger-${i}`}
-                    className="flex w-full cursor-pointer items-center justify-between gap-4 px-5 py-4 text-left sm:px-6 sm:py-[18px]"
-                  >
-                    <span className="min-w-0 text-[14px] font-semibold leading-snug text-ink sm:text-[15px]">
-                      {f.q}
-                    </span>
-                    <Chevron open={isOpen} />
-                  </button>
-                </h3>
-
-                {/*
-                 * Height animates via `grid-template-rows: 0fr → 1fr`, which
-                 * transitions to the content's natural height without having
-                 * to measure it — a `max-height` guess would either clip the
-                 * seven-item list in Q2 or leave the shorter answers easing
-                 * through empty space.
-                 */}
-                <div
-                  id={`faq-panel-${i}`}
-                  role="region"
-                  aria-labelledby={`faq-trigger-${i}`}
-                  className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
-                    isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                  }`}
+              <h3>
+                <button
+                  type="button"
+                  // Closing the open row is a click on the same row, so the
+                  // set collapses to nothing rather than trapping one open.
+                  onClick={() => setOpen(isOpen ? null : i)}
+                  aria-expanded={isOpen}
+                  aria-controls={`faq-panel-${i}`}
+                  id={`faq-trigger-${i}`}
+                  className="flex w-full cursor-pointer items-center justify-between gap-4 px-5 py-4 text-left sm:px-6 sm:py-[18px]"
                 >
-                  <div className="min-h-0 overflow-hidden">
-                    <div className="px-5 pb-5 text-[12.5px] leading-relaxed text-ink2 sm:px-6 sm:pb-6 sm:text-[13px]">
-                      <p className="m-0">{f.a}</p>
-                      {f.bullets && (
-                        <ul className="mt-3 space-y-1.5">
-                          {f.bullets.map((b) => (
-                            <li key={b} className="flex gap-2.5">
-                              <span aria-hidden className="mt-[7px] h-[3px] w-[3px] shrink-0 rounded-full bg-faint" />
-                              <span className="min-w-0">{b}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+                  <span className="min-w-0 text-[14px] font-semibold leading-snug text-ink sm:text-[15px]">
+                    {f.q}
+                  </span>
+                  <Chevron open={isOpen} />
+                </button>
+              </h3>
+
+              {/*
+               * Height animates via `grid-template-rows: 0fr → 1fr`, which
+               * transitions to the content's natural height without having
+               * to measure it — a `max-height` guess would either clip the
+               * seven-item list in Q2 or leave the shorter answers easing
+               * through empty space.
+               */}
+              <div
+                id={`faq-panel-${i}`}
+                role="region"
+                aria-labelledby={`faq-trigger-${i}`}
+                className={`grid transition-[grid-template-rows] duration-300 ease-out motion-reduce:transition-none ${
+                  isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                }`}
+              >
+                <div className="min-h-0 overflow-hidden">
+                  <div className="px-5 pb-5 text-[12.5px] leading-relaxed text-ink2 sm:px-6 sm:pb-6 sm:text-[13px]">
+                    <p className="m-0">{f.a}</p>
+                    {f.bullets && (
+                      <ul className="mt-3 space-y-1.5">
+                        {f.bullets.map((b) => (
+                          <li key={b} className="flex gap-2.5">
+                            <span aria-hidden className="mt-[7px] h-[3px] w-[3px] shrink-0 rounded-full bg-faint" />
+                            <span className="min-w-0">{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
