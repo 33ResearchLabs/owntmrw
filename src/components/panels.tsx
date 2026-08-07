@@ -104,17 +104,29 @@ export function DenseMetricGrid({
 
 export function SectionCard({
   title,
+  subtitle,
   right,
   children,
 }: {
   title: string;
+  /**
+   * One line under the title saying what the section is reading and from
+   * where. Same scale and colour as `TrendSectionHeader`'s, so a page that
+   * mixes the two does not appear to have two kinds of subheading.
+   */
+  subtitle?: string;
   right?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="card">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-grid px-4 py-3">
-        <h3 className="text-[14px] font-semibold">{title}</h3>
+        {/* The title and its subtitle travel together, so `right` still lands
+            against the far edge instead of between them. */}
+        <div>
+          <h3 className="text-[14px] font-semibold">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-[12px] font-normal text-ink2">{subtitle}</p>}
+        </div>
         {right}
       </div>
       {children}
@@ -132,10 +144,13 @@ export function SectionCard({
  */
 export function DashboardCard({
   title,
+  subtitle,
   right,
   children,
 }: {
   title: string;
+  /** One line under the title, at the same scale `SectionCard` uses. */
+  subtitle?: string;
   right?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -145,7 +160,10 @@ export function DashboardCard({
         {/* Same as the Market Depth header, which is the reference on this
             page — two cards stacked in one column should not announce
             themselves at two different weights. */}
-        <h3 className="text-[15px] font-semibold">{title}</h3>
+        <div>
+          <h3 className="text-[15px] font-semibold">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-[12.5px] font-normal text-ink2">{subtitle}</p>}
+        </div>
         {right != null && <div className="flex flex-wrap items-center gap-2">{right}</div>}
       </div>
       {children}
@@ -339,7 +357,10 @@ export function RiskPanel({
 }) {
   if (!risk) {
     return (
-      <SectionCard title="Contract Risk">
+      <SectionCard
+        title="Contract Risk"
+        subtitle="Automated safety checks on the token contract itself — mint, freeze and liquidity locks."
+      >
         <div className="p-4">
           <DataGap
             title="No contract risk check on file"
@@ -375,6 +396,7 @@ export function RiskPanel({
   return (
     <SectionCard
       title="Contract Risk"
+      subtitle="Automated safety checks on the token contract itself — mint, freeze and liquidity locks."
       right={
         <span className="text-[11px] text-muted">
           {flags.length === 0
@@ -475,7 +497,10 @@ export function ListingsPanel({
 }) {
   if (listings.length === 0) {
     return (
-      <SectionCard title="Exchange Listings">
+      <SectionCard
+        title="Exchange Listings"
+        subtitle="Every venue we can see trading this token, and how much of the volume each one carries."
+      >
         <div className="p-4">
           <DataGap
             title="No venues indexed for this token"
@@ -527,6 +552,7 @@ export function ListingsPanel({
   return (
     <SectionCard
       title="Exchange Listings"
+      subtitle="Every venue we can see trading this token, and how much of the volume each one carries."
       right={
         <span className="text-[11px] text-muted">
           {listings.length} venue{listings.length === 1 ? "" : "s"}
@@ -637,7 +663,10 @@ function SupplyAllocation({ p }: { p: ProjectDetail["project"] }) {
   const pool = clean(p.liquidity_tokens);
 
   return (
-    <SectionCard title="Supply Allocation">
+    <SectionCard
+      title="Supply Allocation"
+      subtitle="Where the supply actually sits — treasury, pools, and everything still in circulation."
+    >
       <div className="px-4 py-4">
         <div className="flex h-3 w-full gap-0.5">
           {segments.map((s, i) => (
@@ -712,6 +741,7 @@ export function HoldersPanel({
     <div className="space-y-5">
       <SectionCard
         title="Holder Base"
+        subtitle="How many people hold this token, and how concentrated that ownership is."
         right={
           <span className="text-[11px] text-muted">
             {hh.length} snapshot{hh.length === 1 ? "" : "s"} recorded
@@ -761,7 +791,10 @@ export function HoldersPanel({
 
       <SupplyAllocation p={p} />
 
-      <SectionCard title="Top Holders">
+      <SectionCard
+        title="Top Holders"
+        subtitle="The largest wallets on this token and how much of the supply each one controls."
+      >
         {topHolders.length === 0 ? (
           <div className="p-4">
             <DataGap
@@ -905,7 +938,10 @@ export function SmartMoneyPanel({ d }: { d: ProjectDetail }) {
   );
   return (
     <div className="space-y-5">
-      <SectionCard title="Smart Money Flow">
+      <SectionCard
+        title="Smart Money Flow"
+        subtitle="What the wallets with a track record are doing with this token right now."
+      >
         {whaleEvents.length === 0 ? (
           <div className="p-4">
             <DataGap
@@ -1026,6 +1062,7 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
       </section>
       <SectionCard
         title="Treasury"
+        subtitle="What the project holds and how deep its pools run, read on-chain."
         right={
           p.treasury_address ? (
             <a
@@ -1067,6 +1104,7 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
       {treasuryHistory.length > 0 && (
         <SectionCard
           title="Treasury History"
+          subtitle="Every balance change we have recorded, so you can see the runway moving."
           right={
             <span className="text-[11px] text-muted">
               one row per balance change · read {timeAgo(treasuryLastRead)}
@@ -1234,6 +1272,7 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
       )}
     <DashboardCard
       title="Performance Since Raise"
+      subtitle="How the token has actually done against the price its backers paid."
       right={<CardAction href={p.raise_source_url}>Data source</CardAction>}
     >
       <MetricGrid>
@@ -1357,7 +1396,10 @@ export function NewsPanel({
 }) {
   return (
     <div className="space-y-5">
-      <SectionCard title="News & Announcements">
+      <SectionCard
+        title="News & Announcements"
+        subtitle="Everything this project has said publicly, pulled from its own channels."
+      >
         {items.length === 0 ? (
           <div className="p-4">
             <DataGap
@@ -1374,6 +1416,7 @@ export function NewsPanel({
       {releases.length > 0 && (
         <SectionCard
           title="Repository Releases"
+          subtitle="Tagged versions shipped from this project's repositories."
           right={
             <span className="text-[11px] text-muted">
               {releases.length} git tag{releases.length === 1 ? "" : "s"} · not
@@ -1385,7 +1428,10 @@ export function NewsPanel({
         </SectionCard>
       )}
 
-      <SectionCard title="Official Channels">
+      <SectionCard
+        title="Official Channels"
+        subtitle="The accounts and sites this project actually publishes from."
+      >
         <div className="flex flex-wrap gap-3 px-4 py-4 text-[13px]">
           {(
             [
@@ -1454,23 +1500,35 @@ export function ResearchPanel({ memo }: { memo: Memo }) {
 
   return (
     <div className="space-y-5">
-      <SectionCard title="Executive Summary">
+      <SectionCard
+        title="Executive Summary"
+        subtitle="The short version — what this project is and where it stands today."
+      >
         <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
           {memo.summary}
         </p>
       </SectionCard>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard title="Bull Case">
+        <SectionCard
+          title="Bull Case"
+          subtitle="What has to go right."
+        >
           <List items={memo.bull} tone="good" />
         </SectionCard>
-        <SectionCard title="Bear Case">
+        <SectionCard
+          title="Bear Case"
+          subtitle="What could go wrong."
+        >
           <List items={memo.bear} tone="bad" />
         </SectionCard>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard title="Strengths">
+        <SectionCard
+          title="Strengths"
+          subtitle="What this project already has going for it."
+        >
           {memo.strengths.length ? (
             <List items={memo.strengths} tone="good" />
           ) : (
@@ -1479,7 +1537,10 @@ export function ResearchPanel({ memo }: { memo: Memo }) {
             </p>
           )}
         </SectionCard>
-        <SectionCard title="Weaknesses">
+        <SectionCard
+          title="Weaknesses"
+          subtitle="Where it is thin."
+        >
           {memo.weaknesses.length ? (
             <List items={memo.weaknesses} tone="bad" />
           ) : (
@@ -1490,17 +1551,26 @@ export function ResearchPanel({ memo }: { memo: Memo }) {
         </SectionCard>
       </div>
 
-      <SectionCard title="Risks">
+      <SectionCard
+        title="Risks"
+        subtitle="The things most likely to derail this project, and how exposed it is to each."
+      >
         <List items={memo.risks} tone="bad" />
       </SectionCard>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard title="Momentum">
+        <SectionCard
+          title="Momentum"
+          subtitle="Which way it is trending."
+        >
           <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
             {memo.momentum}
           </p>
         </SectionCard>
-        <SectionCard title="Competition">
+        <SectionCard
+          title="Competition"
+          subtitle="Who else is building this."
+        >
           <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
             {memo.competition}
           </p>
@@ -1508,12 +1578,18 @@ export function ResearchPanel({ memo }: { memo: Memo }) {
       </div>
 
       {memo.developments.length > 0 && (
-        <SectionCard title="Recent Developments">
+        <SectionCard
+          title="Recent Developments"
+          subtitle="What has changed lately."
+        >
           <List items={memo.developments} />
         </SectionCard>
       )}
 
-      <SectionCard title="Long-term Outlook">
+      <SectionCard
+        title="Long-term Outlook"
+        subtitle="Where this project could plausibly end up, and what it would take to get there."
+      >
         <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
           {memo.outlook}
         </p>
@@ -1536,6 +1612,7 @@ export function GovernancePanel({ d }: { d: ProjectDetail }) {
     <div className="space-y-5">
       <SectionCard
         title="Proposals"
+        subtitle="What this project's holders have been asked to decide, and how they voted."
         right={
           <span className="text-[11px] text-muted">
             {proposals.length} indexed
@@ -1593,7 +1670,10 @@ export function GovernancePanel({ d }: { d: ProjectDetail }) {
         )}
       </SectionCard>
 
-      <SectionCard title="Governance Model">
+      <SectionCard
+        title="Governance Model"
+        subtitle="How decisions get made here, and who actually gets a vote."
+      >
         <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
           {p.name} is governed by MetaDAO futarchy: proposals are decided by
           conditional prediction markets rather than token votes. Each proposal

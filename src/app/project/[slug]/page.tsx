@@ -114,12 +114,17 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       <HealthScorePanel hs={hs} updatedAt={hsUpdatedAt} />
       <CompareRaisePanel d={d} />
       <RiskPanel risk={d.risk} flags={parseRisks(d.risk)} />
-      <SectionCard title="AI Insights" right={<span className="text-[11px] text-muted">{signals.length} signal{signals.length === 1 ? "" : "s"}</span>}>
+      <SectionCard
+        title="AI Insights"
+        subtitle="Notable movements picked out of this project's own price, holder and treasury data."
+        right={<span className="text-[11px] text-muted">{signals.length} signal{signals.length === 1 ? "" : "s"}</span>}
+      >
         <InsightList items={signals} />
       </SectionCard>
       {(treasuryValue != null || latest?.liquidity_usd != null) && (
         <SectionCard
           title="Treasury"
+          subtitle="What the project holds and how deep its pools run, read on-chain."
           right={<a href="#treasury" className="text-[11px] text-accent hover:underline">full breakdown →</a>}
         >
           <div className="p-4">
@@ -148,6 +153,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
       {(p.raise_amount_usd != null || rp != null || p.circulating_supply != null || p.raise_note != null) && (
         <DashboardCard
           title="Raise & Supply"
+          subtitle="How much this project raised, at what price, and how much of the token is circulating today."
           right={
             <>
               {p.raise_track && <CardTag>{p.raise_track}</CardTag>}
@@ -373,6 +379,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
               <div className="card">
                 <div className="border-b border-grid px-4 py-3">
                   <h3 className="text-[14px] font-semibold">Latest Signals</h3>
+                  <p className="mt-0.5 text-[12px] font-normal text-ink2">
+                    The most recent things worth knowing about this project.
+                  </p>
                 </div>
                 <ul className="divide-y divide-grid">
                   {observations.slice(0, 5).map((o, i) => (
