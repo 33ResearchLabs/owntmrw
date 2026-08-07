@@ -167,14 +167,15 @@ export default async function Home() {
 
           {/* The price strip belongs to Just Launched rather than standing on
               its own: grouped, the two set their own 16px rhythm instead of
-              inheriting the page's 32px section gap on both sides of a 40px
-              band.
+              inheriting a full section gap on both sides of a 40px band.
 
-              The gap above is set inline, and as `margin-block-start` rather
-              than `margin-top`: `space-y-8` on the parent sets the logical
-              property, so a physical `margin-top` — utility or inline — does
-              not override it and the strip keeps the full section gap. */}
-          <div className="space-y-4" style={{ marginBlockStart: "1rem" }}>
+              The negative top margin cancels most of the gap above it. That
+              gap is the *strip card's* margin-bottom, not this element's
+              margin-top — Tailwind v4 implements `space-y-*` as
+              `margin-block-end` on every child but the last — so it is set
+              here as `-mt-*` and tracks the column's own responsive spacing
+              (space-y-10/14/16 = 40/56/64px), leaving ~16px at every width. */}
+          <div className="-mt-6 space-y-4 md:-mt-10 lg:-mt-12">
             <TokenTicker tokens={ticker} />
 
             {/* newest */}
