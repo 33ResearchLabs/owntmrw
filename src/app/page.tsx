@@ -76,13 +76,14 @@ export default async function Home() {
      * table or a two-up card grid, and all of it was being squeezed into two
      * thirds of the page to leave room for a column that had already stopped.
      */
-    <div className="space-y-8">
+    <div className="ml-10 space-y-10 md:space-y-14 lg:space-y-16">
       {/*
-       * The section rhythm is one scale applied twice: `space-y` between this
-       * column's sections, and the same steps on the gap around it, so the rail
-       * — which sits below the column until `xl` — is spaced like another
-       * section rather than tucked against the last one. At `xl` that gap
-       * becomes the horizontal gutter beside the rail, so it resets there.
+       * One section rhythm, applied at all three levels it can appear at: the
+       * full-width sections below, this column's own sections, and the gap
+       * around the two-column block — so the rail, which sits below the column
+       * until `xl`, is spaced like another section rather than tucked against
+       * the last one. At `xl` that gap becomes the horizontal gutter beside the
+       * rail, so it alone resets there.
        */}
       <div className="flex flex-col gap-10 md:gap-14 lg:gap-16 xl:flex-row xl:gap-6">
         <div className="min-w-0 flex-1 space-y-10 md:space-y-14 lg:space-y-16">
