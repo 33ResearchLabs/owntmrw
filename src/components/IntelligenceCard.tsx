@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Logo } from "./ui";
-import { IconBadge, Eyebrow, type IconName } from "./viz";
+import { IconBadge, Icon, Eyebrow, type IconName } from "./viz";
 import { TradePanel } from "./TradePanel";
 import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 
@@ -53,8 +53,15 @@ export interface IntelProject {
   spark: number[];
 }
 
-/** One row of the card: a measure, and where to read more of it. */
-interface Facet {
+/**
+ * One row of the card: a measure, and where to read more of it.
+ *
+ * Exported alongside `facetsFor` because the alternate layouts in
+ * `IntelligenceVariants` lay these same five measures out differently. What a
+ * facet *is* — which figure, which tab, which unit — is the same question in
+ * every layout, so it is answered once here rather than per design.
+ */
+export interface Facet {
   icon: IconName;
   color: string;
   title: string;
@@ -68,7 +75,7 @@ interface Facet {
 
 const dash = <span className="text-muted">—</span>;
 
-function facetsFor(p: IntelProject): Facet[] {
+export function facetsFor(p: IntelProject): Facet[] {
   // Treasury against what was raised — the card's one derived figure, and it
   // only appears when both halves are real and the raise was non-zero.
   const remaining =
@@ -167,7 +174,7 @@ function Chevron({ open }: { open: boolean }) {
  * new widget. Dismissal follows `GlobalSearch`: a document `mousedown` outside
  * the box, or Escape.
  */
-function Picker({
+export function Picker({
   projects,
   selected,
   onSelect,
@@ -278,25 +285,38 @@ function Picker({
  * — the card above already opens there five times. Taking the list from the
  * real tabs rather than from a wishlist is the same rule the facet rows follow:
  * a tile cannot come to advertise a section the app does not have.
+ *
+ * The glyphs are the reference's: a `</>` for development, a page for news, a
+ * coin for the money tab, and the set's existing people/bank/shield/target for
+ * the rest. All drawn in one neutral ink rather than the tinted badges used
+ * elsewhere — the row is a set of destinations, and eight colours would read as
+ * eight categories that do not exist.
  */
-const EXPLORE: { tab: string; label: string; icon: IconName; color: string }[] = [
-  { tab: "holders", label: "Holders", icon: "users", color: "#9b7ae0" },
-  { tab: "smart", label: "Smart Money", icon: "target", color: "var(--accent)" },
-  { tab: "treasury", label: "Treasury", icon: "bank", color: "var(--good)" },
-  { tab: "development", label: "Development", icon: "bars", color: "#e08a3c" },
-  { tab: "governance", label: "Governance", icon: "shield", color: "var(--warn)" },
-  { tab: "timeline", label: "Timeline", icon: "clock", color: "#d55181" },
-  { tab: "news", label: "News", icon: "info", color: "var(--accent)" },
-  { tab: "research", label: "Research", icon: "layers", color: "#9085e9" },
+const EXPLORE: { tab: string; label: string; icon: IconName }[] = [
+  { tab: "holders", label: "Holders", icon: "users" },
+  { tab: "smart", label: "Smart Money", icon: "coin" },
+  { tab: "treasury", label: "Treasury", icon: "bank" },
+  { tab: "development", label: "Development", icon: "code" },
+  { tab: "governance", label: "Governance", icon: "shield" },
+  { tab: "timeline", label: "Timeline", icon: "clock" },
+  { tab: "news", label: "News", icon: "news" },
+  { tab: "research", label: "Research", icon: "target" },
 ];
 
 function ExploreStrip({ project }: { project: IntelProject }) {
   return (
-    <div className="card px-5 py-5 sm:px-6">
-      <div className="mb-3.5 text-[13px] font-bold">
-        Explore more data
-        <span className="ml-1.5 font-medium text-muted">· {project.name}</span>
+    /*
+     * Its own section, headed like the others on the page — same 18px bold, the
+     * same `mb-4`, and the same right-hand note Top Movers carries. It is a
+     * separate thing from the two cards above it, so it is titled like one
+     * rather than captioned inside a card.
+     */
+    <section>
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <h2 className="text-[18px] font-bold">Explore more data</h2>
+        <span className="truncate text-[12px] text-faint">{project.name}</span>
       </div>
+
       {/*
        * `auto-fit` rather than a column count: eight tiles divide badly into
        * most fixed grids, and this lets the row take as many as fit and wrap
@@ -307,14 +327,18 @@ function ExploreStrip({ project }: { project: IntelProject }) {
           <Link
             key={e.tab}
             href={`/project/${project.slug}#${e.tab}`}
-            className="flex flex-col items-center gap-2 rounded-xl border border-line bg-surface2/40 px-2 py-3.5 text-center transition-colors duration-150 hover:border-line2 hover:bg-surface2"
+            className="group flex flex-col items-center gap-2.5 rounded-xl border border-line bg-surface2/40 px-2 py-4 text-center transition-colors duration-150 hover:border-line2 hover:bg-surface2"
           >
-            <IconBadge name={e.icon} color={e.color} size={30} />
-            <span className="truncate text-[11.5px] font-medium text-ink2">{e.label}</span>
+            <span className="text-ink2 transition-colors duration-150 group-hover:text-ink">
+              <Icon name={e.icon} size={22} />
+            </span>
+            <span className="truncate text-[11.5px] font-medium text-muted transition-colors duration-150 group-hover:text-ink2">
+              {e.label}
+            </span>
           </Link>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
