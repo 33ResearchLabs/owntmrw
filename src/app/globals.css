@@ -386,14 +386,25 @@ body {
 
 .scroll-x { overflow-x: auto; }
 
-/* thin scrollbars so dense tables stay calm */
-.scroll-x::-webkit-scrollbar { height: 8px; }
+/* thin scrollbars so dense tables stay calm. `width` is the vertical
+   scrollbar's thickness — the explorer table scrolls on both axes, and
+   without it the vertical thumb fell back to the browser's default (wider)
+   size while the horizontal one used this thin one. */
+.scroll-x::-webkit-scrollbar { height: 8px; width: 8px; }
 .scroll-x::-webkit-scrollbar-track { background: transparent; }
 .scroll-x::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 999px;
 }
 .scroll-x::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* Hides only the vertical thumb, for a container that scrolls on both axes
+   but should only ever show the horizontal one — the explorer table's row
+   list, where a second thumb beside the wide-table one reads as clutter
+   rather than affordance the wheel/trackpad scroll doesn't already give.
+   `:vertical` is more specific than the bare `.scroll-x::-webkit-scrollbar`
+   rule above, so pairing this class with `scroll-x` overrides just that axis. */
+.scroll-y-quiet::-webkit-scrollbar:vertical { width: 0; }
 
 /* Same horizontal overflow as .scroll-x, but for a nav strip (tabs, the chart's
    timeframe row) rather than a data table — a visible thumb reads as a table
