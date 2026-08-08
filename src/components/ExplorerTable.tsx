@@ -170,8 +170,8 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
           <TrendSectionHeader
             title="The most powerful explorer in crypto."
             subtitle="Ranked by traded volume, market cap, pool depth, treasury and holders. Sort any column."
-            // action={<Link href="/screener" className="text-[11px] text-accent hover:underline">full screener →</Link>}
           />
+
         </div>
         <div className="scroll-x border-t border-grid">
           <table className="itable text-[13px]">
@@ -215,20 +215,18 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
         </div>
 
         {/* The reference design fades the table into the page rather than ending
-            it on a hard rule. Nothing is withheld by it — the footer link goes to
-            the full screener — so it stays purely decorative and click-through. */}
+            it on a hard rule. It stays purely decorative and click-through:
+            the rows it fades over are still readable, and every project in them
+            links to its own page from the first column. */}
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 h-28"
           style={{ background: "linear-gradient(to top, var(--surface) 22%, transparent)" }}
           aria-hidden
         />
-        <div className="relative flex items-center justify-between px-4 py-3">
+        <div className="relative px-4 py-3">
           <span className="text-[11.5px] text-faint">
             Volume summed from daily candles · {rows.length} projects tracked
           </span>
-          <Link href="/screener" className="text-[12.5px] font-medium text-accent hover:underline">
-            View all →
-          </Link>
         </div>
       </div>
     </section>

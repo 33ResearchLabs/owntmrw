@@ -190,11 +190,10 @@ export default async function Home() {
           {/* newest */}
           {newest.length > 0 && (
             <section>
-              <div className="mb-4 flex items-baseline justify-between">
+              <div className="mb-4">
                 <h2 className="flex items-center gap-2 text-[18px] font-bold">
                   <span className="text-accent">⚡</span> Just Launched
                 </h2>
-                <Link href="/screener" className="text-[12.5px] text-muted hover:text-ink">View all</Link>
               </div>
               {/* Three across from `md` rather than `xl`. There are three cards,
                   so a two-up grid spent a second full row on the last one and
@@ -286,9 +285,8 @@ export default async function Home() {
 
           {trending.length > 0 && (
             <div className="card px-5 pb-2.5 pt-4">
-              <div className="mb-1 flex items-center justify-between">
+              <div className="mb-1">
                 <span className="text-[14.5px] font-bold">Most Traded</span>
-                <Link href="/screener" className="text-[12px] text-faint hover:text-ink2">View all</Link>
               </div>
               {trending.map((r, i) => (
                 <Link
@@ -312,12 +310,11 @@ export default async function Home() {
 
           {activity.length > 0 && (
             <div className="card px-5 pb-2.5 pt-4">
-              <div className="mb-1 flex items-center justify-between">
+              <div className="mb-1">
                 <span className="flex items-center gap-2 text-[14.5px] font-bold">
                   <span className="h-[7px] w-[7px] rounded-full bg-good pulse" />
                   Live Activity
                 </span>
-                <Link href="/timeline" className="text-[12px] text-faint hover:text-ink2">View all</Link>
               </div>
               {activity.map((e, i) => (
                 <Link key={i} href={`/project/${e.slug}`} className="flex items-center gap-3 border-t border-grid py-2.5">
@@ -352,9 +349,11 @@ export default async function Home() {
            */}
           {signals.length > 0 && (
             <div className="card flex flex-col px-5 pb-2.5 pt-4 xl:min-h-0 xl:flex-1">
-              <div className="mb-1 flex shrink-0 items-center justify-between">
+              {/* `shrink-0` stays with the heading now that the link beside it
+                  is gone: this is a flex child of the card at `xl`, and without
+                  it the header would give up height to the scrolling list. */}
+              <div className="mb-1 shrink-0">
                 <span className="text-[14.5px] font-bold">Signals</span>
-                <Link href="/observations" className="text-[12px] text-faint hover:text-ink2">View all</Link>
               </div>
               <div className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
                 {signals.map((o, i) => (

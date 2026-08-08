@@ -99,11 +99,6 @@ export function ResearchSection({ board }: { board: Scoreboard }) {
         color="#9b7ae0"
         title="Deep expertise meets deep data."
         subtitle="How a project score is built, and what it produces — worked through on a real project."
-        action={
-          <Link href={`/project/${featured.slug}`} className="text-[11px] text-accent hover:underline">
-            worked example →
-          </Link>
-        }
         divider
       />
       {/* `grid-cols-1` is stated rather than left implicit: an implicit `auto`

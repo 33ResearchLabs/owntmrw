@@ -1,6 +1,6 @@
 import type { ScreenerRow } from "@/lib/queries";
 import { IconBadge, type IconName } from "./viz";
-import { Eyebrow, CardCta, IntelligenceCard, type IntelProject } from "./IntelligenceCard";
+import { Eyebrow, IntelligenceCard, type IntelProject } from "./IntelligenceCard";
 
 /**
  * The two explainer cards under the explorer table: what the product measures,
@@ -157,8 +157,6 @@ export function IntelligenceSection({ rows }: { rows: ScreenerRow[] }) {
               </div>
             ))}
           </div>
-
-          <CardCta href="/screener">See it applied across every project</CardCta>
         </div>
       </div>
 
