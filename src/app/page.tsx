@@ -392,8 +392,11 @@ export default async function Home() {
             nothing upstream goes unused while this is out. */}
         {/* <ResearchSection board={board} /> */}
 
-        {/* faq */}
-        <FaqSection />
+        {/* faq — parked alongside the research section above, same one-line
+            revert. With both out, nothing on this page explains how a score is
+            built any more, so the two links that pointed here now go to the
+            project's own overview, where the score and its dimensions are. */}
+        {/* <FaqSection /> */}
 
         {/* banner — last on the page, so the closing call to action follows the
             questions rather than interrupting them */}

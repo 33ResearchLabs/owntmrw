@@ -272,11 +272,13 @@ export function TradePanel({ p }: { p: IntelProject }) {
         </div>
       </div>
 
-      {/* Points at the FAQ rather than the research section: that section is
-          parked, and "How is the Health Score calculated?" is now the page's
-          remaining account of how the reading above is built. */}
+      {/* Leaves the page for the project's own overview, where the score above
+          is shown broken into the dimensions it is built from. Both in-page
+          destinations this used to have — the research section, then the FAQ —
+          are parked, and the overview is the working version of what they
+          described rather than a substitute for it. */}
       <Link
-        href="#faq-heading"
+        href={`/project/${p.slug}#overview`}
         className="mt-auto flex items-center justify-center gap-2 rounded-xl border border-line bg-surface2/40 px-4 py-3.5 text-[13px] font-medium text-ink2 transition-colors duration-150 hover:border-line2 hover:bg-surface2 hover:text-ink"
       >
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
