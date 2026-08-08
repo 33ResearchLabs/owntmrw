@@ -1,8 +1,6 @@
-import Link from "next/link";
 import type { ScreenerRow } from "@/lib/queries";
-import { Logo } from "./ui";
 import { IconBadge, type IconName } from "./viz";
-import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
+import { Eyebrow, CardCta, IntelligenceCard, type IntelProject } from "./IntelligenceCard";
 
 /**
  * The two explainer cards under the explorer table: what the product measures,
@@ -12,19 +10,25 @@ import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
  * the same reading the project's own page would show, and each row deep-links
  * to the tab it came from. A screenshot-shaped placeholder would have been
  * less work and would have aged into a lie the first time a tab moved.
+ *
+ * That card is a client component (`IntelligenceCard`) because it carries the
+ * project picker; everything else here is static copy and stays on the server.
  */
 
-/** One row of the left card: a measure, and where to read more of it. */
-interface Facet {
-  icon: IconName;
-  color: string;
-  title: string;
-  blurb: string;
-  /** The project-page tab this row opens. */
-  tab: string;
-  value: React.ReactNode;
-  /** What the figure is, under it. */
-  unit: string;
+/**
+ * How much of the card a project can actually fill: how many of its five
+ * headline figures are on file. Three is the floor for appearing at all, so
+ * neither the default nor anything reachable from the picker is a card of
+ * dashes.
+ */
+function filled(r: ScreenerRow): number {
+  return [r.raise_amount_usd, r.treasury_usd, r.holder_count, r.gh_last_push, r.roi_since_raise]
+    .filter((v) => v != null).length;
+}
+
+/** Fullest card first, biggest project breaking ties. */
+function byCompleteness(a: ScreenerRow, b: ScreenerRow): number {
+  return filled(b) - filled(a) || (b.mcap ?? 0) - (a.mcap ?? 0);
 }
 
 /**
@@ -36,64 +40,29 @@ interface Facet {
  * marketing section on the front page full of dashes.
  */
 export function pickFeatured(rows: ScreenerRow[]): ScreenerRow | null {
-  const score = (r: ScreenerRow) =>
-    [r.raise_amount_usd, r.treasury_usd, r.holder_count, r.gh_last_push, r.roi_since_raise]
-      .filter((v) => v != null).length;
-  const best = [...rows].sort(
-    (a, b) => score(b) - score(a) || (b.mcap ?? 0) - (a.mcap ?? 0)
-  )[0];
-  return best && score(best) >= 3 ? best : null;
+  const best = [...rows].sort(byCompleteness)[0];
+  return best && filled(best) >= 3 ? best : null;
 }
 
-/*
- * A row is its own bordered card rather than a rule-separated band. Same link,
- * same figures — the border moves from between the rows to around each of them,
- * which is what lets the padding grow without the card reading as one long
- * ruled table.
+/**
+ * Every project the picker offers, in the order it offers them — flattened to
+ * the nine fields the card reads, because the whole list crosses into the
+ * client bundle and a `ScreenerRow` carries thirty-odd it does not.
+ *
+ * Sorted by the same comparator `pickFeatured` uses, so the first entry — the
+ * card's default — is the featured project by construction rather than by two
+ * rules that have to be kept in agreement.
  */
-function FacetRow({ slug, f }: { slug: string; f: Facet }) {
-  return (
-    <Link
-      href={`/project/${slug}#${f.tab}`}
-      className="flex items-center gap-3.5 rounded-xl border border-line bg-surface2/40 px-4 py-3.5 transition-colors duration-150 hover:border-line2 hover:bg-surface2"
-    >
-      <IconBadge name={f.icon} color={f.color} size={38} />
-      <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-semibold">{f.title}</div>
-        <div className="truncate text-[11.5px] text-muted">{f.blurb}</div>
-      </div>
-      <div className="shrink-0 text-right">
-        <div className="num text-[13.5px] font-semibold">{f.value}</div>
-        <div className="text-[10.5px] text-muted">{f.unit}</div>
-      </div>
-      <span className="shrink-0 text-[15px] text-faint" aria-hidden>›</span>
-    </Link>
-  );
-}
-
-/** Eyebrow tag above each card's heading — the label and its dot. */
-function Eyebrow({ label, color }: { label: string; color: string }) {
-  return (
-    <div
-      className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em]"
-      style={{ color }}
-    >
-      {label}
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
-    </div>
-  );
-}
-
-/** The shared footer action, as a full-width button rather than a ruled strip. */
-function CardCta({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="mt-auto flex items-center justify-center gap-2 rounded-xl border border-line bg-surface2/40 px-4 py-3.5 text-[13px] font-medium text-ink2 transition-colors duration-150 hover:border-line2 hover:bg-surface2 hover:text-ink"
-    >
-      {children} <span aria-hidden>→</span>
-    </Link>
-  );
+export function intelProjects(rows: ScreenerRow[]): IntelProject[] {
+  return [...rows]
+    .filter((r) => filled(r) >= 3)
+    .sort(byCompleteness)
+    .map((r) => ({
+      slug: r.slug, name: r.name, category: r.category, image_url: r.image_url,
+      raise_amount_usd: r.raise_amount_usd, treasury_usd: r.treasury_usd,
+      holder_count: r.holder_count, gh_last_push: r.gh_last_push,
+      roi_since_raise: r.roi_since_raise,
+    }));
 }
 
 /**
@@ -132,47 +101,9 @@ function Check() {
   );
 }
 
-export function IntelligenceSection({ featured }: { featured: ScreenerRow | null }) {
-  if (!featured) return null;
-  const r = featured;
-
-  // Treasury against what was raised — the card's one derived figure, and it
-  // only appears when both halves are real and the raise was non-zero.
-  const remaining = r.treasury_usd != null && r.raise_amount_usd
-    ? (r.treasury_usd / r.raise_amount_usd) * 100 : null;
-
-  const dash = <span className="text-muted">—</span>;
-  const facets: Facet[] = [
-    {
-      icon: "token", color: "var(--accent)", tab: "overview",
-      title: "Raise Overview", blurb: "Funding details and round information",
-      value: r.raise_amount_usd != null ? fmtUsd(r.raise_amount_usd) : dash, unit: "Raised",
-    },
-    {
-      icon: "bank", color: "var(--good)", tab: "treasury",
-      title: "Treasury", blurb: "On-chain treasury and capital allocation",
-      value: r.treasury_usd != null ? fmtUsd(r.treasury_usd) : dash,
-      unit: remaining != null ? `${remaining.toFixed(0)}% of raise held` : "on-chain balance",
-    },
-    {
-      icon: "users", color: "#9b7ae0", tab: "holders",
-      title: "Holders", blurb: "Holder distribution and concentration",
-      value: r.holder_count != null ? fmtNum(r.holder_count) : dash, unit: "Total holders",
-    },
-    {
-      icon: "bars", color: "#e08a3c", tab: "development",
-      title: "Development", blurb: "GitHub activity and developer performance",
-      value: r.gh_last_push ? timeAgo(r.gh_last_push) : dash, unit: "Last commit",
-    },
-    {
-      icon: "chart", color: "var(--warn)", tab: "overview",
-      title: "Performance", blurb: "Market performance since launch",
-      value: r.roi_since_raise != null
-        ? <span className={r.roi_since_raise >= 0 ? "text-good" : "text-bad"}>{fmtPct(r.roi_since_raise)}</span>
-        : dash,
-      unit: "ROI since raise",
-    },
-  ];
+export function IntelligenceSection({ rows }: { rows: ScreenerRow[] }) {
+  const projects = intelProjects(rows);
+  if (!projects.length) return null;
 
   return (
     /*
@@ -182,54 +113,24 @@ export function IntelligenceSection({ featured }: { featured: ScreenerRow | null
      * so they still end on the same line.
      */
     <section className="space-y-6">
-      <div className="grid items-stretch gap-6 lg:grid-cols-2">
-        <div className="card flex h-full flex-col gap-6 p-5 sm:p-6">
-          {/*
-           * Header block, identical in shape to the methodology card's so the
-           * two line up: an eyebrow row of a fixed height, then the heading and
-           * the description on the same margins. The row is sized to the
-           * selector, which only the left card carries — without the floor the
-           * right card's eyebrow would collapse to its text height and pull its
-           * heading a selector's worth of space higher.
-           */}
-          <div>
-            <div className="flex min-h-[42px] items-center justify-between gap-4">
-              <Eyebrow label="Project Intelligence" color="var(--accent)" />
-              <div className="inline-flex max-w-[210px] shrink-0 items-center gap-2.5 rounded-xl border border-line bg-surface2/60 py-1.5 pl-1.5 pr-3">
-                <Logo src={r.image_url} name={r.name} size={28} />
-                <span className="min-w-0 text-left">
-                  <span className="block truncate text-[12.5px] font-bold leading-tight">{r.name}</span>
-                  <span className="block truncate text-[10.5px] text-muted">{r.category ?? "Project"}</span>
-                </span>
-              </div>
-            </div>
-            {/* Broken explicitly rather than left to wrap: the break has to land
-                after "Institutional-grade" at every width the card takes. */}
-            <h2 className="mt-4 text-[26px] font-extrabold leading-[1.12] tracking-[-0.02em] sm:text-[30px]">
-              Institutional-grade<br />project intelligence.
-            </h2>
-            {/* Two lines' worth of floor on both descriptions, so the rule under
-                them lands at the same height however the shorter one wraps. */}
-            <p className="mt-4 min-h-[41px] text-[12.5px] leading-relaxed text-ink2">
-              Go beyond token prices — fundraising, treasury, holders, developers and governance in one workspace.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2.5 border-t border-line pt-3">
-            {facets.map((f) => <FacetRow key={f.title} slug={r.slug} f={f} />)}
-          </div>
-
-          {/* mt-auto pins the footer to the bottom of the stretched card, so
-              two cards with different row counts still end on the same line. */}
-          <CardCta href={`/project/${r.slug}`}>Explore project intelligence</CardCta>
-        </div>
+      {/* `grid-cols-1` is stated rather than left implicit: an implicit `auto`
+          track sizes to its widest item's max-content and will not shrink below
+          it, which pushed both cards ~126px past the viewport on a phone. The
+          `grid-cols-*` utilities compile to `minmax(0, 1fr)`, which caps it. */}
+      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
+        <IntelligenceCard projects={projects} />
 
         <div className="card flex h-full flex-col gap-6 p-5 sm:p-6">
           {/* Mirrors the intelligence card's header exactly — same eyebrow-row
               floor, same margins — so both headings, descriptions and rules sit
               on the same lines. */}
           <div>
-            <div className="flex min-h-[42px] items-center">
+            {/* 45px, not 42: the floor exists to match the selector opposite,
+                and that control is 45px tall — its two lines of text, not its
+                28px logo, are what set the height. At 42 the floor was three
+                short, so this heading sat above its neighbour rather than
+                level with it. */}
+            <div className="flex min-h-[45px] items-center">
               <Eyebrow label="Methodology" color="#9b7ae0" />
             </div>
             <h2 className="mt-4 text-[26px] font-extrabold leading-[1.12] tracking-[-0.02em] sm:text-[30px]">
