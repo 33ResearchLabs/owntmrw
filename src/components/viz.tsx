@@ -18,7 +18,7 @@ import { Delta } from "./ui";
 export type IconName =
   | "chart" | "token" | "users" | "droplet" | "bars" | "target"
   | "pie" | "layers" | "percent" | "shield" | "clock" | "info" | "bank"
-  | "code" | "news" | "coin";
+  | "code" | "news" | "coin" | "stack" | "bolt" | "lock";
 
 /** Stroked 24×24 paths, drawn at the badge's size. No icon dependency. */
 const ICONS: Record<IconName, React.ReactNode> = {
@@ -44,6 +44,11 @@ const ICONS: Record<IconName, React.ReactNode> = {
   // A dollar in a coin. The S is two arcs rather than a glyph, so it keeps the
   // set's stroke weight instead of inheriting the font's.
   coin: <><circle cx="12" cy="12" r="8" /><path d="M12 6.8v10.4" /><path d="M14.6 9.4a2.4 2.4 0 0 0-2.4-1.3c-1.5 0-2.6.8-2.6 2s1.1 1.8 2.6 2.1 2.6.8 2.6 2-1.1 2-2.6 2a2.4 2.4 0 0 1-2.4-1.3" /></>,
+  // Three stacked plates, isometric — aggregation from more than one source
+  // rather than a single feed.
+  stack: <><path d="M12 3.5 4 8l8 4.5 8-4.5-8-4.5Z" /><path d="M4 12.5 12 17l8-4.5" /><path d="M4 16.5 12 21l8-4.5" /></>,
+  bolt: <path d="M13 2 4.5 13.5H11l-1 8.5 9.5-13H13l.5-7Z" />,
+  lock: <><rect x="5" y="10.5" width="14" height="9.5" rx="2" /><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5" /></>,
 };
 
 export function Icon({ name, size = 14 }: { name: IconName; size?: number }) {

@@ -32,7 +32,13 @@ export function AnnouncementBar() {
            * sets its own height, and it survives the ellipsis on a phone
            * instead of being the first thing truncated away.
            */}
-          <span className="shrink-0 rounded border border-zinc-600 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
+          <span
+            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-brandink"
+            style={{
+              background: "linear-gradient(180deg, var(--brand-hi) 0%, var(--brand) 100%)",
+              boxShadow: "0 2px 8px -3px rgba(169, 138, 85, 0.9), inset 0 1px 0 0 rgba(255, 255, 255, 0.22)",
+            }}
+          >
             NEW
           </span>
           {/* Ellipsises on a phone, wraps rather than overflows once there is

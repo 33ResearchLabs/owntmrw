@@ -18,16 +18,23 @@ import type { IntelProject } from "./IntelligenceCard";
  * came from rather than a judgement about where the price is going.
  */
 
-type Tone = "good" | "warn" | "bad" | "muted";
+/*
+ * The four readings below and the tone map are exported because the alternate
+ * layouts in `IntelligenceVariants` restate the same panel in different shapes.
+ * A layout may move where the verdict sits; it may not decide what the verdict
+ * is — that stays here, so a project cannot come out HOLD in one design and BUY
+ * in another.
+ */
+export type Tone = "good" | "warn" | "bad" | "muted";
 
-const TONE: Record<Tone, string> = {
+export const TONE: Record<Tone, string> = {
   good: "text-good",
   warn: "text-warn",
   bad: "text-bad",
   muted: "text-muted",
 };
 
-interface Reading { label: string; tone: Tone }
+export interface Reading { label: string; tone: Tone }
 
 /**
  * The score, restated as a stance.
@@ -36,7 +43,7 @@ interface Reading { label: string; tone: Tone }
  * Weak, reused rather than invented so the same project cannot be "Strong" in
  * one section and a different band in the next.
  */
-function verdictOf(overall: number | null): Reading & { note: string } {
+export function verdictOf(overall: number | null): Reading & { note: string } {
   if (overall == null) return { label: "NO READING", tone: "muted", note: "not enough measured to score" };
   if (overall >= 70) return { label: "BUY", tone: "good", note: `Health ${overall}/100 — strong across measured dimensions` };
   if (overall >= 40) return { label: "HOLD", tone: "warn", note: `Health ${overall}/100 — mixed across measured dimensions` };
@@ -44,7 +51,7 @@ function verdictOf(overall: number | null): Reading & { note: string } {
 }
 
 /** The 24h move, banded. ±2% is the width of ordinary noise on these pools. */
-function trendOf(change: number | null): Reading {
+export function trendOf(change: number | null): Reading {
   if (change == null) return { label: "—", tone: "muted" };
   if (change > 2) return { label: "Bullish", tone: "good" };
   if (change < -2) return { label: "Bearish", tone: "bad" };
@@ -57,7 +64,7 @@ function trendOf(change: number | null): Reading {
  * the mean inverts into a risk band. Dimensions with no reading are left out
  * rather than counted as zero — the same rule the overall score uses.
  */
-function riskOf(concentration: number | null, liquidity: number | null): Reading {
+export function riskOf(concentration: number | null, liquidity: number | null): Reading {
   const xs = [concentration, liquidity].filter((v): v is number => v != null);
   if (!xs.length) return { label: "Unrated", tone: "muted" };
   const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -67,7 +74,7 @@ function riskOf(concentration: number | null, liquidity: number | null): Reading
 }
 
 /** How much of the score is actually measured rather than absent. */
-function strengthOf(measured: number, total: number): Reading {
+export function strengthOf(measured: number, total: number): Reading {
   if (!total) return { label: "—", tone: "muted" };
   const pct = (measured / total) * 100;
   if (pct >= 80) return { label: "Strong", tone: "good" };

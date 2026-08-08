@@ -1,4 +1,3 @@
-import { requireSession } from "@/lib/session";
 import { globalTimeline } from "@/lib/queries";
 import { fmtDate } from "@/lib/format";
 import { TimelineFeed } from "@/components/TimelineFeed";
@@ -6,10 +5,6 @@ import { TimelineFeed } from "@/components/TimelineFeed";
 export const dynamic = "force-dynamic";
 
 export default async function TimelinePage() {
-  // The real gate. `proxy.ts` only saw that a cookie existed; this is where
-  // a forged or expired one is turned away.
-  await requireSession("/timeline");
-
   const events = globalTimeline(200);
 
   return (
