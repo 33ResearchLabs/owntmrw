@@ -51,9 +51,14 @@ export default async function RootLayout({
         {/* Opaque, not just the bar: the padding around the bar is a gap the
             page scrolls through, so a transparent wrapper leaks content above
             and beside the floating pill even when the pill itself is solid.
-            This element's total height (pt + bar + pb) is what `--nav-h` states. */}
+            This element's total height (pt + bar + pb) is what `--nav-h` states.
+
+            The bar and `<main>` below share a container — same `mx-auto`, same
+            `max-w`— so matching their horizontal padding is what makes the logo
+            line up with the first card and the account button with the last.
+            Both are `px-6`; changing one without the other pulls them apart. */}
         <header className="sticky top-0 z-50 bg-page  pb-3 pt-3">
-          <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-3 sm:px-4 lg:gap-5 lg:px-12">
+          <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-6 lg:gap-5">
             <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="Underly — Own Tomorrow">
               <Mark size={36} className="shrink-0" />
               <span className="flex items-baseline gap-2.5">

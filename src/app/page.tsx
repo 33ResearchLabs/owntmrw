@@ -94,7 +94,7 @@ export default async function Home() {
      * table or a two-up card grid, and all of it was being squeezed into two
      * thirds of the page to leave room for a column that had already stopped.
      */
-    <div className="ml-10 space-y-6">
+    <div className="space-y-6">
       {/*
        * One section rhythm, applied at all three levels it can appear at: the
        * full-width sections below, this column's own sections, and the gap
