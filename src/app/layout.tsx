@@ -85,11 +85,25 @@ export default async function RootLayout({
           <main className="min-w-0 flex-1 px-6 py-7">{children}</main>
         </div>
 
+        {/* The disclaimer and the legal links share one row from `sm` and stack
+            below it — the links sit beside the paragraph rather than under it,
+            so the footer keeps its single-band height on a desktop. Type scale,
+            colour and the band's own padding are unchanged. */}
         <footer className="border-t border-line py-5">
-          <div className="mx-auto max-w-[1660px] px-6 text-[11.5px] leading-relaxed text-faint">
-            Underly — public-source intelligence for MetaDAO &amp; Futard projects. Data from
-            Solana RPC, MetaDAO market API, DexScreener, GeckoTerminal, Jupiter and GitHub.
-            Figures are indexed from public sources and may lag. Not financial advice.
+          <div className="mx-auto flex max-w-[1660px] flex-col gap-3 px-6 text-[11.5px] leading-relaxed text-faint sm:flex-row sm:items-start sm:justify-between sm:gap-10">
+            <div className="min-w-0 max-w-[1120px]">
+              OwnTmrw — public-source intelligence for MetaDAO &amp; Futard projects. Data from
+              Solana RPC, MetaDAO market API, DexScreener, GeckoTerminal, Jupiter and GitHub.
+              Figures are indexed from public sources and may lag. Not financial advice.
+            </div>
+            <nav aria-label="Legal" className="flex shrink-0 items-center gap-4">
+              <Link href="/terms" className="transition-colors duration-150 hover:text-ink2">
+                Terms of Use
+              </Link>
+              <Link href="/privacy" className="transition-colors duration-150 hover:text-ink2">
+                Privacy Policy
+              </Link>
+            </nav>
           </div>
         </footer>
         </SignInProvider>
