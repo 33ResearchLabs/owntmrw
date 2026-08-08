@@ -46,7 +46,7 @@ export function isAddress(v: unknown): v is string {
  */
 export function challengeMessage(address: string, nonce: string, issuedTs: number) {
   return [
-    "OwnTmrw wants you to sign in with your Solana account:",
+    "Underly wants you to sign in with your Solana account:",
     address,
     "",
     "Signing proves you control this wallet. It does not approve any transaction and cannot move funds.",

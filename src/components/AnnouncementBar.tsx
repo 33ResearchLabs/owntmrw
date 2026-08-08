@@ -30,7 +30,7 @@ export function AnnouncementBar() {
             <span className="rounded border border-zinc-600 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
               NEW
             </span>{" "}
-            OwnTMRW delivers institutional-grade intelligence. Analyze every
+            Underly delivers institutional-grade intelligence. Analyze every
             project through holders, treasury, development and performance—all
             from a single workspace.
           </span>

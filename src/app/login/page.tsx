@@ -4,7 +4,7 @@ import { LoginPanel } from "@/components/LoginPanel";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Sign in — OwnTmrw" };
+export const metadata = { title: "Sign in — Underly" };
 
 /**
  * Where `proxy.ts` sends a request with no session.

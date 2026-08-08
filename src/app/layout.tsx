@@ -19,7 +19,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "OwnTmrw — Own Tomorrow | MetaDAO Intelligence Terminal",
+  title: "Underly — Own Tomorrow | MetaDAO Intelligence Terminal",
   description:
     "Institutional-grade intelligence for every project launched on MetaDAO and Futard: raises, markets, holders, treasuries, governance, development and community — in one place.",
 };
@@ -53,19 +53,25 @@ export default async function RootLayout({
             This element's total height (pt + bar + pb) is what `--nav-h` states. */}
         <header className="sticky top-0 z-50 bg-page  pb-3 pt-3">
           <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-3 sm:px-4 lg:gap-5 lg:px-12">
-            <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="OwnTmrw — Own Tomorrow">
+            <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="Underly — Own Tomorrow">
+              {/*
+               * The mark, on its own cream tile rather than knocked out of the
+               * bar. It is a navy disc, and the bar behind it is near-black —
+               * inverted to survive that it would not be the mark any more, so
+               * the ground it is drawn on comes with it. Same two shapes and
+               * the same proportions as `icon.svg`.
+               */}
               <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[16px] font-extrabold text-white"
-                style={{
-                  background: "radial-gradient(circle at 35% 35%, #86b6ef, #3987e5 55%, #184f95)",
-                  boxShadow: "0 0 18px -3px rgba(57, 135, 229, 0.6)",
-                }}
+                className="flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-[3px] rounded-[10px]"
+                style={{ background: "#F3EFE9" }}
+                aria-hidden
               >
-                ∞
+                <span className="h-[13px] w-[13px] rounded-full" style={{ background: "#0B1320" }} />
+                <span className="h-[4px] w-[21px] rounded-full" style={{ background: "#A98A55" }} />
               </span>
               <span className="flex items-baseline gap-2.5">
-                <span className="text-[14px] font-extrabold tracking-[0.07em]">
-                  OWNTMRW
+                <span className="text-[15px] font-extrabold tracking-[-0.01em]">
+                  Underly
                 </span>
                 <span className="hidden text-[10.5px] uppercase tracking-[0.13em] text-faint lg:inline">
                   Own Tomorrow
@@ -94,7 +100,7 @@ export default async function RootLayout({
 
         <footer className="border-t border-line py-5">
           <div className="mx-auto max-w-[1660px] px-6 text-[11.5px] leading-relaxed text-faint">
-            OwnTmrw — public-source intelligence for MetaDAO &amp; Futard projects. Data from
+            Underly — public-source intelligence for MetaDAO &amp; Futard projects. Data from
             Solana RPC, MetaDAO market API, DexScreener, GeckoTerminal, Jupiter and GitHub.
             Figures are indexed from public sources and may lag. Not financial advice.
           </div>
