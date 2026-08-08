@@ -81,7 +81,7 @@ export function ProjectFacts({
           <a
             href={`https://solscan.io/token/${p.mint}`}
             target="_blank" rel="noopener noreferrer"
-            className="num text-[12px] text-ink2 transition-colors hover:text-accent"
+            className="num text-[12px] text-ink2 transition-colors hover:text-brand"
             title={p.mint}
           >
             {shortAddr(p.mint)} ↗
@@ -95,7 +95,7 @@ export function ProjectFacts({
           <a
             href={`https://solscan.io/account/${p.treasury_address}`}
             target="_blank" rel="noopener noreferrer"
-            className="num text-[12px] text-ink2 transition-colors hover:text-accent"
+            className="num text-[12px] text-ink2 transition-colors hover:text-brand"
             title={p.treasury_address}
           >
             {shortAddr(p.treasury_address)} ↗
@@ -110,7 +110,7 @@ export function ProjectFacts({
             {present.map(([label, url]) => (
               <a
                 key={label} href={url!} target="_blank" rel="noopener noreferrer"
-                className="rounded-lg border border-line px-2 py-1 text-[11.5px] text-ink2 transition-colors hover:border-accent/50 hover:text-accent"
+                className="rounded-lg border border-line px-2 py-1 text-[11.5px] text-ink2 transition-colors hover:border-accent/50 hover:text-brand"
               >
                 {label} ↗
               </a>
@@ -123,7 +123,7 @@ export function ProjectFacts({
         <div className="border-t border-grid px-4 py-2.5">
           <a
             href={p.raise_source_url} target="_blank" rel="noopener noreferrer"
-            className="text-[11px] text-muted transition-colors hover:text-accent"
+            className="text-[11px] text-muted transition-colors hover:text-brand"
           >
             Raise figures source ↗
           </a>

@@ -36,7 +36,7 @@ export function MoreRows({
             type="button"
             onClick={() => setOpen((o) => !o)}
             aria-expanded={open}
-            className="w-full px-4 py-2.5 text-left text-[12px] text-accent transition-colors hover:bg-surface2"
+            className="w-full px-4 py-2.5 text-left text-[12px] text-brand transition-colors hover:bg-surface2"
           >
             {open ? `Show fewer ${noun}` : `Show ${count} more ${noun}`}
             <span className="ml-1.5 text-[9px] align-[1px]">{open ? "▲" : "▼"}</span>

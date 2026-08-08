@@ -245,7 +245,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
           )}
           <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px]">
             {links.filter(([, url]) => url).map(([label, url]) => (
-              <a key={label} href={url!} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+              <a key={label} href={url!} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
                 {label} ↗
               </a>
             ))}

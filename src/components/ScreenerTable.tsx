@@ -200,7 +200,7 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
       className={`cursor-pointer select-none hover:text-ink2 ${c.align === "right" ? "!text-right" : ""}`}
     >
       {c.label}
-      {sort === c.key && <span className="ml-1 text-accent">{dir === -1 ? "↓" : "↑"}</span>}
+      {sort === c.key && <span className="ml-1 text-brand">{dir === -1 ? "↓" : "↑"}</span>}
     </th>
   );
 
@@ -246,7 +246,7 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
             {sorted.map((r) => (
               <tr key={r.slug}>
                 <td>
-                  <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-accent">
+                  <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-brand">
                     <Logo src={r.image_url} name={r.name} size={24} />
                     <span className="font-medium">{r.name}</span>
                     {r.symbol && <span className="text-[11px] text-muted">{r.symbol}</span>}

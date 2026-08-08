@@ -5,8 +5,8 @@ import { Portfolio, type PortfolioToken } from "@/components/Portfolio";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Portfolio — OwnTmrw",
-  description: "What your wallet holds across every project tracked on OwnTmrw.",
+  title: "Portfolio — Underly",
+  description: "What your wallet holds across every project tracked on Underly.",
 };
 
 /**

@@ -66,6 +66,7 @@ export default async function Home() {
   const explorer = (await explorerRows()).map((r) => ({
     slug: r.slug, name: r.name, symbol: r.symbol,
     image_url: r.image_url, category: r.category,
+    price_usd: r.price_usd,
     vol7d: r.vol7d.usd, vol7dTrend: r.vol7d.trend,
     vol30d: r.vol30d.usd, vol30dTrend: r.vol30d.trend,
     vol180d: r.vol180d.usd, vol180dTrend: r.vol180d.trend,
@@ -128,7 +129,7 @@ export default async function Home() {
           <section className="hero hero-banner px-10 pb-9 pt-8">
             <div className="hero-glow" />
             <h1 className="relative m-0 text-[64px] font-extrabold leading-[1.02] tracking-[-0.03em]">
-              Own<br />Tomorrow<span className="text-accent">.</span>
+              Own<br />Tomorrow<span className="text-brand">.</span>
             </h1>
             <p className="relative mt-5 max-w-[400px] text-[16.5px] leading-relaxed text-ink2">
               Trade tomorrow&apos;s companies, today.<br />
@@ -173,7 +174,7 @@ export default async function Home() {
             </div>
             <Link
               href="/screener"
-              className="group inline-flex shrink-0 items-center gap-2 self-start text-[13.5px] font-medium text-ink2 transition-colors duration-150 hover:text-accent md:ml-auto md:self-auto"
+              className="group inline-flex shrink-0 items-center gap-2 self-start text-[13.5px] font-medium text-ink2 transition-colors duration-150 hover:text-brand md:ml-auto md:self-auto"
             >
               Full screener
               <span aria-hidden className="transition-transform duration-150 group-hover:translate-x-0.5">→</span>
@@ -190,11 +191,10 @@ export default async function Home() {
           {/* newest */}
           {newest.length > 0 && (
             <section>
-              <div className="mb-4 flex items-baseline justify-between">
+              <div className="mb-4">
                 <h2 className="flex items-center gap-2 text-[18px] font-bold">
-                  <span className="text-accent">⚡</span> Just Launched
+                  <span className="text-brand">⚡</span> Just Launched
                 </h2>
-                <Link href="/screener" className="text-[12.5px] text-muted hover:text-ink">View all</Link>
               </div>
               {/* Three across from `md` rather than `xl`. There are three cards,
                   so a two-up grid spent a second full row on the last one and
@@ -286,9 +286,8 @@ export default async function Home() {
 
           {trending.length > 0 && (
             <div className="card px-5 pb-2.5 pt-4">
-              <div className="mb-1 flex items-center justify-between">
+              <div className="mb-1">
                 <span className="text-[14.5px] font-bold">Most Traded</span>
-                <Link href="/screener" className="text-[12px] text-faint hover:text-ink2">View all</Link>
               </div>
               {trending.map((r, i) => (
                 <Link
@@ -312,12 +311,11 @@ export default async function Home() {
 
           {activity.length > 0 && (
             <div className="card px-5 pb-2.5 pt-4">
-              <div className="mb-1 flex items-center justify-between">
+              <div className="mb-1">
                 <span className="flex items-center gap-2 text-[14.5px] font-bold">
                   <span className="h-[7px] w-[7px] rounded-full bg-good pulse" />
                   Live Activity
                 </span>
-                <Link href="/timeline" className="text-[12px] text-faint hover:text-ink2">View all</Link>
               </div>
               {activity.map((e, i) => (
                 <Link key={i} href={`/project/${e.slug}`} className="flex items-center gap-3 border-t border-grid py-2.5">
@@ -352,9 +350,11 @@ export default async function Home() {
            */}
           {signals.length > 0 && (
             <div className="card flex flex-col px-5 pb-2.5 pt-4 xl:min-h-0 xl:flex-1">
-              <div className="mb-1 flex shrink-0 items-center justify-between">
+              {/* `shrink-0` stays with the heading now that the link beside it
+                  is gone: this is a flex child of the card at `xl`, and without
+                  it the header would give up height to the scrolling list. */}
+              <div className="mb-1 shrink-0">
                 <span className="text-[14.5px] font-bold">Signals</span>
-                <Link href="/observations" className="text-[12px] text-faint hover:text-ink2">View all</Link>
               </div>
               <div className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
                 {signals.map((o, i) => (
@@ -384,10 +384,13 @@ export default async function Home() {
         )}
 
         {/* what a project page holds, and how it is put together */}
-        <IntelligenceSection rows={rows} />
+        <IntelligenceSection rows={rows} board={board} />
 
-        {/* how a score is built, and what it produces */}
-        <ResearchSection board={board} />
+        {/* how a score is built, and what it produces. Parked like the roll-ups
+            above — the component and its scoreboard stay in the tree, so this is
+            a one-line revert. `board` is still read by the section above it, so
+            nothing upstream goes unused while this is out. */}
+        {/* <ResearchSection board={board} /> */}
 
         {/* faq */}
         <FaqSection />

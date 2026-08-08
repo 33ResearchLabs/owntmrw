@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Delta, Logo } from "./ui";
 import { TrendSectionHeader } from "./viz";
-import { fmtUsd, fmtNum } from "@/lib/format";
+import { fmtUsd, fmtNum, fmtPrice } from "@/lib/format";
 
 /**
  * One row of the home page's explorer table. Flattened from `ExplorerRow` at
@@ -18,6 +18,7 @@ export interface ExplorerRowDTO {
   symbol: string | null;
   image_url: string | null;
   category: string | null;
+  price_usd: number | null;
   vol7d: number | null; vol7dTrend: number | null;
   vol30d: number | null; vol30dTrend: number | null;
   vol180d: number | null; vol180dTrend: number | null;
@@ -51,12 +52,13 @@ interface Col {
   unit?: string;
   align?: "right";
   window?: number;
-  kind: "text" | "usd" | "num" | "delta";
+  kind: "text" | "usd" | "price" | "num" | "delta";
 }
 
 const COLS: Col[] = [
   { key: "name", label: "Project", kind: "text" },
   { key: "category", label: "Market sector", kind: "text" },
+  { key: "price_usd", label: "Price", align: "right", kind: "price" },
   { key: "vol7d", label: "Volume", unit: "7d", align: "right", window: 7, kind: "usd" },
   { key: "vol30d", label: "Volume", unit: "30d", align: "right", window: 30, kind: "usd" },
   { key: "vol180d", label: "Volume", unit: "180d", align: "right", window: 180, kind: "usd" },
@@ -125,7 +127,7 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
         <span className="flex items-center gap-1 leading-tight text-faint"
           style={{ justifyContent: c.align === "right" ? "flex-end" : "flex-start" }}>
           {c.unit}
-          <span className={on ? "text-accent" : "opacity-40"}>{on ? (dir === -1 ? "↓" : "↑") : "⇅"}</span>
+          <span className={on ? "text-brand" : "opacity-40"}>{on ? (dir === -1 ? "↓" : "↑") : "⇅"}</span>
         </span>
       </th>
     );
@@ -145,6 +147,11 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
         </>
       );
     }
+    // Prices go through `fmtPrice`, not `fmtUsd`: most of these quotes sit
+    // below a dollar, where two decimals collapses $0.00180 and $0.00225 onto
+    // the same "$0.00" — three significant figures keeps the column readable
+    // as a comparison rather than a row of zeroes.
+    if (c.kind === "price") return fmtPrice(v as number | null);
     if (c.kind === "num") return fmtNum(v as number | null);
     return (
       <>
@@ -170,8 +177,8 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
           <TrendSectionHeader
             title="The most powerful explorer in crypto."
             subtitle="Ranked by traded volume, market cap, pool depth, treasury and holders. Sort any column."
-            // action={<Link href="/screener" className="text-[11px] text-accent hover:underline">full screener →</Link>}
           />
+
         </div>
         <div className="scroll-x border-t border-grid">
           <table className="itable text-[13px]">
@@ -184,7 +191,7 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
                       {/* Rank follows the sort, so it reads as a position in the
                           current ranking rather than a fixed project number. */}
                       <span className="num w-4 shrink-0 text-right text-[12px] text-faint">{i + 1}</span>
-                      <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-accent">
+                      <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-brand">
                         <Logo src={r.image_url} name={r.name} size={22} />
                         <span className="max-w-[150px] truncate font-medium">{r.name}</span>
                         {r.symbol && (
@@ -215,20 +222,18 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
         </div>
 
         {/* The reference design fades the table into the page rather than ending
-            it on a hard rule. Nothing is withheld by it — the footer link goes to
-            the full screener — so it stays purely decorative and click-through. */}
+            it on a hard rule. It stays purely decorative and click-through:
+            the rows it fades over are still readable, and every project in them
+            links to its own page from the first column. */}
         <div
           className="pointer-events-none absolute inset-x-0 bottom-0 h-28"
           style={{ background: "linear-gradient(to top, var(--surface) 22%, transparent)" }}
           aria-hidden
         />
-        <div className="relative flex items-center justify-between px-4 py-3">
+        <div className="relative px-4 py-3">
           <span className="text-[11.5px] text-faint">
             Volume summed from daily candles · {rows.length} projects tracked
           </span>
-          <Link href="/screener" className="text-[12.5px] font-medium text-accent hover:underline">
-            View all →
-          </Link>
         </div>
       </div>
     </section>

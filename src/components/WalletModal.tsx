@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { Mark } from "./ui";
 import { SignInContent } from "./SignInContent";
 
 /**
@@ -72,16 +73,7 @@ export function WalletModal({
             ×
           </button>
 
-          <span
-            className="relative mx-auto flex h-11 w-11 items-center justify-center rounded-2xl text-[18px] font-black text-white"
-            style={{
-              background: "linear-gradient(180deg, var(--accent-hi), var(--accent))",
-              boxShadow: "0 10px 24px -10px rgba(57,135,229,0.9)",
-            }}
-            aria-hidden
-          >
-            ∞
-          </span>
+          <Mark size={44} className="relative mx-auto" />
           <h2 id="wallet-modal-title" className="relative mt-3.5 text-[18px] font-extrabold tracking-tight">
             Sign in with your wallet
           </h2>

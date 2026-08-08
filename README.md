@@ -1,4 +1,4 @@
-# OwnTmrw — Own Tomorrow
+# Underly — Own Tomorrow
 
 The MetaDAO intelligence terminal. Institutional-grade research on every project launched
 through **MetaDAO** and **Futard** — one permanent profile per project covering raise, market,

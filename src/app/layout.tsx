@@ -4,6 +4,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, sessionAddress } from "@/lib/auth";
 import "./globals.css";
+import { Mark } from "@/components/ui";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { SideRail } from "@/components/SideRail";
 import { WalletProvider } from "@/components/wallet";
@@ -19,7 +20,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "OwnTmrw — Own Tomorrow | MetaDAO Intelligence Terminal",
+  title: "Underly — Own Tomorrow | MetaDAO Intelligence Terminal",
   description:
     "Institutional-grade intelligence for every project launched on MetaDAO and Futard: raises, markets, holders, treasuries, governance, development and community — in one place.",
 };
@@ -53,19 +54,11 @@ export default async function RootLayout({
             This element's total height (pt + bar + pb) is what `--nav-h` states. */}
         <header className="sticky top-0 z-50 bg-page  pb-3 pt-3">
           <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-3 sm:px-4 lg:gap-5 lg:px-12">
-            <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="OwnTmrw — Own Tomorrow">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[16px] font-extrabold text-white"
-                style={{
-                  background: "radial-gradient(circle at 35% 35%, #86b6ef, #3987e5 55%, #184f95)",
-                  boxShadow: "0 0 18px -3px rgba(57, 135, 229, 0.6)",
-                }}
-              >
-                ∞
-              </span>
+            <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="Underly — Own Tomorrow">
+              <Mark size={36} className="shrink-0" />
               <span className="flex items-baseline gap-2.5">
-                <span className="text-[14px] font-extrabold tracking-[0.07em]">
-                  OWNTMRW
+                <span className="text-[15px] font-extrabold tracking-[-0.01em]">
+                  Underly
                 </span>
                 <span className="hidden text-[10.5px] uppercase tracking-[0.13em] text-faint lg:inline">
                   Own Tomorrow
@@ -94,7 +87,7 @@ export default async function RootLayout({
 
         <footer className="border-t border-line py-5">
           <div className="mx-auto max-w-[1660px] px-6 text-[11.5px] leading-relaxed text-faint">
-            OwnTmrw — public-source intelligence for MetaDAO &amp; Futard projects. Data from
+            Underly — public-source intelligence for MetaDAO &amp; Futard projects. Data from
             Solana RPC, MetaDAO market API, DexScreener, GeckoTerminal, Jupiter and GitHub.
             Figures are indexed from public sources and may lag. Not financial advice.
           </div>

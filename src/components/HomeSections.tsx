@@ -52,7 +52,7 @@ export function PerformanceSection({
         color="var(--good)"
         title="Track every project from raise to today."
         subtitle="Combined market cap, treasury, holders and liquidity across every tracked project."
-        action={<Link href="/screener" className="text-[11px] text-accent hover:underline">full screener →</Link>}
+        action={<Link href="/screener" className="text-[11px] text-brand hover:underline">full screener →</Link>}
         divider
       />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
@@ -114,7 +114,7 @@ export function TreasurySection({
         color="var(--accent)"
         title="Treasury at a Glance."
         subtitle="Combined on-chain treasury across every tracked project, read at the last ingest."
-        action={<Link href="/screener" className="text-[11px] text-accent hover:underline">view full treasury →</Link>}
+        action={<Link href="/screener" className="text-[11px] text-brand hover:underline">view full treasury →</Link>}
         divider
       />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -168,7 +168,7 @@ export function DevelopmentSection({ agg }: { agg: HomeAggregates }) {
           color="var(--accent)"
           title="Development at a Glance."
           subtitle={`Combined GitHub activity across the ${dev.projects} projects with a linked organisation.`}
-          action={<Link href="/screener" className="text-[11px] text-accent hover:underline">browse projects →</Link>}
+          action={<Link href="/screener" className="text-[11px] text-brand hover:underline">browse projects →</Link>}
         divider
         />
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -214,7 +214,7 @@ export function DevelopmentSection({ agg }: { agg: HomeAggregates }) {
                 The latest work landing across every tracked project.
               </p>
             </div>
-            <Link href="/timeline" className="shrink-0 text-[11px] text-accent hover:underline">
+            <Link href="/timeline" className="shrink-0 text-[11px] text-brand hover:underline">
               all activity →
             </Link>
           </div>
@@ -234,14 +234,14 @@ export function DevelopmentSection({ agg }: { agg: HomeAggregates }) {
                   </div>
                   <Link
                     href={`/project/${c.slug}#development`}
-                    className="hidden shrink-0 rounded bg-surface2 px-1.5 py-0.5 text-[10.5px] text-ink2 hover:text-accent sm:block"
+                    className="hidden shrink-0 rounded bg-surface2 px-1.5 py-0.5 text-[10.5px] text-ink2 hover:text-brand sm:block"
                   >
                     {c.name}
                   </Link>
                   {sha && (
                     <a
                       href={c.url ?? undefined} target="_blank" rel="noopener noreferrer"
-                      className="num hidden shrink-0 text-[11px] text-ink2 hover:text-accent sm:block"
+                      className="num hidden shrink-0 text-[11px] text-ink2 hover:text-brand sm:block"
                     >
                       {sha}
                     </a>

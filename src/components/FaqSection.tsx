@@ -20,8 +20,8 @@ type Faq = {
 
 const FAQS: Faq[] = [
   {
-    q: "What is OwnTMRW?",
-    a: "OwnTMRW is a research platform for private-market and tokenized companies. We combine on-chain data, treasury analysis, holder intelligence, development activity, governance, and AI insights into one institutional-grade workspace.",
+    q: "What is Underly?",
+    a: "Underly is a research platform for private-market and tokenized companies. We combine on-chain data, treasury analysis, holder intelligence, development activity, governance, and AI insights into one institutional-grade workspace.",
   },
   {
     q: "What can I analyze?",
@@ -57,8 +57,8 @@ const FAQS: Faq[] = [
     a: "No. You can browse markets and explore research without connecting a wallet. Connecting your wallet unlocks watchlists, portfolio tracking, personalized insights, saved research, and future premium features.",
   },
   {
-    q: "Is OwnTMRW an investment platform?",
-    a: "No. OwnTMRW provides research and analytics. We do not provide financial advice or guarantee investment outcomes. Our goal is to make private-market intelligence transparent and accessible.",
+    q: "Is Underly an investment platform?",
+    a: "No. Underly provides research and analytics. We do not provide financial advice or guarantee investment outcomes. Our goal is to make private-market intelligence transparent and accessible.",
   },
 ];
 

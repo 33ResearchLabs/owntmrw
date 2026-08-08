@@ -129,7 +129,7 @@ export default async function WalletPage({ params }: { params: Promise<{ address
             <a
               href={`https://solscan.io/account/${address}`}
               target="_blank" rel="noopener noreferrer"
-              className="shrink-0 text-accent hover:underline"
+              className="shrink-0 text-brand hover:underline"
             >
               Solscan ↗
             </a>
@@ -175,7 +175,7 @@ export default async function WalletPage({ params }: { params: Promise<{ address
                   {r.role}
                 </span>
                 <span className="text-[13px]">of</span>
-                <Link href={`/project/${r.slug}`} className="text-[13px] font-medium hover:text-accent">
+                <Link href={`/project/${r.slug}`} className="text-[13px] font-medium hover:text-brand">
                   {r.name}
                 </Link>
               </li>
@@ -237,7 +237,7 @@ export default async function WalletPage({ params }: { params: Promise<{ address
                 {holdings.map((h) => (
                   <tr key={h.slug}>
                     <td>
-                      <Link href={`/project/${h.slug}`} className="hover:text-accent">
+                      <Link href={`/project/${h.slug}`} className="hover:text-brand">
                         {h.name}{h.symbol ? <span className="ml-1.5 text-[11px] text-muted">{h.symbol}</span> : null}
                       </Link>
                     </td>

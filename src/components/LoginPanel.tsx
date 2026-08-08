@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Mark } from "./ui";
 import { SignInContent } from "./SignInContent";
 
 /**
@@ -18,16 +19,7 @@ export function LoginPanel({ next }: { next: string }) {
       {/* Masthead sits outside the card so the card reads as the form rather
           than as the whole page. */}
       <div className="mb-6 text-center">
-        <span
-          className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-[20px] font-black text-white"
-          style={{
-            background: "linear-gradient(180deg, var(--accent-hi), var(--accent))",
-            boxShadow: "0 10px 26px -10px rgba(57,135,229,0.85)",
-          }}
-          aria-hidden
-        >
-          ∞
-        </span>
+        <Mark size={48} className="mx-auto" />
         <h1 className="mt-4 text-[26px] font-extrabold leading-tight tracking-[-0.02em]">
           Sign in with your wallet
         </h1>

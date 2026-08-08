@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Logo } from "./ui";
-import { IconBadge, type IconName } from "./viz";
+import { IconBadge, Eyebrow, type IconName } from "./viz";
+import { TradePanel } from "./TradePanel";
 import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 
 /**
@@ -27,6 +28,7 @@ import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 export interface IntelProject {
   slug: string;
   name: string;
+  symbol: string | null;
   category: string | null;
   image_url: string | null;
   raise_amount_usd: number | null;
@@ -34,6 +36,21 @@ export interface IntelProject {
   holder_count: number | null;
   gh_last_push: number | null;
   roi_since_raise: number | null;
+  /** 24h price move, in percent. Drives the trend reading. */
+  change_24h: number | null;
+  /** Health score out of 100, and how much of it could be measured. */
+  overall: number | null;
+  measured: number;
+  total: number;
+  /**
+   * The two dimension scores the risk reading is built from — how spread the
+   * holders are, and how deep the pool is. Null where the dimension could not
+   * be measured, which is different from scoring zero on it.
+   */
+  concentrationScore: number | null;
+  liquidityScore: number | null;
+  /** Recent daily closes, oldest first, for the line on the trade panel. */
+  spark: number[];
 }
 
 /** One row of the card: a measure, and where to read more of it. */
@@ -118,21 +135,8 @@ function FacetRow({ slug, f }: { slug: string; f: Facet }) {
   );
 }
 
-/** Eyebrow tag above each card's heading — the label and its dot. */
-export function Eyebrow({ label, color }: { label: string; color: string }) {
-  return (
-    <div
-      className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em]"
-      style={{ color }}
-    >
-      {label}
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
-    </div>
-  );
-}
-
 /** The shared footer action, as a full-width button rather than a ruled strip. */
-export function CardCta({ href, children }: { href: string; children: React.ReactNode }) {
+function CardCta({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <Link
       href={href}
@@ -190,24 +194,24 @@ function Picker({
 
   const chip = (
     <>
-      <Logo src={selected.image_url} name={selected.name} size={28} />
+      <Logo src={selected.image_url} name={selected.name} size={24} />
       <span className="min-w-0 flex-1 text-left">
-        <span className="block truncate text-[12.5px] font-bold leading-tight">{selected.name}</span>
-        <span className="block truncate text-[10.5px] text-muted">{selected.category ?? "Project"}</span>
+        <span className="block truncate text-[11.5px] font-bold leading-tight">{selected.name}</span>
+        <span className="block truncate text-[10px] leading-tight text-muted">{selected.category ?? "Project"}</span>
       </span>
     </>
   );
 
   if (single) {
     return (
-      <div className="inline-flex min-w-0 max-w-[210px] items-center gap-2.5 rounded-xl border border-line bg-surface2/60 py-1.5 pl-1.5 pr-3">
+      <div className="inline-flex min-w-0 max-w-[196px] items-center gap-2 rounded-xl border border-line bg-surface2/60 py-1 pl-1 pr-2.5">
         {chip}
       </div>
     );
   }
 
   return (
-    <div ref={boxRef} className="relative min-w-0">
+    <div ref={boxRef} className="relative shrink-0">
       <button
         ref={triggerRef}
         type="button"
@@ -216,7 +220,7 @@ function Picker({
         aria-haspopup="true"
         aria-expanded={open}
         aria-label={`Project shown: ${selected.name}. Choose another`}
-        className={`inline-flex w-full min-w-0 max-w-[210px] items-center gap-2.5 rounded-xl border bg-surface2/60 py-1.5 pl-1.5 pr-2.5 transition-colors duration-150 hover:border-line2 hover:bg-surface2 ${
+        className={`inline-flex w-full min-w-0 max-w-[196px] items-center gap-2 rounded-xl border bg-surface2/60 py-1 pl-1 pr-2 transition-colors duration-150 hover:border-line2 hover:bg-surface2 ${
           open ? "border-line2" : "border-line"
         }`}
       >
@@ -257,7 +261,7 @@ function Picker({
                   <span className="block truncate text-[12.5px] font-semibold leading-tight">{p.name}</span>
                   <span className="block truncate text-[10.5px] text-muted">{p.category ?? "Project"}</span>
                 </span>
-                {on && <span className="shrink-0 text-[12px] text-accent" aria-hidden>✓</span>}
+                {on && <span className="shrink-0 text-[12px] text-brand" aria-hidden>✓</span>}
               </button>
             );
           })}
@@ -267,7 +271,15 @@ function Picker({
   );
 }
 
-export function IntelligenceCard({ projects }: { projects: IntelProject[] }) {
+/**
+ * The pair of cards, and the selection they share.
+ *
+ * State lives here rather than in the left card because the trade panel beside
+ * it reads the same project — picking a token has to move both, and two
+ * components cannot each own the answer. They are returned as a fragment so
+ * the section's grid still sees two children and lays them out as two columns.
+ */
+export function IntelligencePair({ projects }: { projects: IntelProject[] }) {
   const [slug, setSlug] = useState(projects[0]?.slug ?? null);
 
   // Selection is held as a slug rather than the object, so a refreshed list
@@ -276,38 +288,50 @@ export function IntelligenceCard({ projects }: { projects: IntelProject[] }) {
   if (!selected) return null;
 
   return (
+    <>
+      <IntelligenceCard
+        projects={projects}
+        selected={selected}
+        onSelect={(p) => setSlug(p.slug)}
+      />
+      <TradePanel p={selected} />
+    </>
+  );
+}
+
+function IntelligenceCard({
+  projects,
+  selected,
+  onSelect,
+}: {
+  projects: IntelProject[];
+  selected: IntelProject;
+  onSelect: (p: IntelProject) => void;
+}) {
+  return (
     <div className="card flex h-full flex-col gap-6 p-5 sm:p-6">
       {/*
-       * Header block, identical in shape to the methodology card's so the
-       * two line up: an eyebrow row of a fixed height, then the heading and
-       * the description on the same margins. The row is sized to the
-       * selector, which only this card carries — without the floor the
-       * right card's eyebrow would collapse to its text height and pull its
-       * heading a selector's worth of space higher.
+       * Same shape as `TrendSectionHeader`, which every other section on the
+       * page uses: eyebrow, a 19px title and the subtitle, with whatever action
+       * the section carries set beside them rather than above. Written out here
+       * only because that component takes a plain string title and this one has
+       * to keep the picker's own state wiring.
        *
-       * The row wraps below `sm`: the eyebrow and a 210px selector do not fit
-       * a phone's card together, and unwrapped they pushed the whole section
-       * past the viewport.
+       * The picker sitting in the row rather than over it is what dropped this
+       * header's height: it no longer pushes the heading down, so the two cards'
+       * titles line up without a floor holding them level.
        */}
-      <div>
-        <div className="flex min-h-[45px] flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <Eyebrow label="Project Intelligence" color="var(--accent)" />
-          <Picker
-            projects={projects}
-            selected={selected}
-            onSelect={(p) => setSlug(p.slug)}
-          />
+      <div className="flex flex-wrap items-start justify-between gap-3 sm:flex-nowrap">
+        <div className="min-w-0 flex-1">
+          <Eyebrow label="Project Intelligence" color="var(--brand)" />
+          <h2 className="mt-1 text-[19px] font-extrabold tracking-tight">
+            Institutional-grade project intelligence.
+          </h2>
+          <p className="mt-0.5 text-[12.5px] leading-relaxed text-ink2">
+            Go beyond token prices — fundraising, treasury, holders, developers and governance in one workspace.
+          </p>
         </div>
-        {/* Broken explicitly rather than left to wrap: the break has to land
-            after "Institutional-grade" at every width the card takes. */}
-        <h2 className="mt-4 text-[26px] font-extrabold leading-[1.12] tracking-[-0.02em] sm:text-[30px]">
-          Institutional-grade<br />project intelligence.
-        </h2>
-        {/* Two lines' worth of floor on both descriptions, so the rule under
-            them lands at the same height however the shorter one wraps. */}
-        <p className="mt-4 min-h-[41px] text-[12.5px] leading-relaxed text-ink2">
-          Go beyond token prices — fundraising, treasury, holders, developers and governance in one workspace.
-        </p>
+        <Picker projects={projects} selected={selected} onSelect={onSelect} />
       </div>
 
       <div className="flex flex-col gap-2.5 border-t border-line pt-3">

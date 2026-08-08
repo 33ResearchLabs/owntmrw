@@ -306,7 +306,7 @@ export function SignalsFeed({
                           {s.slug && s.name ? (
                             <Link
                               href={`/project/${s.slug}`}
-                              className="flex shrink-0 items-center gap-2 font-medium text-ink hover:text-accent"
+                              className="flex shrink-0 items-center gap-2 font-medium text-ink hover:text-brand"
                             >
                               <Logo src={s.image_url} name={s.name} size={20} />
                               {s.name}

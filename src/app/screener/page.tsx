@@ -6,7 +6,7 @@ import { fmtUsd, fmtNum } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Screener — OwnTmrw",
+  title: "Screener — Underly",
   description: "Every MetaDAO and Futard project ranked by market cap, ROI since raise, liquidity, treasury, holders and development activity.",
 };
 

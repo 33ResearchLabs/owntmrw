@@ -82,7 +82,7 @@ function TokenCard({ t }: { t: TickerToken }) {
       }}
     >
       <Logo src={t.image_url} name={t.name} size={18} />
-      <span className="whitespace-nowrap text-[12px] font-semibold text-ink group-hover:text-accent">
+      <span className="whitespace-nowrap text-[12px] font-semibold text-ink group-hover:text-brand">
         {t.name}
       </span>
       {t.symbol && (

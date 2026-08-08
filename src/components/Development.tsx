@@ -252,7 +252,7 @@ export function DevelopmentPanel({
             )}
             <a
               href={githubUrl} target="_blank" rel="noopener noreferrer"
-              className="text-[11px] text-accent hover:underline"
+              className="text-[11px] text-brand hover:underline"
             >
               repository ↗
             </a>
@@ -333,7 +333,7 @@ export function DevelopmentPanel({
                   {sha && (
                     <a
                       href={c.url ?? undefined} target="_blank" rel="noopener noreferrer"
-                      className="num shrink-0 text-[11px] text-ink2 hover:text-accent"
+                      className="num shrink-0 text-[11px] text-ink2 hover:text-brand"
                     >
                       {sha}
                     </a>
