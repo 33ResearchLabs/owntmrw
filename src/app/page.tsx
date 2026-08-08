@@ -26,10 +26,13 @@ export default async function Home() {
     .sort((a, b) => (b.launch_ts ?? 0) - (a.launch_ts ?? 0))
     .slice(0, 3);
 
+  // Nine rather than six: the board is three across from `lg`, so this fills
+  // three whole rows. Sixteen projects clear the liquidity floor, so the extra
+  // row is real movers rather than padding.
   const movers = [...rows]
     .filter((r) => r.change_24h != null && (r.liquidity_usd ?? 0) > 10_000)
     .sort((a, b) => Math.abs(b.change_24h ?? 0) - Math.abs(a.change_24h ?? 0))
-    .slice(0, 6);
+    .slice(0, 9);
 
   const trending = [...rows]
     .filter((r) => r.vol24h != null)
@@ -47,7 +50,10 @@ export default async function Home() {
     }));
 
   const activity = globalTimeline(6);
-  const signals = allObservations(4);
+  // Enough to fill the height the Signals card grows into at `xl` rather than
+  // stretching four rows over it. Any surplus scrolls inside the card, so this
+  // is an upper bound on what is read, not on what is shown.
+  const signals = allObservations(7);
 
   const agg = homeAggregates();
   const totalLiq = rows.reduce((s, r) => s + (r.liquidity_usd ?? 0), 0);
@@ -87,7 +93,7 @@ export default async function Home() {
      * table or a two-up card grid, and all of it was being squeezed into two
      * thirds of the page to leave room for a column that had already stopped.
      */
-    <div className="ml-10 space-y-10 md:space-y-14 lg:space-y-16">
+    <div className="ml-10 space-y-6">
       {/*
        * One section rhythm, applied at all three levels it can appear at: the
        * full-width sections below, this column's own sections, and the gap
@@ -95,22 +101,31 @@ export default async function Home() {
        * until `xl`, is spaced like another section rather than tucked against
        * the last one. At `xl` that gap becomes the horizontal gutter beside the
        * rail, so it alone resets there.
+       *
+       * The rhythm is two fixed steps rather than a responsive scale: 24px
+       * between sections, 16px between cards within one. The scale it replaces
+       * reached 64px at `lg`, and every gap that mattered was already opting
+       * out of it by hand.
        */}
-      <div className="flex flex-col gap-10 md:gap-14 lg:gap-16 xl:flex-row xl:gap-6">
-        <div className="min-w-0 flex-1 space-y-10 md:space-y-14 lg:space-y-16">
+      <div className="relative flex flex-col gap-6 xl:flex-row">
+        {/* A plain 16px stack. The column used to carry the section scale and
+            then cancel it back down to this with `mb-4` and negative top
+            margins that had to track each step by hand; every one of those
+            overrides existed to reach this gap, so the scale went and the gap
+            stayed. Top Movers never got an override and so sat 64px adrift —
+            it now lands on the same rhythm as the rest.
+
+            The `xl` padding is the space the rail occupies — its 340px plus the
+            24px gutter — held open by hand because the rail is positioned out of
+            flow there and no longer pushes this column aside itself. */}
+        <div className="flex min-w-0 flex-1 flex-col gap-4 xl:pr-[364px]">
           {/* hero */}
           {/* Padding is deliberately asymmetric — the plate's own vertical wash
               darkens toward the foot, so an equal `pb` reads as heavier than
               the `pt` above it. The pair is tuned to land the panel near the
               height of the Most Traded card beside it rather than overshooting
               it by a third, which is what the old pt-12/pb-16 did. */}
-          {/* `mb-4` opts this one gap out of the column's section rhythm to
-              match the rail's own `space-y-4`, so the market strip starts level
-              with Live Activity instead of a section-gap below it. It overrides
-              the rhythm rather than fighting it: Tailwind's `space-y-*` sets
-              `margin-block-end` on every child but the last from inside a
-              zero-specificity `:where()`, which any margin utility outranks. */}
-          <section className="hero hero-banner mb-4 px-10 pb-9 pt-8">
+          <section className="hero hero-banner px-10 pb-9 pt-8">
             <div className="hero-glow" />
             <h1 className="relative m-0 text-[64px] font-extrabold leading-[1.02] tracking-[-0.03em]">
               Own<br />Tomorrow<span className="text-accent">.</span>
@@ -165,46 +180,43 @@ export default async function Home() {
             </Link>
           </div>
 
-          {/* The price strip belongs to Just Launched rather than standing on
-              its own: grouped, the two set their own 16px rhythm instead of
-              inheriting a full section gap on both sides of a 40px band.
+          {/* The price strip sits directly in the stack. It used to be wrapped
+              with Just Launched in a group that set its own 16px rhythm and
+              then pulled the pair up with a negative margin; now that the
+              column's own gap is 16px there is nothing left for the wrapper to
+              correct, so both are plain children. */}
+          <TokenTicker tokens={ticker} />
 
-              The negative top margin cancels most of the gap above it. That
-              gap is the *strip card's* margin-bottom, not this element's
-              margin-top — Tailwind v4 implements `space-y-*` as
-              `margin-block-end` on every child but the last — so it is set
-              here as `-mt-*` and tracks the column's own responsive spacing
-              (space-y-10/14/16 = 40/56/64px), leaving ~16px at every width. */}
-          <div className="-mt-6 space-y-4 md:-mt-10 lg:-mt-12">
-            <TokenTicker tokens={ticker} />
-
-            {/* newest */}
-            {newest.length > 0 && (
-              <section>
-                <div className="mb-4 flex items-baseline justify-between">
-                  <h2 className="flex items-center gap-2 text-[18px] font-bold">
-                    <span className="text-accent">⚡</span> Just Launched
-                  </h2>
-                  <Link href="/screener" className="text-[12.5px] text-muted hover:text-ink">View all</Link>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {newest.map((r, i) => (
-                    <ProjectCard
-                      key={r.slug}
-                      badge={i === 0 ? "NEW" : undefined}
-                      p={{
-                        slug: r.slug, name: r.name, symbol: r.symbol, category: r.category,
-                        image_url: r.image_url, status: r.status,
-                        price_usd: r.price_usd, mcap: r.mcap, change_24h: r.change_24h,
-                        raise_amount_usd: r.raise_amount_usd, roi_since_raise: r.roi_since_raise,
-                        holder_count: r.holder_count, treasury_usd: r.treasury_usd,
-                      }}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
+          {/* newest */}
+          {newest.length > 0 && (
+            <section>
+              <div className="mb-4 flex items-baseline justify-between">
+                <h2 className="flex items-center gap-2 text-[18px] font-bold">
+                  <span className="text-accent">⚡</span> Just Launched
+                </h2>
+                <Link href="/screener" className="text-[12.5px] text-muted hover:text-ink">View all</Link>
+              </div>
+              {/* Three across from `md` rather than `xl`. There are three cards,
+                  so a two-up grid spent a second full row on the last one and
+                  left a card-width hole beside it; from `md` the column is wide
+                  enough for all three to share one row. */}
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                {newest.map((r, i) => (
+                  <ProjectCard
+                    key={r.slug}
+                    badge={i === 0 ? "NEW" : undefined}
+                    p={{
+                      slug: r.slug, name: r.name, symbol: r.symbol, category: r.category,
+                      image_url: r.image_url, status: r.status,
+                      price_usd: r.price_usd, mcap: r.mcap, change_24h: r.change_24h,
+                      raise_amount_usd: r.raise_amount_usd, roi_since_raise: r.roi_since_raise,
+                      holder_count: r.holder_count, treasury_usd: r.treasury_usd,
+                    }}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* movers — a trading board, not a table */}
           {movers.length > 0 && (
@@ -213,7 +225,7 @@ export default async function Home() {
                 <h2 className="text-[18px] font-bold">Top Movers</h2>
                 <span className="text-[12px] text-faint">24h · liquid markets only</span>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {movers.map((r) => {
                   const up = (r.change_24h ?? 0) >= 0;
                   return (
@@ -242,7 +254,34 @@ export default async function Home() {
         </div>
 
         {/* right rail — portfolio, trending, activity */}
-        <aside className="w-full shrink-0 space-y-4 xl:w-[340px]">
+        {/*
+         * A rail only from `xl`, where it genuinely is one. Below that the
+         * flex row stacks and these cards get the full page width, which a
+         * single column spent on ~1000px of near-empty rows — so they lay out
+         * across it instead, two up and then three, and fold back to the 340px
+         * column when the rail returns.
+         *
+         * `items-start` keeps each card at its own content height rather than
+         * stretching it to the tallest in its row.
+         *
+         * At `xl` it turns into a flex column that is taken out of flow, and
+         * that is the whole trick: in flow, the rail's own content sets the
+         * band height whenever it is the taller side, so signing in — which
+         * inserts the ~218px Portfolio card — grew the band and left the dead
+         * space under the *column* instead. Absolute with `inset-y-0` makes the
+         * rail exactly as tall as the column and never taller, so the slack, in
+         * either direction, always lands on the one card built to take it.
+         *
+         * `xl:items-stretch` is needed to undo `items-start`, which on a flex
+         * column means the cross axis — width — and would otherwise shrink
+         * every card to its text.
+         *
+         * `grid-cols-1` is stated rather than left to the implicit track: an
+         * implicit `auto` column sizes to its widest item's max-content and
+         * will not shrink below it, which sized this to ~736px on a phone.
+         * `grid-cols-*` compiles to `minmax(0, 1fr)`, which caps it.
+         */}
+        <aside className="grid w-full shrink-0 grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:absolute xl:inset-y-0 xl:right-0 xl:flex xl:w-[340px] xl:flex-col xl:items-stretch">
           <PortfolioCard hideWhenDisconnected />
 
           {trending.length > 0 && (
@@ -294,18 +333,37 @@ export default async function Home() {
             </div>
           )}
 
+          {/*
+           * The card that takes up the slack. The rail is a fixed set of cards
+           * beside a column whose height moves with the data and with whether a
+           * wallet is connected, so one of them has to absorb the difference or
+           * it shows up as blank rail under the last card.
+           *
+           * Signals is the one to do it: it is last, and its rows are a feed
+           * rather than a ranked five, so showing more or fewer of them costs
+           * nothing. `flex-1` grows it into whatever the column leaves and
+           * shrinks it back when the Portfolio card appears above; the list
+           * scrolls, so the card is never the thing that sets the rail's
+           * height. `min-h-0` is what allows the shrink — a flex item will not
+           * go below its content without it, and the scroll would never engage.
+           *
+           * All of it is `xl:`-only. Below that the rail is a grid of equal
+           * cards with no column beside it, so there is no slack to take.
+           */}
           {signals.length > 0 && (
-            <div className="card px-5 pb-2.5 pt-4">
-              <div className="mb-1 flex items-center justify-between">
+            <div className="card flex flex-col px-5 pb-2.5 pt-4 xl:min-h-0 xl:flex-1">
+              <div className="mb-1 flex shrink-0 items-center justify-between">
                 <span className="text-[14.5px] font-bold">Signals</span>
                 <Link href="/observations" className="text-[12px] text-faint hover:text-ink2">View all</Link>
               </div>
-              {signals.map((o, i) => (
-                <div key={i} className="border-t border-grid py-2.5 text-[12px] leading-relaxed text-ink2">
-                  {o.name && <span className="font-semibold text-ink">{o.name} · </span>}
-                  {o.text}
-                </div>
-              ))}
+              <div className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
+                {signals.map((o, i) => (
+                  <div key={i} className="border-t border-grid py-2.5 text-[12px] leading-relaxed text-ink2">
+                    {o.name && <span className="font-semibold text-ink">{o.name} · </span>}
+                    {o.text}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </aside>

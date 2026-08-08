@@ -106,9 +106,18 @@ export function ResearchSection({ board }: { board: Scoreboard }) {
         }
         divider
       />
-      <div className="grid gap-8 lg:grid-cols-2">
+      {/* `grid-cols-1` is stated rather than left implicit: an implicit `auto`
+          track sizes to its widest item's max-content and will not shrink
+          below it, which pushed this ~100px past the card on a phone. The
+          `grid-cols-*` utilities compile to `minmax(0, 1fr)`, which caps the
+          track and lets the chart's own `scroll-x` take the overflow. */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         {/* ---------------------------------------------- 1. the framework */}
-        <div className="flex h-full flex-col justify-between gap-5">
+        {/* A plain stack. `h-full justify-between` used to stretch this half to
+            the output column beside it and pay for the difference out of the
+            gaps between the blocks — 20px as written, 56px as rendered. The
+            column now ends where its content does. */}
+        <div className="flex flex-col gap-5">
           <Step n={1} title="Research framework" />
 
           <Block icon="info" color="var(--accent)" title="Research question">
