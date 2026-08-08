@@ -11,6 +11,7 @@ import { homeAggregates } from "@/lib/aggregates";
 import { PortfolioCard } from "@/components/PortfolioCard";
 import { MatchHeight } from "@/components/MatchHeight";
 import { FaqSection } from "@/components/FaqSection";
+import { ClosingBanner } from "@/components/ClosingBanner";
 import { Logo } from "@/components/ui";
 import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 
@@ -422,18 +423,7 @@ export default async function Home() {
 
         {/* banner — last on the page, so the closing call to action follows the
             questions rather than interrupting them */}
-        <Link href="/screener" className="hero block px-10 pb-12 pt-10">
-          <div className="hero-glow" />
-          <h3 className="relative m-0 text-[30px] font-extrabold leading-tight tracking-[-0.02em] text-ink">
-            The next generation<br />of great companies.
-          </h3>
-          <p className="relative mt-2.5 text-[14px] text-ink2">
-            Discover. Trade. Own tomorrow.
-          </p>
-          <span className="relative mt-5 inline-block rounded-xl bg-page px-5 py-2.5 text-[13px] font-semibold">
-            Explore now
-          </span>
-        </Link>
+        <ClosingBanner />
     </div>
   );
 }

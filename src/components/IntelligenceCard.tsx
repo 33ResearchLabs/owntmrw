@@ -303,7 +303,7 @@ const EXPLORE: { tab: string; label: string; icon: IconName }[] = [
   { tab: "research", label: "Research", icon: "target" },
 ];
 
-function ExploreStrip({ project }: { project: IntelProject }) {
+export function ExploreStrip({ project }: { project: IntelProject }) {
   return (
     /*
      * Its own section, headed like the others on the page — same 18px bold, the

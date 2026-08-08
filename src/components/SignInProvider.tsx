@@ -25,7 +25,7 @@ interface SignIn {
 const Ctx = createContext<SignIn | null>(null);
 
 /** Kept in step with the matcher in `proxy.ts`. */
-const GATED = ["/screener", "/timeline", "/observations", "/portfolio"];
+const GATED = ["/screener", "/portfolio"];
 
 export function SignInProvider({ children }: { children: React.ReactNode }) {
   const [next, setNext] = useState<string | null>(null);
