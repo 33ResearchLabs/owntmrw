@@ -51,8 +51,8 @@ export default async function RootLayout({
             page scrolls through, so a transparent wrapper leaks content above
             and beside the floating pill even when the pill itself is solid.
             This element's total height (pt + bar + pb) is what `--nav-h` states. */}
-        <header className="sticky top-0 z-50 bg-page px-6 pb-3 pt-3">
-          <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-3 sm:px-4 lg:gap-5 lg:px-5">
+        <header className="sticky top-0 z-50 bg-page  pb-3 pt-3">
+          <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-3 sm:px-4 lg:gap-5 lg:px-12">
             <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="OwnTmrw — Own Tomorrow">
               <span
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[16px] font-extrabold text-white"

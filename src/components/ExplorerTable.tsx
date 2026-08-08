@@ -170,7 +170,7 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
           <TrendSectionHeader
             title="The most powerful explorer in crypto."
             subtitle="Ranked by traded volume, market cap, pool depth, treasury and holders. Sort any column."
-            action={<Link href="/screener" className="text-[11px] text-accent hover:underline">full screener →</Link>}
+            // action={<Link href="/screener" className="text-[11px] text-accent hover:underline">full screener →</Link>}
           />
         </div>
         <div className="scroll-x border-t border-grid">
