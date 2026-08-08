@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { SESSION_COOKIE, sessionAddress } from "@/lib/auth";
 import "./globals.css";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { SideRail } from "@/components/SideRail";
@@ -30,13 +32,19 @@ const NAV = [
   { href: "/portfolio", label: "Portfolio" },
 ];
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Read here rather than letting the client discover it: the nav decides what
+  // to render from this, so it has to be true on the first paint. Every page in
+  // the app is already `force-dynamic`, so reading the cookie costs no static
+  // rendering.
+  const session = sessionAddress((await cookies()).get(SESSION_COOKIE)?.value);
+
   return (
     <html lang="en" className={`${inter.className} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
-        <WalletProvider>
+        <WalletProvider initialSession={session}>
         <SignInProvider>
         <AnnouncementBar />
         {/* Opaque, not just the bar: the padding around the bar is a gap the
