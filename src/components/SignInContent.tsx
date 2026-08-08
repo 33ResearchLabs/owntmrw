@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useWallet } from "./wallet";
-import { IconBadge, type IconName } from "./viz";
+import { useWallet, WALLETS } from "./wallet";
 
 /**
  * The sign-in body, shared by the `/login` page and the header modal.
@@ -18,21 +17,122 @@ import { IconBadge, type IconName } from "./viz";
  * button are content, not ornament.
  */
 
-/** What signing opens, named rather than implied. */
-const GATED: { icon: IconName; color: string; name: string; what: string }[] = [
-  { icon: "bars", color: "var(--accent)", name: "Screener", what: "Every project ranked across 16 measures" },
-  { icon: "clock", color: "var(--good)", name: "Activity", what: "Launches, raises and releases as they land" },
-  { icon: "target", color: "#9b7ae0", name: "Signals", what: "Movements picked out of on-chain data" },
-  { icon: "pie", color: "#e08a3c", name: "Portfolio", what: "Your holdings against what each project raised" },
-];
-
 /**
  * The modal panel is 392px wide, where the full labels wrap to a second line.
  * Shorter ones there keep the sequence on one row; the page has the room for
  * the fuller wording.
  */
-const STEPS = ["Connect Phantom", "Sign a message", "You're in"];
+const STEPS = ["Connect a wallet", "Sign a message", "You're in"];
 const STEPS_COMPACT = ["Connect", "Sign", "You're in"];
+
+/**
+ * A recognisable mark for each entry in `WALLETS`, drawn rather than pulled
+ * from an asset — a wallet-selector row that reads "Phantom" beside a generic
+ * glyph does not read as Phantom. Each is an original line-art silhouette in
+ * that wallet's own colour family, not a reproduction of the trademarked logo
+ * — close enough to place at a glance, not a copy of the asset itself.
+ */
+const WALLET_MARK: Record<string, { color: string; glyph: React.ReactNode }> = {
+  phantom: {
+    color: "#7a63e8",
+    glyph: (
+      <>
+        <path d="M6 20v-7a6 6 0 0 1 12 0v7" />
+        <path d="M6 20a2 2 0 0 0 2-2M10 20a2 2 0 0 0 2-2M14 20a2 2 0 0 0 2-2M18 20a2 2 0 0 0 2-2" />
+        <circle cx="10" cy="12" r="1.1" fill="currentColor" stroke="none" />
+        <circle cx="14" cy="12" r="1.1" fill="currentColor" stroke="none" />
+      </>
+    ),
+  },
+  solflare: {
+    color: "#e08a3c",
+    glyph: (
+      <>
+        <circle cx="12" cy="12" r="4.2" />
+        <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.1 5.1l2.1 2.1M16.8 16.8l2.1 2.1M18.9 5.1l-2.1 2.1M7.2 16.8l-2.1 2.1" />
+      </>
+    ),
+  },
+  backpack: {
+    color: "#a98a55",
+    glyph: (
+      <>
+        <path d="M7 9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v10a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V9Z" />
+        <path d="M9 7V6a3 3 0 0 1 6 0v1" />
+        <path d="M9 13h6M10 20v-4h4v4" />
+      </>
+    ),
+  },
+};
+
+function WalletMark({ id, size = 34 }: { id: string; size?: number }) {
+  const mark = WALLET_MARK[id];
+  if (!mark) return null;
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-lg"
+      style={{ width: size, height: size, color: mark.color, background: `color-mix(in srgb, ${mark.color} 14%, transparent)` }}
+    >
+      <svg width={Math.round(size * 0.5)} height={Math.round(size * 0.5)} viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        {mark.glyph}
+      </svg>
+    </span>
+  );
+}
+
+function Chevron() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-faint" aria-hidden>
+      <path d="m9 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+/**
+ * One row per wallet in `WALLETS`. A detected one connects on click; one
+ * that isn't opens its install page in a new tab instead — the reader never
+ * lands on a row that does nothing.
+ */
+function WalletList({ onPick, busyId }: { onPick: (id: string) => void; busyId: string | null }) {
+  const { installedWallets } = useWallet();
+
+  return (
+    <div className="flex flex-col gap-2">
+      {WALLETS.map((w) => {
+        const installed = installedWallets.includes(w.id);
+        const busy = busyId === w.id;
+        return (
+          <button
+            key={w.id}
+            type="button"
+            onClick={() =>
+              installed
+                ? onPick(w.id)
+                : window.open(w.installUrl, "_blank", "noopener")
+            }
+            disabled={busyId != null && !busy}
+            className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface2/40 px-3.5 py-2.5 text-left transition-colors duration-150 hover:border-line2 hover:bg-surface2 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <WalletMark id={w.id} />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-semibold text-ink">{w.name}</span>
+              <span className="block text-[10.5px] text-muted">
+                {busy ? "Check your wallet…" : installed ? "Detected" : "Not installed"}
+              </span>
+            </span>
+            {installed ? <Chevron /> : (
+              <span className="shrink-0 rounded-md border border-line2 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-ink2">
+                Get
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export function SignInContent({
   onDone,
@@ -46,19 +146,25 @@ export function SignInContent({
   /** Drops the benefit list — the modal opens over the thing being unlocked. */
   compact?: boolean;
 }) {
-  const { login, signingIn, available } = useWallet();
+  const { login } = useWallet();
   const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const router = useRouter();
 
-  const onClick = async () => {
+  const onPick = async (id: string) => {
     setError(null);
-    const err = await login();
-    if (err) return setError(err);
-    // The session is a fresh httpOnly cookie the router has not seen, so the
-    // cache has to be dropped or server components keep rendering their
-    // signed-out output — including the gated page this was aimed at.
-    router.refresh();
-    onDone();
+    setBusyId(id);
+    try {
+      const err = await login(id);
+      if (err) return setError(err);
+      // The session is a fresh httpOnly cookie the router has not seen, so the
+      // cache has to be dropped or server components keep rendering their
+      // signed-out output — including the gated page this was aimed at.
+      router.refresh();
+      onDone();
+    } finally {
+      setBusyId(null);
+    }
   };
 
   return (
@@ -77,14 +183,9 @@ export function SignInContent({
         ))}
       </ol>
 
-      <button
-        onClick={() => void onClick()}
-        disabled={signingIn}
-        className="btn-primary mt-5 w-full disabled:opacity-60"
-        style={{ boxShadow: "0 10px 26px -12px rgba(57,135,229,0.9)" }}
-      >
-        {signingIn ? "Check your wallet…" : available ? "Connect wallet" : "Install Phantom"}
-      </button>
+      <div className="mt-5">
+        <WalletList onPick={(id) => void onPick(id)} busyId={busyId} />
+      </div>
 
       {/* The scope note carries a lock because it is the one line on this
           screen a hurried reader most needs to have seen. */}
@@ -101,23 +202,6 @@ export function SignInContent({
         <p role="alert" className="mt-3 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-[12px] text-bad">
           {error}
         </p>
-      )}
-
-      {!compact && (
-        <div className="mt-6 border-t border-grid pt-5">
-          <div className="text-[10.5px] uppercase tracking-[0.09em] text-faint">What this opens</div>
-          <ul className="mt-3 space-y-3">
-            {GATED.map((g) => (
-              <li key={g.name} className="flex items-center gap-3">
-                <IconBadge name={g.icon} color={g.color} size={28} />
-                <span className="min-w-0">
-                  <span className="block text-[12.5px] font-semibold text-ink">{g.name}</span>
-                  <span className="block text-[11.5px] leading-snug text-muted">{g.what}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
       )}
     </>
   );
