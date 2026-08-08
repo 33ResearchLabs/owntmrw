@@ -17,7 +17,8 @@ import { Delta } from "./ui";
 
 export type IconName =
   | "chart" | "token" | "users" | "droplet" | "bars" | "target"
-  | "pie" | "layers" | "percent" | "shield" | "clock" | "info" | "bank";
+  | "pie" | "layers" | "percent" | "shield" | "clock" | "info" | "bank"
+  | "code" | "news" | "coin";
 
 /** Stroked 24×24 paths, drawn at the badge's size. No icon dependency. */
 const ICONS: Record<IconName, React.ReactNode> = {
@@ -34,6 +35,15 @@ const ICONS: Record<IconName, React.ReactNode> = {
   clock: <><circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" /></>,
   info: <><circle cx="12" cy="12" r="8" /><path d="M12 11v5M12 8h.01" /></>,
   bank: <><path d="M3 10 12 4l9 6M5 10v8M10 10v8M14 10v8M19 10v8M3 20h18" /></>,
+  // Angle brackets around a slash — the `</>` the explore strip's Development
+  // tile is drawn with. Same stroke weight as the rest, so it sits in the row
+  // without reading as a different family.
+  code: <><path d="M8.5 8.5 4.5 12l4 3.5M15.5 8.5 19.5 12l-4 3.5M13.8 6.4l-3.6 11.2" /></>,
+  // A page with a fold and two lines of body text.
+  news: <><path d="M6 3.5h7.5L18 8v12.5H6V3.5Z" /><path d="M13.5 3.5V8H18" /><path d="M9 12.5h6M9 16h4" /></>,
+  // A dollar in a coin. The S is two arcs rather than a glyph, so it keeps the
+  // set's stroke weight instead of inheriting the font's.
+  coin: <><circle cx="12" cy="12" r="8" /><path d="M12 6.8v10.4" /><path d="M14.6 9.4a2.4 2.4 0 0 0-2.4-1.3c-1.5 0-2.6.8-2.6 2s1.1 1.8 2.6 2.1 2.6.8 2.6 2-1.1 2-2.6 2a2.4 2.4 0 0 1-2.4-1.3" /></>,
 };
 
 export function Icon({ name, size = 14 }: { name: IconName; size?: number }) {

@@ -24,25 +24,30 @@ export function AnnouncementBar() {
           stays centred against the bar rather than against the space left over. */}
       <div className="mx-auto flex min-h-[38px] max-w-[1660px] items-center justify-center px-10 py-2 sm:px-12">
         <p className="flex min-w-0 items-center justify-center gap-1.5 text-center text-[12px] leading-snug">
+          {/*
+           * The badge is a flex item, not part of the sentence. Inline inside
+           * the truncating span it was subject to that span's `overflow:
+           * hidden`, and an inline box does not grow the line to fit its own
+           * padding — so the border was sliced off along the top. Out here it
+           * sets its own height, and it survives the ellipsis on a phone
+           * instead of being the first thing truncated away.
+           */}
+          <span className="shrink-0 rounded border border-zinc-600 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
+            NEW
+          </span>
           {/* Ellipsises on a phone, wraps rather than overflows once there is
               room for a second line, and sits on one line on a desktop. */}
           <span className="min-w-0 truncate text-ink md:whitespace-normal">
-            <span className="rounded border border-zinc-600 bg-zinc-900 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-300">
-              NEW
-            </span>{" "}
             Underly delivers institutional-grade intelligence. Analyze every
             project through holders, treasury, development and performance—all
             from a single workspace.
           </span>
-          <span className="ml-1 cursor-pointer font-medium text-yellow-400 transition-colors hover:text-yellow-300">
-            Learn more →
-          </span>
-          {/* <Link
+          <Link
             href="/screener"
-            className="shrink-0 font-medium text-brand transition-colors hover:text-brandhi hover:underline"
+            className="ml-1 shrink-0 font-medium text-brand transition-colors hover:text-brandhi"
           >
-            Explore →
-          </Link> */}
+            Learn more →
+          </Link>
         </p>
       </div>
 

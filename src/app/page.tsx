@@ -94,7 +94,7 @@ export default async function Home() {
      * table or a two-up card grid, and all of it was being squeezed into two
      * thirds of the page to leave room for a column that had already stopped.
      */
-    <div className="ml-10 space-y-6">
+    <div className="space-y-6">
       {/*
        * One section rhythm, applied at all three levels it can appear at: the
        * full-width sections below, this column's own sections, and the gap
@@ -392,8 +392,11 @@ export default async function Home() {
             nothing upstream goes unused while this is out. */}
         {/* <ResearchSection board={board} /> */}
 
-        {/* faq */}
-        <FaqSection />
+        {/* faq — parked alongside the research section above, same one-line
+            revert. With both out, nothing on this page explains how a score is
+            built any more, so the two links that pointed here now go to the
+            project's own overview, where the score and its dimensions are. */}
+        {/* <FaqSection /> */}
 
         {/* banner — last on the page, so the closing call to action follows the
             questions rather than interrupting them */}
