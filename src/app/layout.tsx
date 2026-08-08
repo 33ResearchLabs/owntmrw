@@ -53,12 +53,11 @@ export default async function RootLayout({
             and beside the floating pill even when the pill itself is solid.
             This element's total height (pt + bar + pb) is what `--nav-h` states.
 
-            The bar and `<main>` below share a container — same `mx-auto`, same
-            `max-w`— so matching their horizontal padding is what makes the logo
-            line up with the first card and the account button with the last.
-            Both are `px-6`; changing one without the other pulls them apart. */}
-        <header className="sticky top-0 z-50 bg-page  pb-3 pt-3">
-          <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-6 lg:gap-5">
+            No `pt`: that 12px was page colour showing between the announcement
+            bar and the nav, and the two now meet on a single edge. The `pb`
+            stays — it is the gap below the bar, not between the bars. */}
+        <header className="sticky top-0 z-50 bg-page pb-3">
+          <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-3 sm:px-4 lg:gap-5 lg:px-12">
             <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="Underly — Own Tomorrow">
               <Mark size={36} className="shrink-0" />
               {/* The wordmark carries the rule under it that the logo does —
@@ -97,21 +96,27 @@ export default async function RootLayout({
             so the footer keeps its single-band height on a desktop. Type scale,
             colour and the band's own padding are unchanged. */}
         <footer className="border-t border-line py-5">
-          <div className="mx-auto flex max-w-[1660px] flex-col gap-3 px-6 text-[11.5px] leading-relaxed text-faint sm:flex-row sm:items-start sm:justify-between sm:gap-10">
-            <div className="min-w-0 max-w-[1120px]">
-              OwnTmrw — public-source intelligence for MetaDAO &amp; Futard projects. Data from
-              Solana RPC, MetaDAO market API, DexScreener, GeckoTerminal, Jupiter and GitHub.
-              Figures are indexed from public sources and may lag. Not financial advice.
-            </div>
-            <nav aria-label="Legal" className="flex shrink-0 items-center gap-4">
-              <Link href="/terms" className="transition-colors duration-150 hover:text-ink2">
-                Terms of Use
-              </Link>
-              <Link href="/privacy" className="transition-colors duration-150 hover:text-ink2">
-                Privacy Policy
-              </Link>
-            </nav>
-          </div>
+          <div className="flex flex-col justify-between gap-3 px-16 text-[11.5px] leading-relaxed text-faint sm:flex-row sm:items-start sm:gap-10">
+  <div className="min-w-0">
+    © 2026 Underly. All rights reserved.
+  </div>
+
+  <nav aria-label="Legal" className="flex shrink-0 items-center gap-4">
+    <Link
+      href="/terms"
+      className="transition-colors duration-150 hover:text-ink2"
+    >
+      Terms of Use
+    </Link>
+
+    <Link
+      href="/privacy"
+      className="transition-colors duration-150 hover:text-ink2"
+    >
+      Privacy Policy
+    </Link>
+  </nav>
+</div>
         </footer>
         </SignInProvider>
         </WalletProvider>

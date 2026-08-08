@@ -9,6 +9,7 @@ import { scoreboard } from "@/lib/scoreboard";
 import { PerformanceSection, TreasurySection, DevelopmentSection } from "@/components/HomeSections";
 import { homeAggregates } from "@/lib/aggregates";
 import { PortfolioCard } from "@/components/PortfolioCard";
+import { MatchHeight } from "@/components/MatchHeight";
 import { FaqSection } from "@/components/FaqSection";
 import { Logo } from "@/components/ui";
 import { fmtUsd, fmtNum, fmtPct, timeAgo } from "@/lib/format";
@@ -126,14 +127,30 @@ export default async function Home() {
               the `pt` above it. The pair is tuned to land the panel near the
               height of the Most Traded card beside it rather than overshooting
               it by a third, which is what the old pt-12/pb-16 did. */}
-          <section className="hero hero-banner px-10 pb-9 pt-8">
-            <div className="hero-glow" />
+          {/* The `id` is the rail's measuring point — `MatchHeight` reads this
+              element to size the Most Traded card level with it. Nothing about
+              the banner's own box changes. */}
+          <section id="hero-banner" className="hero hero-banner px-10 pb-9 pt-8">
+            {/* The foot light in the brand gold. Set on this element rather
+                than in `.hero-glow` itself, which the closing banner at the
+                bottom of the page also wears — the class keeps the original
+                blue as its default, so that one is untouched. */}
+            <div
+              className="hero-glow"
+              style={{ "--hero-glow-light": "rgba(169, 138, 85, 0.22)" } as React.CSSProperties}
+            />
+            {/* Each line closes on a brand-gold full stop — the same treatment
+                the heading already gave its one terminal period, applied to the
+                three this copy has. Size, weight, leading and tracking are
+                unchanged. */}
             <h1 className="relative m-0 text-[64px] font-extrabold leading-[1.02] tracking-[-0.03em]">
-              Own<br />Tomorrow<span className="text-brand">.</span>
+              Discover<span className="text-brand">.</span><br />
+              Research<span className="text-brand">.</span><br />
+              Trade<span className="text-brand">.</span>
             </h1>
             <p className="relative mt-5 max-w-[400px] text-[16.5px] leading-relaxed text-ink2">
-              Trade tomorrow&apos;s companies, today.<br />
-              The public market for private innovation.
+              The next generation of great companies.<br />
+              The public market for private innovation
             </p>
             <div className="relative mt-6 flex flex-wrap gap-3">
               <Link href="/screener" className="btn-primary">Explore markets</Link>
@@ -285,7 +302,12 @@ export default async function Home() {
           <PortfolioCard hideWhenDisconnected />
 
           {trending.length > 0 && (
-            <div className="card px-5 pb-2.5 pt-4">
+            /* Level with the hero across the gutter. `MatchHeight` measures the
+               banner and applies its height here, at `xl` only — below that the
+               rail is a grid of cards with no hero beside it, so there is
+               nothing to line up with and the card keeps its own height. The
+               card's own classes are unchanged; only the box it draws grows. */
+            <MatchHeight of="hero-banner" className="card px-5 pb-2.5 pt-4">
               <div className="mb-1">
                 <span className="text-[14.5px] font-bold">Most Traded</span>
               </div>
@@ -306,7 +328,7 @@ export default async function Home() {
                   </span>
                 </Link>
               ))}
-            </div>
+            </MatchHeight>
           )}
 
           {activity.length > 0 && (
