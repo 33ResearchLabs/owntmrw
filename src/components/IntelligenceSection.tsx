@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { ScreenerRow } from "@/lib/queries";
 import type { Scoreboard } from "@/lib/scoreboard";
 import { recentCloses } from "@/lib/queries";
@@ -155,12 +154,10 @@ export function IntelligenceSection({ rows, board }: { rows: ScreenerRow[]; boar
           Underly is a data intelligence platform, not an investment advisor. Every reading is
           computed from public on-chain and off-chain sources, and none of it is financial advice.
         </p>
-        <Link
-          href="#faq-heading"
-          className="shrink-0 text-[11.5px] font-medium text-ink2 transition-colors duration-150 hover:text-brand"
-        >
-          Learn more <span aria-hidden>→</span>
-        </Link>
+        {/* No "Learn more" beside it any more: it pointed at the FAQ, and with
+            that parked there is nowhere on the site this could honestly go. A
+            disclaimer that links nowhere is still a disclaimer; one that links
+            to a page not answering it is worse than none. */}
       </div>
     </section>
   );
