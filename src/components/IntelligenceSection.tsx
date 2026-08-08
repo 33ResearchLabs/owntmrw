@@ -1,7 +1,6 @@
 import type { ScreenerRow } from "@/lib/queries";
 import type { Scoreboard } from "@/lib/scoreboard";
 import { recentCloses } from "@/lib/queries";
-import { IconBadge, type IconName } from "./viz";
 import { IntelligencePair, type IntelProject } from "./IntelligenceCard";
 
 /**
@@ -83,19 +82,6 @@ export function intelProjects(rows: ScreenerRow[], board: Scoreboard): IntelProj
     }));
 }
 
-/**
- * The trust strip under the two cards. Static copy about the platform, so it
- * takes no data — it sits here rather than in its own file because it only
- * ever appears directly beneath these two.
- */
-const FEATURES: { icon: IconName; color: string; title: string; blurb: string }[] = [
-  { icon: "shield", color: "var(--accent)", title: "Verified data", blurb: "All data is verified and cross-checked" },
-  { icon: "info", color: "var(--good)", title: "No hidden gaps", blurb: "Every gap is disclosed, not estimated" },
-  { icon: "layers", color: "#9b7ae0", title: "On-chain first", blurb: "Data read directly from blockchain & public sources" },
-  { icon: "bank", color: "#e08a3c", title: "Institutional grade", blurb: "Built for analysts, investors & DAOs" },
-  { icon: "token", color: "var(--warn)", title: "Multi-chain coverage", blurb: "100+ chains and L2s supported" },
-];
-
 export function IntelligenceSection({ rows, board }: { rows: ScreenerRow[]; board: Scoreboard }) {
   const projects = intelProjects(rows, board);
   if (!projects.length) return null;
@@ -108,33 +94,7 @@ export function IntelligenceSection({ rows, board }: { rows: ScreenerRow[]; boar
      * so they still end on the same line.
      */
     <section className="space-y-6">
-      {/* `grid-cols-1` is stated rather than left implicit: an implicit `auto`
-          track sizes to its widest item's max-content and will not shrink below
-          it, which pushed both cards ~126px past the viewport on a phone. The
-          `grid-cols-*` utilities compile to `minmax(0, 1fr)`, which caps it. */}
-      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
-        {/* Both cards, and the selection they share — picking a project has to
-            move the figures on the left and the readings on the right. */}
-        <IntelligencePair projects={projects} />
-      </div>
-
-      {/*
-       * Trust strip. Five across on a desktop with hairlines between, two up on
-       * a tablet and stacked on a phone — the rules are `lg`-only because
-       * `divide-x` borders every child but the first in DOM order, which is the
-       * divider you want in one row and the wrong one entirely once it wraps.
-       */}
-      <div className="card grid grid-cols-1 gap-6 px-5 py-6 sm:grid-cols-2 sm:px-6 lg:grid-cols-5 lg:gap-0 lg:divide-x lg:divide-line">
-        {FEATURES.map((f) => (
-          <div key={f.title} className="flex items-start gap-3 lg:px-5 lg:first:pl-0 lg:last:pr-0">
-            <IconBadge name={f.icon} color={f.color} size={34} />
-            <div className="min-w-0">
-              <div className="text-[13px] font-semibold">{f.title}</div>
-              <div className="mt-0.5 text-[11.5px] leading-relaxed text-muted">{f.blurb}</div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <IntelligencePair projects={projects} />
 
       {/*
        * The standing disclaimer. It sits under the trade panel's readings

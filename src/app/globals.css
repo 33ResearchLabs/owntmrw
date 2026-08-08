@@ -110,7 +110,19 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-a { color: inherit; text-decoration: none; }
+/*
+ * In `base`, not unlayered.
+ *
+ * Tailwind v4 declares `@layer theme, base, components, utilities`, and
+ * unlayered CSS outranks every one of them however low its specificity. Written
+ * bare, this rule beat `text-*` on any anchor — so `text-brand` and friends
+ * were silently doing nothing on the fifteen links that carry one, and those
+ * links quietly inherited whatever colour was around them. Inside `base` the
+ * utilities win, which is what every one of those classes was written expecting.
+ */
+@layer base {
+  a { color: inherit; text-decoration: none; }
+}
 
 .num { font-variant-numeric: tabular-nums; }
 
