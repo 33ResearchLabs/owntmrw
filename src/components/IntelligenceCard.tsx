@@ -320,19 +320,32 @@ export function ExploreStrip({ project }: { project: IntelProject }) {
       {/*
        * `auto-fit` rather than a column count: eight tiles divide badly into
        * most fixed grids, and this lets the row take as many as fit and wrap
-       * the rest evenly instead of stranding one on a line of its own.
+       * the rest evenly instead of stranding one on a line of its own. The
+       * floor is raised with the padding below — a 104px track was sized to
+       * tiles that no longer exist, and the wider one is what keeps the row at
+       * eight across on a desktop instead of wrapping two onto a second line.
        */}
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-2.5">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(118px,1fr))] gap-3">
         {EXPLORE.map((e) => (
           <Link
             key={e.tab}
             href={`/project/${project.slug}#${e.tab}`}
-            className="group flex flex-col items-center gap-2.5 rounded-xl border border-line bg-surface2/40 px-2 py-4 text-center transition-colors duration-150 hover:border-line2 hover:bg-surface2"
+            /*
+             * Squarer and quieter than the tile it replaces: the padding roughly
+             * doubles on the vertical, which is what gives the icon air above
+             * the label rather than stacking the two against the edges. The
+             * border stays — on this surface a borderless tile has no edge at
+             * all — but it sits over a flatter fill so the row reads as eight
+             * destinations rather than eight raised buttons.
+             */
+            className="group flex flex-col items-center justify-center gap-3.5 rounded-2xl border border-line bg-surface2/30 px-3 py-7 text-center transition-colors duration-150 hover:border-line2 hover:bg-surface2"
           >
-            <span className="text-ink2 transition-colors duration-150 group-hover:text-ink">
-              <Icon name={e.icon} size={22} />
+            {/* The icon takes the brand on hover, the label the plain ink —
+                one accent per tile, on the element that carries the meaning. */}
+            <span className="text-ink2 transition-colors duration-150 group-hover:text-brand">
+              <Icon name={e.icon} size={26} />
             </span>
-            <span className="truncate text-[11.5px] font-medium text-muted transition-colors duration-150 group-hover:text-ink2">
+            <span className="truncate text-[12.5px] font-medium text-muted transition-colors duration-150 group-hover:text-ink">
               {e.label}
             </span>
           </Link>

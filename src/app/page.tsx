@@ -145,10 +145,13 @@ export default async function Home() {
                 three this copy has. Size, weight, leading and tracking are
                 unchanged. */}
             <h1 className="relative m-0 text-[64px] font-extrabold leading-[1.02] tracking-[-0.03em]">
-              Discover<span className="text-brand">.</span><br />
-              Research<span className="text-brand">.</span><br />
+              Discover<br />
               Trade<span className="text-brand">.</span>
             </h1>
+            {/* The same accent rule the closing banner carries under its
+                heading — `relative` so it clears the glow, which is absolute
+                and would otherwise paint over it. */}
+            <span className="relative mt-3 ml-10 block h-[3px] w-12 rounded-full bg-brand" aria-hidden />
             <p className="relative mt-5 max-w-[400px] text-[16.5px] leading-relaxed text-ink2">
               The next generation of great companies.<br />
               The public market for private innovation

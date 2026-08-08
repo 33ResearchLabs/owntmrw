@@ -249,6 +249,48 @@ body {
  * renders byte-identically to before, and the banner sets the property on its
  * own element.
  */
+
+/*
+ * The closing plate's artwork. A sibling of `.hero-banner` rather than a reuse
+ * of it: that one rakes a 2.5:1 landscape across the whole card, and this plate
+ * is a 1.5:1 object that belongs on one side of the copy.
+ *
+ * `contain`, not `cover`. The card is wide and short, so `cover` would scale a
+ * 1536x1024 image by its width and crop away everything but a narrow vertical
+ * band through the middle of the subject. `contain` fits it by height, which is
+ * the card's shorter axis, and `right` seats the whole object against that edge
+ * with the copy running clear of it.
+ *
+ * The veil ramps the other way for the same reason — heaviest on the left where
+ * the heading and the button sit, easing off across the plate so the artwork is
+ * dimmed to the page's level rather than erased. As with `.hero-banner`, the
+ * base gradient underneath is kept: if the PNG 404s or is still in flight, the
+ * plate falls back to the surface it would otherwise have had.
+ */
+.closing-banner {
+  background:
+    linear-gradient(
+      100deg,
+      rgba(0, 0, 0, 0.95) 0%,
+      rgba(0, 0, 0, 0.88) 32%,
+      rgba(0, 0, 0, 0.58) 62%,
+      rgba(0, 0, 0, 0.3) 100%
+    ),
+    url("/banner2.png") right center / contain no-repeat,
+    linear-gradient(180deg, #161615 0%, #101010 100%);
+}
+
+/*
+ * No artwork on a phone. Stacked, the copy runs the full width of the plate, so
+ * a `contain` image on the right has nowhere to sit that is not behind a line of
+ * text — and shrunk to what is left it reads as a smudge rather than an object.
+ */
+@media (max-width: 640px) {
+  .closing-banner {
+    background: linear-gradient(180deg, #161615 0%, #101010 100%);
+  }
+}
+
 .hero-glow {
   position: absolute;
   inset-inline: 0;
