@@ -71,30 +71,6 @@ const COLS: Col[] = [
   { key: "holder_count", label: "Holders", align: "right", kind: "num" },
 ];
 
-/** Rows per page. */
-const PAGE = 8;
-
-/**
- * Which page numbers to draw.
- *
- * Every one of them while they fit, and once they do not, the first, the last
- * and the current with a neighbour each side — gaps between those collapse to
- * an ellipsis. Twenty-three projects is three pages today; this is what keeps
- * the row from becoming thirteen buttons if the tracked set grows.
- */
-function pageWindow(current: number, count: number): (number | "gap")[] {
-  if (count <= 7) return Array.from({ length: count }, (_, i) => i);
-  const keep = [...new Set([0, current - 1, current, current + 1, count - 1])]
-    .filter((n) => n >= 0 && n < count)
-    .sort((a, b) => a - b);
-  const out: (number | "gap")[] = [];
-  keep.forEach((n, i) => {
-    if (i && n - keep[i - 1] > 1) out.push("gap");
-    out.push(n);
-  });
-  return out;
-}
-
 /**
  * Why a windowed figure is marked. Same `~` the screener already uses for a
  * number whose method cannot bear the weight the column implies.
@@ -107,34 +83,6 @@ function shortWindow(r: ExplorerRowDTO, c: Col): string | undefined {
   }
   if (!c.window || !r.candleDays || r.candleDays >= c.window) return undefined;
   return `Only ${r.candleDays} day${r.candleDays === 1 ? "" : "s"} of candle history on file — this ${c.window}-day window covers ${r.candleDays}.`;
-}
-
-/** One control in the pager: a page number, or a step arrow. */
-function PageBtn({
-  children, onClick, active = false, disabled = false, label,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  active?: boolean;
-  disabled?: boolean;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label={label}
-      aria-current={active ? "page" : undefined}
-      className={`num flex h-7 min-w-[28px] items-center justify-center rounded-lg border px-2 text-[12px] transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-35 ${
-        active
-          ? "border-brand/50 bg-brand/15 font-bold text-brand"
-          : "border-line bg-surface2/40 text-ink2 hover:enabled:border-line2 hover:enabled:bg-surface2 hover:enabled:text-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
 }
 
 export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
@@ -157,14 +105,6 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
     [rows, sort, dir]
   );
 
-  const [page, setPage] = useState(0);
-  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE));
-  // Clamped rather than trusted: the row count can shrink under a page that is
-  // already open, and a stale index would render an empty table.
-  const current = Math.min(page, pageCount - 1);
-  const start = current * PAGE;
-  const shown = sorted.slice(start, start + PAGE);
-
   const th = (c: Col) => {
     const on = sort === c.key;
     return (
@@ -173,9 +113,6 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
         aria-sort={on ? (dir === -1 ? "descending" : "ascending") : "none"}
         className={`cursor-pointer select-none align-bottom hover:text-ink2 ${c.align === "right" ? "!text-right" : ""}`}
         onClick={() => {
-          // Back to the first page either way: the ranking has changed, and
-          // page three of the old order is not page three of the new one.
-          setPage(0);
           if (on) setDir((d) => (d === 1 ? -1 : 1));
           // Text columns read A→Z first; every measure reads biggest first.
           else { setSort(c.key); setDir(c.kind === "text" ? 1 : -1); }
@@ -238,19 +175,24 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
           />
 
         </div>
-        <div className="scroll-x border-t border-grid">
+        {/* `max-h` plus `overflow-y-auto` rather than pages: every project is
+            always in the DOM, sorting never has to reset a page index back to
+            the first, and the row count can grow without a pager gaining more
+            buttons. The header is `sticky` so a column stays labelled and
+            sortable however far down the scroll a reader gets — it needs its
+            own opaque background for that, since the card's own background
+            sits on `<section>`, not on this scrolling child. */}
+        <div className="scroll-x scroll-y-quiet max-h-[420px] overflow-y-auto border-t border-grid">
           <table className="itable text-[13px]">
-            <thead><tr>{COLS.map(th)}</tr></thead>
+            <thead className="sticky top-0 z-10 bg-surface"><tr>{COLS.map(th)}</tr></thead>
             <tbody>
-              {shown.map((r, i) => (
+              {sorted.map((r, i) => (
                 <tr key={r.slug}>
                   <td>
                     <div className="flex items-center gap-3">
                       {/* Rank follows the sort, so it reads as a position in the
-                          current ranking rather than a fixed project number —
-                          and it counts through the pages, so page two opens at
-                          nine rather than starting over at one. */}
-                      <span className="num w-4 shrink-0 text-right text-[12px] text-faint">{start + i + 1}</span>
+                          current ranking rather than a fixed project number. */}
+                      <span className="num w-4 shrink-0 text-right text-[12px] text-faint">{i + 1}</span>
                       <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-brand">
                         <Logo src={r.image_url} name={r.name} size={22} />
                         <span className="max-w-[150px] truncate font-medium">{r.name}</span>
@@ -281,52 +223,10 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
           </table>
         </div>
 
-        {/* The fade that used to sit here is gone with the truncation it stood
-            for. It said "this continues below" about a list cut at eight; now
-            every page is whole, and dimming its last row would be dimming real
-            data on every page rather than marking an edge. */}
-        <div className="flex flex-col gap-3 border-t border-grid px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="border-t border-grid px-4 py-3">
           <span className="text-[11.5px] text-faint">
-            {sorted.length > 0 && (
-              <>Showing {start + 1}–{start + shown.length} of {sorted.length} · </>
-            )}
-            volume summed from daily candles
+            {sorted.length} project{sorted.length === 1 ? "" : "s"} · volume summed from daily candles
           </span>
-
-          {pageCount > 1 && (
-            <nav className="flex items-center gap-1" aria-label="Explorer pages">
-              <PageBtn
-                onClick={() => setPage(current - 1)}
-                disabled={current === 0}
-                label="Previous page"
-              >
-                ‹
-              </PageBtn>
-
-              {pageWindow(current, pageCount).map((n, i) =>
-                n === "gap" ? (
-                  <span key={`gap${i}`} className="px-1 text-[12px] text-faint" aria-hidden>…</span>
-                ) : (
-                  <PageBtn
-                    key={n}
-                    onClick={() => setPage(n)}
-                    active={n === current}
-                    label={`Page ${n + 1}`}
-                  >
-                    {n + 1}
-                  </PageBtn>
-                )
-              )}
-
-              <PageBtn
-                onClick={() => setPage(current + 1)}
-                disabled={current === pageCount - 1}
-                label="Next page"
-              >
-                ›
-              </PageBtn>
-            </nav>
-          )}
         </div>
       </div>
     </section>

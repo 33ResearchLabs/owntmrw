@@ -87,16 +87,16 @@ export default async function RootLayout({
         <header className="sticky top-0 z-50 bg-page pb-3">
           <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-6 md:px-12 lg:gap-5">
             <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="Underly — Own Tomorrow">
-              <Mark size={36} className="shrink-0" />
+              <Mark size={42} className="shrink-0" />
               {/* The wordmark carries the rule under it that the logo does —
                   left-aligned and about a third of the word's width, as drawn.
                   `aria-hidden` because it is the mark's shape, not a divider,
                   and the link already names itself. */}
               <span className="flex flex-col items-start">
-                <span className="text-[15px] font-extrabold leading-none tracking-[-0.01em]">
+                <span className="text-[19px] font-extrabold leading-none tracking-[-0.01em]">
                   Underly
                 </span>
-                <span className="mt-[5px] h-[3px] w-5 rounded-full bg-brand" aria-hidden />
+                <span className="mt-[6px] h-[3px] w-6 rounded-full bg-brand" aria-hidden />
               </span>
             </Link>
 

@@ -3,10 +3,12 @@ import Link from "next/link";
 /**
  * The page's closing call to action.
  *
- * `.hero` is the same class and gradient the page's top banner sits on — this
- * is the second time the page reaches for it, not a new treatment invented for
- * the foot. That repetition is what makes it read as a closing plate rather
- * than a section that wandered off the site's own palette.
+ * `.hero` is the same shape and shell the page's top banner sits in — same
+ * border, radius and vertical wash — paired with `.hero-gold`, which swaps
+ * `.hero`'s own two radial gradients from the old terminal blue to the brand
+ * gold. The top hero can leave those blue because `.hero-banner`'s artwork and
+ * veil sit on top and hide most of them; a plain panel with nothing layered
+ * over it, like this one, would otherwise show the blue in full.
  */
 
 /**
@@ -48,9 +50,13 @@ function OrbitMark() {
   return (
     <svg width={220} height={186} viewBox="0 0 220 186" aria-hidden className="hidden shrink-0 sm:block">
       <defs>
+        {/* A gold-lit sheen rather than the cooler blue-grey this started as —
+            the disc's only light source in the scene is the gold the rings and
+            pedestal are drawn in, so its highlight reads as that light hitting
+            navy metal rather than as a stray blue accent. */}
         <radialGradient id="orbit-disc" cx="0.35" cy="0.3" r="0.85">
-          <stop offset="0%" stopColor="#4d6690" />
-          <stop offset="55%" stopColor="#1c2b45" />
+          <stop offset="0%" stopColor="#7d6a48" />
+          <stop offset="55%" stopColor="#241f2c" />
           <stop offset="100%" stopColor="#0b1320" />
         </radialGradient>
         <radialGradient id="orbit-halo" cx="0.5" cy="0.5" r="0.5">
@@ -105,9 +111,16 @@ export function ClosingBanner() {
   return (
     <Link
       href="/screener"
-      className="hero group relative flex flex-col items-start gap-8 px-8 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-12 sm:py-11"
+      className="hero hero-gold group relative flex flex-col items-start gap-8 px-8 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-12 sm:py-11"
     >
-      <div className="hero-glow" />
+      {/* `--hero-glow-light` set to the brand gold, same as the top hero:
+          `.hero-glow`'s own default is the old terminal blue, and left
+          unset here it would be the one blue thing left on a page that has
+          otherwise moved to the brand gold. */}
+      <div
+        className="hero-glow"
+        style={{ "--hero-glow-light": "rgba(169, 138, 85, 0.22)" } as React.CSSProperties}
+      />
 
       <div className="relative max-w-[420px]">
         <h3 className="text-[27px] font-extrabold leading-[1.15] tracking-tight text-ink sm:text-[31px]">
