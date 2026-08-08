@@ -17,11 +17,13 @@ import type { NextRequest } from "next/server";
 const SESSION_COOKIE = "owntmrw_session";
 
 /**
- * Signed-in areas. Home and project pages stay open to everyone, and so do
- * the activity and signals feeds — both are read-only across every tracked
- * project, so there is nothing on either page a session unlocks.
+ * Signed-in areas. Home stays open to everyone, and so do the activity and
+ * signals feeds — both are read-only across every tracked project, so there
+ * is nothing on either page a session unlocks. Project pages carry the trade
+ * terminal and per-wallet data, so they gate the same as the screener and
+ * the portfolio.
  */
-const GATED = ["/screener", "/portfolio"];
+const GATED = ["/screener", "/portfolio", "/project"];
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -37,5 +39,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/screener/:path*", "/portfolio/:path*"],
+  matcher: ["/screener/:path*", "/portfolio/:path*", "/project/:path*"],
 };
