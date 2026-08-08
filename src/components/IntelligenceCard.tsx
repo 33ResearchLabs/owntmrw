@@ -272,6 +272,53 @@ function Picker({
 }
 
 /**
+ * Where else to read the selected project.
+ *
+ * One tile per tab the project page actually has, in its order, less Overview
+ * — the card above already opens there five times. Taking the list from the
+ * real tabs rather than from a wishlist is the same rule the facet rows follow:
+ * a tile cannot come to advertise a section the app does not have.
+ */
+const EXPLORE: { tab: string; label: string; icon: IconName; color: string }[] = [
+  { tab: "holders", label: "Holders", icon: "users", color: "#9b7ae0" },
+  { tab: "smart", label: "Smart Money", icon: "target", color: "var(--accent)" },
+  { tab: "treasury", label: "Treasury", icon: "bank", color: "var(--good)" },
+  { tab: "development", label: "Development", icon: "bars", color: "#e08a3c" },
+  { tab: "governance", label: "Governance", icon: "shield", color: "var(--warn)" },
+  { tab: "timeline", label: "Timeline", icon: "clock", color: "#d55181" },
+  { tab: "news", label: "News", icon: "info", color: "var(--accent)" },
+  { tab: "research", label: "Research", icon: "layers", color: "#9085e9" },
+];
+
+function ExploreStrip({ project }: { project: IntelProject }) {
+  return (
+    <div className="card px-5 py-5 sm:px-6">
+      <div className="mb-3.5 text-[13px] font-bold">
+        Explore more data
+        <span className="ml-1.5 font-medium text-muted">· {project.name}</span>
+      </div>
+      {/*
+       * `auto-fit` rather than a column count: eight tiles divide badly into
+       * most fixed grids, and this lets the row take as many as fit and wrap
+       * the rest evenly instead of stranding one on a line of its own.
+       */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(104px,1fr))] gap-2.5">
+        {EXPLORE.map((e) => (
+          <Link
+            key={e.tab}
+            href={`/project/${project.slug}#${e.tab}`}
+            className="flex flex-col items-center gap-2 rounded-xl border border-line bg-surface2/40 px-2 py-3.5 text-center transition-colors duration-150 hover:border-line2 hover:bg-surface2"
+          >
+            <IconBadge name={e.icon} color={e.color} size={30} />
+            <span className="truncate text-[11.5px] font-medium text-ink2">{e.label}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * The pair of cards, and the selection they share.
  *
  * State lives here rather than in the left card because the trade panel beside
@@ -289,12 +336,19 @@ export function IntelligencePair({ projects }: { projects: IntelProject[] }) {
 
   return (
     <>
-      <IntelligenceCard
-        projects={projects}
-        selected={selected}
-        onSelect={(p) => setSlug(p.slug)}
-      />
-      <TradePanel p={selected} />
+      {/* `grid-cols-1` is stated rather than left implicit: an implicit `auto`
+          track sizes to its widest item's max-content and will not shrink below
+          it, which pushed both cards ~126px past the viewport on a phone. The
+          `grid-cols-*` utilities compile to `minmax(0, 1fr)`, which caps it. */}
+      <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
+        <IntelligenceCard
+          projects={projects}
+          selected={selected}
+          onSelect={(p) => setSlug(p.slug)}
+        />
+        <TradePanel p={selected} />
+      </div>
+      <ExploreStrip project={selected} />
     </>
   );
 }

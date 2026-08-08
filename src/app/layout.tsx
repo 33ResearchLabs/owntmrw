@@ -61,13 +61,15 @@ export default async function RootLayout({
           <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-6 lg:gap-5">
             <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="Underly — Own Tomorrow">
               <Mark size={36} className="shrink-0" />
-              <span className="flex items-baseline gap-2.5">
-                <span className="text-[15px] font-extrabold tracking-[-0.01em]">
+              {/* The wordmark carries the rule under it that the logo does —
+                  left-aligned and about a third of the word's width, as drawn.
+                  `aria-hidden` because it is the mark's shape, not a divider,
+                  and the link already names itself. */}
+              <span className="flex flex-col items-start">
+                <span className="text-[15px] font-extrabold leading-none tracking-[-0.01em]">
                   Underly
                 </span>
-                <span className="hidden text-[10.5px] uppercase tracking-[0.13em] text-faint lg:inline">
-                  Own Tomorrow
-                </span>
+                <span className="mt-[5px] h-[3px] w-5 rounded-full bg-brand" aria-hidden />
               </span>
             </Link>
 
@@ -75,7 +77,7 @@ export default async function RootLayout({
 
             <TopNav items={NAV} />
 
-            <div className="mx-auto w-full max-w-[460px]">
+            <div className="mx-auto w-full max-w-[340px]">
               <GlobalSearch />
             </div>
 
