@@ -63,7 +63,16 @@ export function ConnectButton() {
         }}
       >
         <WalletGlyph />
-        {w.signingIn ? "Check your wallet…" : stale ? "Wallet changed — sign in" : w.available ? "Sign in" : "Get Phantom"}
+        {/* "Connect wallet" rather than "Sign in": the button opens the wallet
+            dialog, and connecting is what the reader is being asked to do —
+            the signature that follows is a step inside it, not the invitation.
+            Phrased to match the same button on the portfolio card. The stale
+            label follows the same verb so the two do not read as different
+            actions. */}
+        {w.signingIn
+          ? "Check your wallet…"
+          : stale ? "Wallet changed — reconnect"
+          : w.available ? "Connect wallet" : "Get Phantom"}
       </button>
       </div>
     );
