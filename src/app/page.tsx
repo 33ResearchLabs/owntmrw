@@ -147,7 +147,7 @@ export default async function Home() {
               box-shadow whose spread is negative — `shadow-[…_-22px_…]` silently
               produces no rule at all. */}
           <div
-            className="card flex flex-col gap-6 px-6 py-6 sm:px-8 md:flex-row md:items-center md:gap-8"
+            className="card flex flex-col gap-6 px-6 py-3 sm:px-8 md:flex-row md:items-center md:gap-8"
             style={{ boxShadow: "0 14px 36px -22px rgba(0, 0, 0, 0.95)" }}
           >
             <div className="grid flex-1 grid-cols-2 gap-y-6 sm:grid-cols-4">
