@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { requireSession } from "@/lib/session";
 import {
   projectDetail, priceIsReliable, MIN_LIQUIDITY_USD,
   parseLanguages, parseCodeFrequency, parseRisks, raisePriceOf, tradingStart,
@@ -33,6 +34,10 @@ const EVENT_LABEL: Record<string, string> = {
 
 export default async function ProjectPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  // The real gate. `proxy.ts` only saw that a cookie existed; this is where
+  // a forged or expired one is turned away.
+  await requireSession(`/project/${slug}`);
+
   const d = await projectDetail(slug);
   if (!d) notFound();
   const {
