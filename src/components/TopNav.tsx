@@ -23,26 +23,31 @@ export function TopNav({ items }: { items: NavItem[] }) {
   const { session } = useWallet();
   const signIn = useSignIn();
 
+  /*
+   * Signed out, the bar carries Home and nothing else: every other route is
+   * gated, so the links were four invitations to a dialog. `gated()` is the
+   * same predicate the click interception used, and it is kept in step with
+   * `proxy.ts` — so the bar cannot come to disagree with what is actually
+   * protected, and an ungated route added later appears here without a change.
+   *
+   * This hides links; it does not protect routes. `proxy.ts` still redirects a
+   * typed URL and the pages still call `requireSession`.
+   */
+  const visible = session ? items : items.filter((n) => !signIn.gated(n.href));
+
   return (
     <nav className="hidden items-center gap-0.5 sm:flex lg:gap-1.5">
-      {items.map((n) => {
+      {visible.map((n) => {
         const on = n.href === "/" ? path === "/" : path.startsWith(n.href);
         return (
           <Link
             key={n.href}
             href={n.href}
             aria-current={on ? "page" : undefined}
-            onClick={(e) => {
-              // Signed out and aimed at a gated route: open the dialog instead
-              // of letting the navigation happen, get redirected by the proxy
-              // and land on the login page. The redirect still exists and is
-              // still what protects the route — this just spares the reader a
-              // round trip when they are already here.
-              if (!session && signIn.gated(n.href)) {
-                e.preventDefault();
-                signIn.open(n.href);
-              }
-            }}
+            // No click interception here any more: the only links that reach
+            // this point are ones the reader is allowed to follow, so there is
+            // nothing left to intercept. The dialog is still opened from the
+            // header's connect button and from `SignInContent`.
             className={`relative rounded-lg px-2.5 py-2 text-[13px] transition-colors duration-150 lg:px-3.5 ${
               on
                 ? "font-semibold text-ink"

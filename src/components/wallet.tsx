@@ -88,11 +88,25 @@ export interface WalletState {
 
 const Ctx = createContext<WalletState | null>(null);
 
-export function WalletProvider({ children }: { children: React.ReactNode }) {
+/**
+ * `initialSession` is the signed-in address as the server already knew it, read
+ * from the session cookie in `layout.tsx`. Without it the first client render
+ * always says "signed out" and corrects itself once the fetch below lands,
+ * which is fine for a balance but not for anything that decides what to render
+ * — the nav would paint its signed-out shape and then shift. Seeding it makes
+ * the first paint the true one; the fetch stays as the refresh.
+ */
+export function WalletProvider({
+  children,
+  initialSession = null,
+}: {
+  children: React.ReactNode;
+  initialSession?: string | null;
+}) {
   const [address, setAddress] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [available, setAvailable] = useState(false);
-  const [session, setSession] = useState<string | null>(null);
+  const [session, setSession] = useState<string | null>(initialSession);
   const [signingIn, setSigningIn] = useState(false);
   const [solBalance, setSol] = useState<number | null>(null);
   const [usdcBalance, setUsdc] = useState<number | null>(null);
