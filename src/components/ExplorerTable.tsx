@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Delta, Logo } from "./ui";
 import { TrendSectionHeader } from "./viz";
-import { fmtUsd, fmtNum } from "@/lib/format";
+import { fmtUsd, fmtNum, fmtPrice } from "@/lib/format";
 
 /**
  * One row of the home page's explorer table. Flattened from `ExplorerRow` at
@@ -18,6 +18,7 @@ export interface ExplorerRowDTO {
   symbol: string | null;
   image_url: string | null;
   category: string | null;
+  price_usd: number | null;
   vol7d: number | null; vol7dTrend: number | null;
   vol30d: number | null; vol30dTrend: number | null;
   vol180d: number | null; vol180dTrend: number | null;
@@ -51,12 +52,13 @@ interface Col {
   unit?: string;
   align?: "right";
   window?: number;
-  kind: "text" | "usd" | "num" | "delta";
+  kind: "text" | "usd" | "price" | "num" | "delta";
 }
 
 const COLS: Col[] = [
   { key: "name", label: "Project", kind: "text" },
   { key: "category", label: "Market sector", kind: "text" },
+  { key: "price_usd", label: "Price", align: "right", kind: "price" },
   { key: "vol7d", label: "Volume", unit: "7d", align: "right", window: 7, kind: "usd" },
   { key: "vol30d", label: "Volume", unit: "30d", align: "right", window: 30, kind: "usd" },
   { key: "vol180d", label: "Volume", unit: "180d", align: "right", window: 180, kind: "usd" },
@@ -125,7 +127,7 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
         <span className="flex items-center gap-1 leading-tight text-faint"
           style={{ justifyContent: c.align === "right" ? "flex-end" : "flex-start" }}>
           {c.unit}
-          <span className={on ? "text-accent" : "opacity-40"}>{on ? (dir === -1 ? "↓" : "↑") : "⇅"}</span>
+          <span className={on ? "text-brand" : "opacity-40"}>{on ? (dir === -1 ? "↓" : "↑") : "⇅"}</span>
         </span>
       </th>
     );
@@ -145,6 +147,11 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
         </>
       );
     }
+    // Prices go through `fmtPrice`, not `fmtUsd`: most of these quotes sit
+    // below a dollar, where two decimals collapses $0.00180 and $0.00225 onto
+    // the same "$0.00" — three significant figures keeps the column readable
+    // as a comparison rather than a row of zeroes.
+    if (c.kind === "price") return fmtPrice(v as number | null);
     if (c.kind === "num") return fmtNum(v as number | null);
     return (
       <>
@@ -184,7 +191,7 @@ export function ExplorerTable({ rows }: { rows: ExplorerRowDTO[] }) {
                       {/* Rank follows the sort, so it reads as a position in the
                           current ranking rather than a fixed project number. */}
                       <span className="num w-4 shrink-0 text-right text-[12px] text-faint">{i + 1}</span>
-                      <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-accent">
+                      <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-brand">
                         <Logo src={r.image_url} name={r.name} size={22} />
                         <span className="max-w-[150px] truncate font-medium">{r.name}</span>
                         {r.symbol && (

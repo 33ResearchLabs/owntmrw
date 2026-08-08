@@ -476,3 +476,22 @@ export function ScaleMarker({
     </div>
   );
 }
+
+/**
+ * The small uppercase tag above a card heading, and its dot.
+ *
+ * Shared rather than written out in each card: the intelligence card and the
+ * trade panel sit side by side with their headers deliberately mirrored, so a
+ * size set in two places is a size that eventually disagrees.
+ */
+export function Eyebrow({ label, color }: { label: string; color: string }) {
+  return (
+    <div
+      className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em]"
+      style={{ color }}
+    >
+      {label}
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+    </div>
+  );
+}

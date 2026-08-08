@@ -28,7 +28,7 @@ export function ProjectCard({ p, badge }: { p: CardProject; badge?: string }) {
           <Logo src={p.image_url} name={p.name} size={44} />
         </div>
         {badge && (
-          <span className="absolute left-3.5 top-3.5 rounded-md bg-accent px-2 py-1 text-[10px] font-extrabold tracking-[0.08em] text-white">
+          <span className="absolute left-3.5 top-3.5 rounded-md bg-brand px-2 py-1 text-[10px] font-extrabold tracking-[0.08em] text-brandink">
             {badge}
           </span>
         )}

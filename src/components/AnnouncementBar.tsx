@@ -39,7 +39,7 @@ export function AnnouncementBar() {
           </span>
           {/* <Link
             href="/screener"
-            className="shrink-0 font-medium text-accent transition-colors hover:text-accenthi hover:underline"
+            className="shrink-0 font-medium text-brand transition-colors hover:text-brandhi hover:underline"
           >
             Explore →
           </Link> */}

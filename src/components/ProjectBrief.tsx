@@ -208,7 +208,7 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
   ].filter(Boolean) as { label: string; value: string; icon: IconName; color: string }[];
 
   const toneCls = (t?: Tile["tone"]) =>
-    t === "good" ? "text-good" : t === "bad" ? "text-bad" : t === "accent" ? "text-accent" : "";
+    t === "good" ? "text-good" : t === "bad" ? "text-bad" : t === "accent" ? "text-brand" : "";
 
   return (
     <section>
@@ -222,7 +222,7 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
         {p.raise_source_url && (
           <a
             href={p.raise_source_url} target="_blank" rel="noopener noreferrer"
-            className="text-[12px] text-faint transition-colors hover:text-accent"
+            className="text-[12px] text-faint transition-colors hover:text-brand"
           >
             figures source ↗
           </a>

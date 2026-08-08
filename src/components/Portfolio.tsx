@@ -143,7 +143,7 @@ export function Portfolio({ tokens }: { tokens: PortfolioToken[] }) {
                 {holdings.map((h) => (
                   <tr key={h.mint}>
                     <td>
-                      <Link href={`/project/${h.slug}`} className="flex items-center gap-2.5 hover:text-accent">
+                      <Link href={`/project/${h.slug}`} className="flex items-center gap-2.5 hover:text-brand">
                         <Logo src={h.image_url} name={h.name} size={22} />
                         <span className="font-medium">{h.name}</span>
                         {h.symbol && <span className="text-[11px] text-muted">{h.symbol}</span>}
@@ -173,7 +173,7 @@ export function Portfolio({ tokens }: { tokens: PortfolioToken[] }) {
       <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
         <span className="num">{shortAddr(address)}</span>
         <CopyButton value={address} />
-        <Link href={`/wallet/${address}`} className="text-accent hover:underline">
+        <Link href={`/wallet/${address}`} className="text-brand hover:underline">
           public wallet page →
         </Link>
       </div>

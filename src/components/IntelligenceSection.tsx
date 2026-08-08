@@ -1,6 +1,9 @@
+import Link from "next/link";
 import type { ScreenerRow } from "@/lib/queries";
+import type { Scoreboard } from "@/lib/scoreboard";
+import { recentCloses } from "@/lib/queries";
 import { IconBadge, type IconName } from "./viz";
-import { Eyebrow, IntelligenceCard, type IntelProject } from "./IntelligenceCard";
+import { IntelligencePair, type IntelProject } from "./IntelligenceCard";
 
 /**
  * The two explainer cards under the explorer table: what the product measures,
@@ -11,8 +14,9 @@ import { Eyebrow, IntelligenceCard, type IntelProject } from "./IntelligenceCard
  * to the tab it came from. A screenshot-shaped placeholder would have been
  * less work and would have aged into a lie the first time a tab moved.
  *
- * That card is a client component (`IntelligenceCard`) because it carries the
- * project picker; everything else here is static copy and stays on the server.
+ * Both cards are client components: the left one carries the project picker,
+ * and the trade panel beside it reads whatever that picker selects. What stays
+ * on the server is this file — choosing the list, and the two strips below.
  */
 
 /**
@@ -53,15 +57,30 @@ export function pickFeatured(rows: ScreenerRow[]): ScreenerRow | null {
  * card's default — is the featured project by construction rather than by two
  * rules that have to be kept in agreement.
  */
-export function intelProjects(rows: ScreenerRow[]): IntelProject[] {
+export function intelProjects(rows: ScreenerRow[], board: Scoreboard): IntelProject[] {
+  // Scores and price series are looked up per project, so both are indexed once
+  // rather than scanned for each of the twenty-odd rows below.
+  const scored = new Map(board.projects.map((p) => [p.slug, p]));
+  const closes = recentCloses(30);
+  const part = (slug: string, key: string) =>
+    scored.get(slug)?.parts.find((q) => q.key === key)?.score ?? null;
+
   return [...rows]
     .filter((r) => filled(r) >= 3)
     .sort(byCompleteness)
     .map((r) => ({
-      slug: r.slug, name: r.name, category: r.category, image_url: r.image_url,
+      slug: r.slug, name: r.name, symbol: r.symbol, category: r.category,
+      image_url: r.image_url,
       raise_amount_usd: r.raise_amount_usd, treasury_usd: r.treasury_usd,
       holder_count: r.holder_count, gh_last_push: r.gh_last_push,
       roi_since_raise: r.roi_since_raise,
+      change_24h: r.change_24h,
+      overall: scored.get(r.slug)?.overall ?? null,
+      measured: scored.get(r.slug)?.measured ?? 0,
+      total: scored.get(r.slug)?.total ?? 0,
+      concentrationScore: part(r.slug, "concentration"),
+      liquidityScore: part(r.slug, "liquidity"),
+      spark: closes.get(r.slug) ?? [],
     }));
 }
 
@@ -78,31 +97,8 @@ const FEATURES: { icon: IconName; color: string; title: string; blurb: string }[
   { icon: "token", color: "var(--warn)", title: "Multi-chain coverage", blurb: "100+ chains and L2s supported" },
 ];
 
-/**
- * What every project page is built from. Static because it describes the
- * product, not a reading — but each entry names a tab that genuinely exists,
- * so the list cannot drift into claiming coverage the app does not have.
- */
-const METHOD: { icon: IconName; color: string; title: string; blurb: string }[] = [
-  { icon: "pie", color: "#9b7ae0", title: "Treasury Analysis", blurb: "On-chain treasury balance, flows, and capital efficiency" },
-  { icon: "users", color: "var(--good)", title: "Holder Analysis", blurb: "Holder distribution, concentration, and wallet behaviour" },
-  { icon: "bars", color: "var(--accent)", title: "Development Activity", blurb: "GitHub commits, contributors, and repo health" },
-  { icon: "chart", color: "#e08a3c", title: "Market & Performance", blurb: "Liquidity, price performance, and market momentum" },
-  { icon: "shield", color: "var(--warn)", title: "Governance Activity", blurb: "Proposal activity, voting participation, and treasury usage" },
-  { icon: "target", color: "#9b7ae0", title: "AI Intelligence", blurb: "Generated summaries, read from verified on-chain data" },
-];
-
-function Check() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--good)"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden>
-      <circle cx="12" cy="12" r="9" /><path d="m8.5 12 2.5 2.5 4.5-5" />
-    </svg>
-  );
-}
-
-export function IntelligenceSection({ rows }: { rows: ScreenerRow[] }) {
-  const projects = intelProjects(rows);
+export function IntelligenceSection({ rows, board }: { rows: ScreenerRow[]; board: Scoreboard }) {
+  const projects = intelProjects(rows, board);
   if (!projects.length) return null;
 
   return (
@@ -118,46 +114,9 @@ export function IntelligenceSection({ rows }: { rows: ScreenerRow[] }) {
           it, which pushed both cards ~126px past the viewport on a phone. The
           `grid-cols-*` utilities compile to `minmax(0, 1fr)`, which caps it. */}
       <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
-        <IntelligenceCard projects={projects} />
-
-        <div className="card flex h-full flex-col gap-6 p-5 sm:p-6">
-          {/* Mirrors the intelligence card's header exactly — same eyebrow-row
-              floor, same margins — so both headings, descriptions and rules sit
-              on the same lines. */}
-          <div>
-            {/* 45px, not 42: the floor exists to match the selector opposite,
-                and that control is 45px tall — its two lines of text, not its
-                28px logo, are what set the height. At 42 the floor was three
-                short, so this heading sat above its neighbour rather than
-                level with it. */}
-            <div className="flex min-h-[45px] items-center">
-              <Eyebrow label="Methodology" color="#9b7ae0" />
-            </div>
-            <h2 className="mt-4 text-[26px] font-extrabold leading-[1.12] tracking-[-0.02em] sm:text-[30px]">
-              Transparent<br />research methodology.
-            </h2>
-            <p className="mt-4 min-h-[41px] text-[12.5px] leading-relaxed text-ink2">
-              Every figure is read from public sources, and every gap is named rather than filled.
-            </p>
-          </div>
-
-          {/* One rule above the list, where the header ends — the per-row rules
-              this replaces were six lines doing the work of spacing. The row
-              padding matches the facet cards opposite, less the 1px those spend
-              on their border, so the first row of each starts on one line. */}
-          <div className="flex flex-col gap-1 border-t border-line pt-3">
-            {METHOD.map((m) => (
-              <div key={m.title} className="flex items-center gap-3.5 rounded-xl px-2 py-3.5">
-                <IconBadge name={m.icon} color={m.color} size={38} />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold">{m.title}</div>
-                  <div className="truncate text-[11.5px] text-muted">{m.blurb}</div>
-                </div>
-                <Check />
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Both cards, and the selection they share — picking a project has to
+            move the figures on the left and the readings on the right. */}
+        <IntelligencePair projects={projects} />
       </div>
 
       {/*
@@ -176,6 +135,32 @@ export function IntelligenceSection({ rows }: { rows: ScreenerRow[] }) {
             </div>
           </div>
         ))}
+      </div>
+
+      {/*
+       * The standing disclaimer. It sits under the trade panel's readings
+       * because that panel states a stance on a project — the line says what
+       * that stance is and is not, at the size the rest of the page's footnotes
+       * are set in rather than as fine print.
+       */}
+      <div className="card flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:gap-4 sm:px-6">
+        <span className="shrink-0 text-muted" aria-hidden>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3.5 4.5 6.8v4.9c0 4.4 3.1 7.6 7.5 8.8 4.4-1.2 7.5-4.4 7.5-8.8V6.8Z" />
+            <path d="M12 9v4" /><path d="M12 16h.01" />
+          </svg>
+        </span>
+        <p className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-muted">
+          Underly is a data intelligence platform, not an investment advisor. Every reading is
+          computed from public on-chain and off-chain sources, and none of it is financial advice.
+        </p>
+        <Link
+          href="#faq-heading"
+          className="shrink-0 text-[11.5px] font-medium text-ink2 transition-colors duration-150 hover:text-brand"
+        >
+          Learn more <span aria-hidden>→</span>
+        </Link>
       </div>
     </section>
   );

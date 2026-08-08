@@ -93,7 +93,7 @@ export function ResearchSection({ board }: { board: Scoreboard }) {
   const verdict = featured.overall >= 70 ? "Strong" : featured.overall >= 40 ? "Moderate" : "Weak";
 
   return (
-    <section className="card p-5 lg:p-6">
+    <section id="methodology" className="card p-5 lg:p-6">
       <TrendSectionHeader
         eyebrow="Research Methodology"
         color="#9b7ae0"
@@ -118,7 +118,7 @@ export function ResearchSection({ board }: { board: Scoreboard }) {
           <Block icon="info" color="var(--accent)" title="Research question">
             <div className="rounded-lg border border-line bg-surface2/40 px-3 py-2.5 text-[12.5px] text-ink2">
               What is the long-term potential of{" "}
-              <Link href={`/project/${featured.slug}`} className="text-accent hover:underline">
+              <Link href={`/project/${featured.slug}`} className="text-brand hover:underline">
                 {featured.name}
               </Link>
               ?
@@ -157,7 +157,7 @@ export function ResearchSection({ board }: { board: Scoreboard }) {
           <Step
             n={2} title="Insights output"
             right={
-              <Link href={`/project/${featured.slug}`} className="ml-auto text-[11.5px] text-muted hover:text-accent">
+              <Link href={`/project/${featured.slug}`} className="ml-auto text-[11.5px] text-muted hover:text-brand">
                 {featured.name} →
               </Link>
             }

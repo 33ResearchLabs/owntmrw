@@ -199,14 +199,14 @@ export function TradeTerminal({
             <a
               href={`https://jup.ag/swap/USDC-${mint}`}
               target="_blank" rel="noopener noreferrer"
-              className="flex-1 rounded-lg border border-line py-1.5 text-center text-[12px] text-ink2 transition-colors hover:border-accent/50 hover:text-accent"
+              className="flex-1 rounded-lg border border-line py-1.5 text-center text-[12px] text-ink2 transition-colors hover:border-accent/50 hover:text-brand"
             >
               Jupiter ↗
             </a>
             <a
               href={`https://metadao.fi/${symbol.toLowerCase()}`}
               target="_blank" rel="noopener noreferrer"
-              className="flex-1 rounded-lg border border-line py-1.5 text-center text-[12px] text-ink2 transition-colors hover:border-accent/50 hover:text-accent"
+              className="flex-1 rounded-lg border border-line py-1.5 text-center text-[12px] text-ink2 transition-colors hover:border-accent/50 hover:text-brand"
             >
               MetaDAO ↗
             </a>

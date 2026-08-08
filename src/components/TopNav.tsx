@@ -65,8 +65,8 @@ export function TopNav({ items }: { items: NavItem[] }) {
             {on && (
               <span
                 aria-hidden
-                className="absolute inset-x-4 bottom-0 h-[2px] rounded-full bg-accent lg:inset-x-5"
-                style={{ boxShadow: "0 0 9px 0 var(--accent)" }}
+                className="absolute inset-x-4 bottom-0 h-[2px] rounded-full bg-brand lg:inset-x-5"
+                style={{ boxShadow: "0 0 9px 0 var(--brand)" }}
               />
             )}
           </Link>

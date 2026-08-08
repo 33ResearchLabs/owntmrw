@@ -33,7 +33,7 @@ export function CopyButton({ value, label = "address" }: { value: string; label?
       }}
       title={copied ? "Copied" : `Copy ${label}`}
       aria-label={copied ? "Copied" : `Copy ${label}`}
-      className="inline-flex shrink-0 items-center rounded p-0.5 text-faint transition-colors hover:bg-surface2 hover:text-accent"
+      className="inline-flex shrink-0 items-center rounded p-0.5 text-faint transition-colors hover:bg-surface2 hover:text-brand"
     >
       {copied ? (
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--good)"

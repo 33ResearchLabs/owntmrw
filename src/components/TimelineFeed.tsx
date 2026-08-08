@@ -156,7 +156,7 @@ export function TimelineFeed({ events }: { events: TimelineEventDTO[] }) {
 
                           <Link
                             href={`/project/${e.slug}`}
-                            className="flex shrink-0 items-center gap-2 font-medium text-ink hover:text-accent"
+                            className="flex shrink-0 items-center gap-2 font-medium text-ink hover:text-brand"
                           >
                             <Logo src={e.image_url} name={e.name} size={20} />
                             {e.name}
@@ -170,7 +170,7 @@ export function TimelineFeed({ events }: { events: TimelineEventDTO[] }) {
                                 href={e.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="hover:text-accent"
+                                className="hover:text-brand"
                               >
                                 {e.title}
                               </a>

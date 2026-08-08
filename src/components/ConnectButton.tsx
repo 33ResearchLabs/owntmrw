@@ -56,10 +56,10 @@ export function ConnectButton() {
       <button
         onClick={() => signIn.open()}
         disabled={w.signingIn}
-        className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-white transition-[filter,box-shadow] duration-150 hover:brightness-[1.08] active:brightness-95 disabled:opacity-60 sm:px-4"
+        className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-brandink transition-[filter,box-shadow] duration-150 hover:brightness-[1.08] active:brightness-95 disabled:opacity-60 sm:px-4"
         style={{
-          background: "linear-gradient(180deg, var(--accent-hi) 0%, var(--accent) 100%)",
-          boxShadow: "0 6px 18px -7px rgba(57, 135, 229, 0.9), inset 0 1px 0 0 rgba(255, 255, 255, 0.18)",
+          background: "linear-gradient(180deg, var(--brand-hi) 0%, var(--brand) 100%)",
+          boxShadow: "0 6px 18px -7px rgba(169, 138, 85, 0.9), inset 0 1px 0 0 rgba(255, 255, 255, 0.22)",
         }}
       >
         <WalletGlyph />

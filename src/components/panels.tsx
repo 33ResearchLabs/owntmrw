@@ -179,7 +179,7 @@ export function CardAction({ href, children }: { href: string | null; children: 
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 rounded-lg border border-line2 px-3 py-1.5 text-[12px] font-medium text-ink2 transition-colors duration-150 hover:border-accent hover:text-accent"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-line2 px-3 py-1.5 text-[12px] font-medium text-ink2 transition-colors duration-150 hover:border-accent hover:text-brand"
     >
       {children}
       <svg
@@ -519,7 +519,7 @@ export function ListingsPanel({
     <tr key={`${l.exchange}|${l.pair}`}>
       <td className="font-medium">
         {l.url ? (
-          <a href={l.url} target="_blank" rel="noopener noreferrer" className="hover:text-accent">
+          <a href={l.url} target="_blank" rel="noopener noreferrer" className="hover:text-brand">
             {l.exchange}
           </a>
         ) : (
@@ -530,7 +530,7 @@ export function ListingsPanel({
       <td>
         <span
           className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
-            l.is_dex ? "border-line text-muted" : "border-accent/40 text-accent"
+            l.is_dex ? "border-line text-muted" : "border-accent/40 text-brand"
           }`}
         >
           {l.is_dex ? "DEX" : "CEX"}
@@ -855,7 +855,7 @@ export function HoldersPanel({
                       <td className="!flex items-center gap-1.5">
                         <Link
                           href={`/wallet/${owner}`}
-                          className="num hover:text-accent"
+                          className="num hover:text-brand"
                           title={owner}
                         >
                           {shortAddr(owner)}
@@ -1051,7 +1051,7 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
               <a
                 href={`https://solscan.io/account/${p.treasury_address}`}
                 target="_blank" rel="noopener noreferrer"
-                className="rounded-lg border border-line px-3 py-1.5 text-[12px] font-medium text-ink2 hover:border-accent hover:text-accent"
+                className="rounded-lg border border-line px-3 py-1.5 text-[12px] font-medium text-ink2 hover:border-accent hover:text-brand"
               >
                 View vault ↗
               </a>
@@ -1069,7 +1069,7 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
               href={`https://solscan.io/account/${p.treasury_address}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="num text-[11px] text-accent hover:underline"
+              className="num text-[11px] text-brand hover:underline"
             >
               {shortAddr(p.treasury_address)} ↗
             </a>
@@ -1374,7 +1374,7 @@ function FeedList({
                 href={n.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-accent"
+                className="hover:text-brand"
               >
                 {n.title}
               </a>
@@ -1456,7 +1456,7 @@ export function NewsPanel({
                 href={url!}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded border border-line px-2.5 py-1 text-ink2 hover:border-accent/50 hover:text-accent"
+                className="rounded border border-line px-2.5 py-1 text-ink2 hover:border-accent/50 hover:text-brand"
               >
                 {label} ↗
               </a>
@@ -1656,7 +1656,7 @@ export function GovernancePanel({ d }: { d: ProjectDetail }) {
                           href={pr.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="hover:text-accent"
+                          className="hover:text-brand"
                         >
                           {pr.title ?? "Proposal"}
                         </a>
@@ -1739,7 +1739,7 @@ export function TimelinePanel({
                       href={e.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="hover:text-accent"
+                      className="hover:text-brand"
                     >
                       {e.title}
                     </a>

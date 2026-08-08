@@ -94,7 +94,7 @@ export function BarList({ items, labelWidth = 150 }: { items: BarItem[]; labelWi
             title={i.title}
           >
             {i.href ? (
-              <Link href={i.href} className="hover:text-accent">{i.label}</Link>
+              <Link href={i.href} className="hover:text-brand">{i.label}</Link>
             ) : (
               i.label
             )}
@@ -121,7 +121,7 @@ export function StatusBadge({ status }: { status: string | null }) {
   const s = (status ?? "unknown").toLowerCase();
   const map: Record<string, string> = {
     live: "text-good border-good/40",
-    raising: "text-accent border-accent/40",
+    raising: "text-brand border-accent/40",
     completed: "text-ink2 border-line",
     failed: "text-bad border-bad/40",
   };
@@ -129,5 +129,30 @@ export function StatusBadge({ status }: { status: string | null }) {
     <span className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${map[s] ?? "text-muted border-line"}`}>
       {s}
     </span>
+  );
+}
+
+/**
+ * The Underly mark: a navy disc over a gold bar, on the brand's cream ground.
+ *
+ * Geometry is identical to `app/icon.svg` — same viewBox, same coordinates — so
+ * the favicon, the nav and the sign-in crests are one object at three sizes
+ * rather than three drawings that drift. Drawn rather than rasterised because
+ * it renders at 16px in a browser tab.
+ *
+ * The colours are literals, not tokens: they are the brand's own and do not
+ * follow the surface, and `icon.svg` is a standalone file that cannot read a
+ * CSS variable — hard-coding both keeps the two provably identical.
+ */
+export function Mark({ size = 36, className }: { size?: number; className?: string }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 64 64"
+      className={className} role="img" aria-label="Underly"
+    >
+      <rect width="64" height="64" rx="12" fill="#F3EFE9" />
+      <circle cx="32" cy="24" r="12" fill="#0B1320" />
+      <rect x="13" y="42" width="38" height="8" rx="4" fill="#A98A55" />
+    </svg>
   );
 }

@@ -698,3 +698,30 @@ export function allObservations(limit = 100) {
     ORDER BY o.ts DESC LIMIT ?
   `).all(limit) as { ts: number; kind: string | null; text: string; slug: string | null; name: string | null; image_url: string | null }[];
 }
+
+/**
+ * Recent daily closes per project, slug-keyed, oldest first.
+ *
+ * For the home page's trade panel, which plots one small line per project and
+ * needs every project the picker offers up front — a per-project read on each
+ * selection would be a round trip for thirty numbers. The archive stores daily
+ * bars, so this is a windowed scan of the same table the volume columns use
+ * rather than anything new.
+ */
+export function recentCloses(days = 30): Map<string, number[]> {
+  const d = db();
+  const now = Number((d.prepare("SELECT strftime('%s','now') AS n").get() as { n: string }).n);
+  const rows = d.prepare(`
+    SELECT p.slug AS slug, c.c AS close FROM candles c
+    JOIN projects p ON p.id = c.project_id
+    WHERE c.ts >= ? ORDER BY c.ts
+  `).all(now - days * 86400) as { slug: string; close: number }[];
+
+  const out = new Map<string, number[]>();
+  for (const r of rows) {
+    if (r.close == null) continue;
+    if (!out.has(r.slug)) out.set(r.slug, []);
+    out.get(r.slug)!.push(r.close);
+  }
+  return out;
+}

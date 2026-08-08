@@ -265,7 +265,7 @@ export function HealthScorePanel({
             <div className="flex flex-col gap-4 rounded-xl border border-line bg-surface2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
               <div className="flex items-start gap-3">
                 <span
-                  className="mt-px flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-accent"
+                  className="mt-px flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-brand"
                   style={{ background: "var(--accent-dim)" }}
                 >
                   <InfoGlyph size={15} />
@@ -279,7 +279,7 @@ export function HealthScorePanel({
               {learnMoreHref && (
                 <a
                   href={learnMoreHref}
-                  className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-lg border border-line2 px-3.5 py-2 text-[12px] font-medium text-ink2 transition-colors duration-150 hover:border-accent hover:text-accent sm:self-auto"
+                  className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-lg border border-line2 px-3.5 py-2 text-[12px] font-medium text-ink2 transition-colors duration-150 hover:border-accent hover:text-brand sm:self-auto"
                 >
                   Learn more about scoring
                   <svg

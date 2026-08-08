@@ -94,7 +94,7 @@ export function MarketDepthPanel({ d, nowSec }: { d: ProjectDetail; nowSec: numb
           <a
             href={`https://dexscreener.com/solana/${p.mint}`}
             target="_blank" rel="noopener noreferrer"
-            className="rounded-lg border border-line px-2.5 py-1.5 text-[11.5px] text-ink2 transition-colors hover:border-line2 hover:text-accent"
+            className="rounded-lg border border-line px-2.5 py-1.5 text-[11.5px] text-ink2 transition-colors hover:border-line2 hover:text-brand"
           >
             View details ↗
           </a>

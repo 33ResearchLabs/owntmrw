@@ -4,6 +4,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, sessionAddress } from "@/lib/auth";
 import "./globals.css";
+import { Mark } from "@/components/ui";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { SideRail } from "@/components/SideRail";
 import { WalletProvider } from "@/components/wallet";
@@ -54,21 +55,7 @@ export default async function RootLayout({
         <header className="sticky top-0 z-50 bg-page  pb-3 pt-3">
           <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-3 sm:px-4 lg:gap-5 lg:px-12">
             <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="Underly — Own Tomorrow">
-              {/*
-               * The mark, on its own cream tile rather than knocked out of the
-               * bar. It is a navy disc, and the bar behind it is near-black —
-               * inverted to survive that it would not be the mark any more, so
-               * the ground it is drawn on comes with it. Same two shapes and
-               * the same proportions as `icon.svg`.
-               */}
-              <span
-                className="flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-[3px] rounded-[10px]"
-                style={{ background: "#F3EFE9" }}
-                aria-hidden
-              >
-                <span className="h-[13px] w-[13px] rounded-full" style={{ background: "#0B1320" }} />
-                <span className="h-[4px] w-[21px] rounded-full" style={{ background: "#A98A55" }} />
-              </span>
+              <Mark size={36} className="shrink-0" />
               <span className="flex items-baseline gap-2.5">
                 <span className="text-[15px] font-extrabold tracking-[-0.01em]">
                   Underly
