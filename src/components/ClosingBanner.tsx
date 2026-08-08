@@ -7,123 +7,58 @@ import Link from "next/link";
  * is the second time the page reaches for it, not a new treatment invented for
  * the foot. That repetition is what makes it read as a closing plate rather
  * than a section that wandered off the site's own palette.
- */
-
-/**
- * Half of an ellipse, split at its widest points, as an SVG arc path — the
- * unit `OrbitMark` draws a ring from. A single `<ellipse>` cannot sit partly
- * behind and partly in front of the disc; two half-paths can, drawn either
- * side of it in document order. `sweep` picks which half: 0 and 1 are the two
- * complements of the same split, not an up/down or front/back choice by
- * themselves — which physical half each one lands on then depends on the
- * ring's own rotation, so `OrbitMark` assigns them by eye, not by formula.
- */
-function halfEllipse(cx: number, cy: number, rx: number, ry: number, sweep: 0 | 1): string {
-  return `M ${cx - rx} ${cy} A ${rx} ${ry} 0 0 ${sweep} ${cx + rx} ${cy}`;
-}
-
-interface Ring { rx: number; ry: number; rotate: number; opacity: number; width: number }
-
-const RINGS: Ring[] = [
-  { rx: 104, ry: 38, rotate: -14, opacity: 0.85, width: 1.2 },
-  { rx: 76, ry: 27, rotate: -20, opacity: 0.55, width: 1 },
-];
-
-/**
- * The mark, rendered as an orbiting disc rather than the flat badge.
  *
- * Built from the same bar-across-a-circle shape `Mark` is, just at hero scale
- * with a disc gradient and two rings standing in for the flat fill —
- * recognisably the same object, not a new one invented for this banner. Each
- * ring is drawn as a back half (before the disc, so it disappears behind it)
- * and a front half (after, so it crosses over) — an orbit has to pass behind
- * its own planet on one side and in front on the other, and a single ellipse
- * drawn whole cannot do both at once. The disc carries a lighter rim than
- * `Mark`'s flat navy so it still reads as a shape against the hero's own dark
- * gradient rather than disappearing into it. Hidden below `sm`: at that width
- * it would outweigh the copy it sits beside.
+ * `.closing-banner` layers the artwork over it, seated against the right edge
+ * with the copy running clear of it on the left. It replaces the `OrbitMark`
+ * SVG that used to occupy that side: the drawing and the plate were two takes
+ * on the same object, and the supplied render is the one that was asked for.
  */
-function OrbitMark() {
-  const cx = 118, cy = 96, r = 48;
-  return (
-    <svg width={220} height={186} viewBox="0 0 220 186" aria-hidden className="hidden shrink-0 sm:block">
-      <defs>
-        <radialGradient id="orbit-disc" cx="0.35" cy="0.3" r="0.85">
-          <stop offset="0%" stopColor="#4d6690" />
-          <stop offset="55%" stopColor="#1c2b45" />
-          <stop offset="100%" stopColor="#0b1320" />
-        </radialGradient>
-        <radialGradient id="orbit-halo" cx="0.5" cy="0.5" r="0.5">
-          <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.22" />
-          <stop offset="100%" stopColor="var(--brand)" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      <circle cx={cx} cy={cy} r={92} fill="url(#orbit-halo)" />
-
-      {/* back halves — behind the disc. Centred on the disc itself, not below
-          it: `ry` is close enough to `r` that the ellipse's edge actually
-          crosses the disc's circle, which is what the front half needs to cut
-          across rather than merely graze its rim. */}
-      {RINGS.map((ring, i) => (
-        <path
-          key={`back-${i}`}
-          d={halfEllipse(cx, cy, ring.rx, ring.ry, 1)}
-          transform={`rotate(${ring.rotate} ${cx} ${cy})`}
-          stroke="var(--brand)" strokeWidth={ring.width} opacity={ring.opacity} fill="none"
-        />
-      ))}
-
-      {/* pedestal — a cylinder, not a flat ellipse: a body rect between two
-          ellipses gives it a visible side rather than reading as a coin lying
-          flat under the disc */}
-      <rect x={cx - 30} y={cy + r - 6} width="60" height="18" fill="var(--brand)" />
-      <ellipse cx={cx} cy={cy + r + 12} rx="30" ry="7" fill="#8a6f43" />
-      <ellipse cx={cx} cy={cy + r - 6} rx="30" ry="7" fill="var(--brand-hi)" />
-
-      <circle cx={cx} cy={cy} r={r} fill="url(#orbit-disc)" stroke="rgba(255,255,255,0.12)" />
-      <circle cx={cx - 14} cy={cy - 16} r="9.5" fill="#f3efe9" />
-      <rect x={cx - 27} y={cy + 12} width="34" height="8" rx="4" fill="var(--brand)" />
-
-      {/* front halves — over the disc, plus the two orbiting points, both
-          drawn last so neither is ever clipped by it */}
-      {RINGS.map((ring, i) => (
-        <path
-          key={`front-${i}`}
-          d={halfEllipse(cx, cy, ring.rx, ring.ry, 0)}
-          transform={`rotate(${ring.rotate} ${cx} ${cy})`}
-          stroke="var(--brand)" strokeWidth={ring.width} opacity={ring.opacity} fill="none"
-        />
-      ))}
-      <circle cx={cx + 94} cy={cy - 4} r="3.2" fill="var(--brand-hi)" />
-      <circle cx={cx - 82} cy={cy + 36} r="2.2" fill="var(--brand)" opacity="0.8" />
-    </svg>
-  );
-}
-
 export function ClosingBanner() {
   return (
     <Link
       href="/screener"
-      className="hero group relative flex flex-col items-start gap-8 px-8 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-12 sm:py-11"
+      /*
+       * A floor rather than a fixed height. The artwork is fitted by the card's
+       * shorter axis, so the plate's height is what decides how large it reads —
+       * and left to the copy alone it came out shorter than the object needs.
+       * A floor gives it room without pinning the card, so the copy can still
+       * grow the plate past it rather than being clipped by it.
+       */
+      className="hero closing-banner group relative block overflow-hidden px-8 py-10 sm:min-h-[300px] sm:px-12 sm:py-12"
     >
-      <div className="hero-glow" />
+      {/* Gold, matching the top banner — the default on `.hero-glow` is the
+          terminal blue, which is the one colour on this plate that would not
+          belong to the artwork above it. */}
+      <div
+        className="hero-glow"
+        style={{ "--hero-glow-light": "rgba(169, 138, 85, 0.22)" } as React.CSSProperties}
+      />
 
-      <div className="relative max-w-[420px]">
-        <h3 className="text-[27px] font-extrabold leading-[1.15] tracking-tight text-ink sm:text-[31px]">
-          Own tomorrow&apos;s<br />winners.
+      {/*
+       * Capped so the lines break where the artwork begins rather than running
+       * under it. The cap is the copy's, not the card's — the plate stays full
+       * width and the text column sits on its left.
+       */}
+      <div className="relative max-w-[460px]">
+        {/* Broken after "generation" rather than left to wrap: the line is
+            longer than the one it replaces, and at the copy column's cap it
+            would otherwise break after "next" and strand a word. */}
+        <h3 className="text-[30px] font-extrabold leading-[1.12] tracking-[-0.02em] text-ink sm:text-[38px]">
+          The next generation<br />of great companies
         </h3>
-        <span className="mt-4 block h-[3px] w-10 rounded-full bg-brand" aria-hidden />
-        <p className="mt-4 text-[13.5px] leading-relaxed text-ink2">
+
+        {/* The accent rule under the heading, as the reference sets it. */}
+        <span className="mt-5 block h-[3px] w-12 rounded-full bg-brand" aria-hidden />
+
+        <p className="mt-5 text-[13.5px] leading-relaxed text-ink2 sm:text-[14px]">
           Discover insights that power better decisions.<br />
           Track what matters. Understand what comes next.
         </p>
-        <span className="btn-primary mt-6 inline-flex transition-[filter] duration-150 group-hover:brightness-110">
+
+        <span className="btn-primary mt-7 inline-flex transition-[filter] duration-150 group-hover:brightness-110">
           Explore now <span aria-hidden>→</span>
         </span>
       </div>
-
-      <div className="relative"><OrbitMark /></div>
     </Link>
   );
 }
