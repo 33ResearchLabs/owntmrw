@@ -384,7 +384,7 @@ export default async function Home() {
         )}
 
         {/* what a project page holds, and how it is put together */}
-        <IntelligenceSection featured={featured} />
+        <IntelligenceSection rows={rows} />
 
         {/* how a score is built, and what it produces */}
         <ResearchSection board={board} />
