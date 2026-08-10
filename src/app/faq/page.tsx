@@ -212,7 +212,7 @@ export default function FaqPage() {
      */
     <div className="mx-auto max-w-[820px] pb-6">
       {/* ---- breadcrumb ---- */}
-      <nav aria-label="Breadcrumb" className="text-[12.5px] text-muted">
+      {/* <nav aria-label="Breadcrumb" className="text-[12.5px] text-muted">
         <ol className="flex items-center gap-2">
           <li>
             <Link href="/" className="transition-colors duration-150 hover:text-ink">
@@ -222,16 +222,15 @@ export default function FaqPage() {
           <li aria-hidden className="text-faint">
             ›
           </li>
-          {/* The current page is not a link — `aria-current` marks it instead,
-              so it is announced as where the reader already is. */}
+          
           <li aria-current="page" className="text-ink2">
             FAQ
           </li>
         </ol>
-      </nav>
+      </nav> */}
 
       {/* ---- heading ---- */}
-      <div className="mt-10 text-center sm:mt-12">
+      <div className="mt- text-center ">
         {/* Responsive from the first step rather than a fixed display size —
             the home page's fixed 64px hero is what overflows a phone. */}
         <h1 className="text-[48px] font-extrabold leading-none tracking-[-0.04em] sm:text-[60px] lg:text-[68px]">
