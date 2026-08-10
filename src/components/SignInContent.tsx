@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useWallet, WALLETS } from "./wallet";
 
 /**
@@ -81,6 +80,31 @@ function WalletMark({ id, size = 34 }: { id: string; size?: number }) {
   );
 }
 
+/**
+ * What the card shows between a verified signature and the destination
+ * arriving.
+ *
+ * The gap is real and can be seconds: `login` sets `session` the moment
+ * `/api/auth/verify` returns, so the header switches to its connected chip
+ * immediately, while the destination is still being rendered server-side.
+ * Without this the body underneath that chip still read "1 Connect a wallet"
+ * over three untouched wallet rows — the card claiming signed-out while the
+ * header claimed signed-in, which reads as a page that has hung.
+ *
+ * The dot is `.pulse` in `--good`, the same one the header's connected chip
+ * and the Live Activity heading use, so the two agree at a glance instead of
+ * contradicting each other.
+ */
+function Redirecting() {
+  return (
+    <div role="status" className="flex flex-col items-center gap-2 py-7 text-center">
+      <span className="pulse h-2 w-2 rounded-full bg-good" aria-hidden />
+      <span className="text-[13px] font-semibold text-ink">Signed in</span>
+      <span className="text-[11.5px] text-muted">Taking you where you were headed…</span>
+    </div>
+  );
+}
+
 function Chevron() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -149,23 +173,35 @@ export function SignInContent({
   const { login } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const router = useRouter();
+  const [done, setDone] = useState(false);
 
   const onPick = async (id: string) => {
     setError(null);
     setBusyId(id);
-    try {
-      const err = await login(id);
-      if (err) return setError(err);
-      // The session is a fresh httpOnly cookie the router has not seen, so the
-      // cache has to be dropped or server components keep rendering their
-      // signed-out output — including the gated page this was aimed at.
-      router.refresh();
-      onDone();
-    } finally {
+    const err = await login(id);
+    if (err) {
+      // Only the failure path comes back to the picker, so this is the only
+      // path that clears the busy row. It used to sit in a `finally`, which
+      // ran the instant the router call was *issued* rather than when the
+      // navigation landed — so the row dropped "Check your wallet…" and the
+      // card went fully idle while the destination was still loading.
+      setError(err);
       setBusyId(null);
+      return;
     }
+    // No `router.refresh()` here any more. It refetched whichever route the
+    // card happens to sit on, which on `/login` is a route whose server
+    // component now redirects — a round-trip whose only outcome was a
+    // redirect, racing the caller's own navigation. Cache invalidation is the
+    // caller's business now: it is only load-bearing when nothing navigates,
+    // which is the header modal's case alone. Every page here is
+    // `force-dynamic`, so a real navigation always refetches with the new
+    // cookie regardless.
+    setDone(true);
+    onDone();
   };
+
+  if (done) return <Redirecting />;
 
   return (
     <>

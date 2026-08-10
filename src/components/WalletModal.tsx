@@ -89,7 +89,17 @@ export function WalletModal({
               onClose();
               // Opened from a gated link: finish the journey it started.
               // Opened from the header: stay exactly where the reader was.
+              //
+              // The refresh belongs to the second case only, and moved here
+              // from `SignInContent` so it fires just for it. The session is a
+              // fresh httpOnly cookie the router has not seen, and staying put
+              // means nothing else will ever go and ask — so the page behind
+              // this dialog would keep rendering its signed-out output. When
+              // `next` is set the navigation does that job already: every page
+              // is `force-dynamic`, so it refetches with the new cookie, and
+              // refreshing as well would just be a second request for it.
               if (next) router.push(next);
+              else router.refresh();
             }}
           />
         </div>
