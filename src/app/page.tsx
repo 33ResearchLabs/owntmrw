@@ -337,11 +337,18 @@ export default async function Home() {
 
           {activity.length > 0 && (
             <div className="card px-5 pb-2.5 pt-4">
-              <div className="mb-1">
+              {/* "View all" is back on this card and on Signals, and stays off
+                  the three that #0850b1d also stripped. Those pointed at
+                  `/screener`, which `proxy.ts` gates — the link would have
+                  offered a page that answers with the sign-in redirect. These
+                  two go to `/timeline` and `/observations`, both public, so the
+                  affordance leads where it says it does. */}
+              <div className="mb-1 flex items-center justify-between">
                 <span className="flex items-center gap-2 text-[14.5px] font-bold">
                   <span className="h-[7px] w-[7px] rounded-full bg-good pulse" />
                   Live Activity
                 </span>
+                <Link href="/timeline" className="text-[12px] text-faint hover:text-ink2">View all</Link>
               </div>
               {activity.map((e, i) => (
                 <Link key={i} href={`/project/${e.slug}`} className="flex items-center gap-3 border-t border-grid py-2.5">
@@ -376,11 +383,12 @@ export default async function Home() {
            */}
           {signals.length > 0 && (
             <div className="card flex flex-col px-5 pb-2.5 pt-4 xl:min-h-0 xl:flex-1">
-              {/* `shrink-0` stays with the heading now that the link beside it
-                  is gone: this is a flex child of the card at `xl`, and without
-                  it the header would give up height to the scrolling list. */}
-              <div className="mb-1 shrink-0">
+              {/* `shrink-0` matters more with the link back beside the heading:
+                  this is a flex child of the card at `xl`, and without it the
+                  header would give up height to the scrolling list below. */}
+              <div className="mb-1 flex shrink-0 items-center justify-between">
                 <span className="text-[14.5px] font-bold">Signals</span>
+                <Link href="/observations" className="text-[12px] text-faint hover:text-ink2">View all</Link>
               </div>
               <div className="xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
                 {signals.map((o, i) => (
