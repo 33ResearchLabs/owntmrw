@@ -232,7 +232,7 @@ export function SignalsFeed({
           </label>
 
           <div className="flex shrink-0 items-center gap-2">
-            <button
+            {/* <button
               type="button"
               disabled
               title="Signals carry no importance rating yet"
@@ -240,7 +240,7 @@ export function SignalsFeed({
             >
               <span className="h-4 w-7 rounded-full border border-line bg-surface2" />
               Only important
-            </button>
+            </button> */}
             <select
               value={newestFirst ? "new" : "old"}
               onChange={(e) => setNewestFirst(e.target.value === "new")}

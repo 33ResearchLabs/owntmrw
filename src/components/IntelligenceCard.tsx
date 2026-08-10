@@ -314,7 +314,7 @@ export function ExploreStrip({ project }: { project: IntelProject }) {
     <section>
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <h2 className="text-[18px] font-bold">Explore more data</h2>
-        <span className="truncate text-[12px] text-faint">{project.name}</span>
+        {/* <span className="truncate text-[12px] text-faint">{project.name}</span> */}
       </div>
 
       {/*
