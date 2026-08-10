@@ -21,6 +21,21 @@ import { DAY, changeVsAgo, deltaVsAgo } from "@/lib/series";
 import { MoreRows } from "./MoreRows";
 import { CopyButton } from "./CopyButton";
 
+/**
+ * What a metric shows when its figure does not exist.
+ *
+ * The panels keep their labels rather than dropping the tile, so the same
+ * measure sits in the same position on every project and a reader comparing
+ * two tokens is not reading two differently-shaped sheets. Faint ink, never the
+ * figure white: at tile scale a white "N/A" reads as a value.
+ *
+ * Where the *reason* a figure is absent is known — a private round has no
+ * commitment book, a token with no snapshots yet has no holder history — say it
+ * in the tile's `sub`. "N/A" alone reads as a load failure; "N/A · no
+ * commitment book" reads as a fact about the token.
+ */
+export const NA = <span className="text-faint">N/A</span>;
+
 /** Shown wherever a section needs data we cannot obtain from public sources. */
 export function DataGap({
   title,
@@ -74,14 +89,18 @@ export function Metric({
 }
 
 /**
- * A dense grid of metrics with the empty ones dropped, for `SectionCard`-scale
- * panels. Distinct from the display-scale `MetricGrid` below it — that one is
- * for `DashboardCard`'s bigger, hero-style tiles.
+ * A dense grid of metrics for `SectionCard`-scale panels. Distinct from the
+ * display-scale `MetricGrid` below it — that one is for `DashboardCard`'s
+ * bigger, hero-style tiles.
  *
- * Panels used to render every tile unconditionally, so a token that never had a
- * public sale showed seven dashes for figures that do not exist for it — which
- * reads as a broken page rather than an inapplicable one. Same convention the
- * project brief already follows: no data, no tile.
+ * Tiles used to be dropped when their figure was missing, on the reasoning that
+ * a column of dashes reads as a broken page. It reads as a *shorter* page
+ * instead: the label goes with the number, so a reader cannot tell an
+ * inapplicable measure from one this app forgot to show, and two projects side
+ * by side have different tiles in different places. The convention is now the
+ * one `MetricGrid` follows — keep the label, show `NA`, and put the reason in
+ * `sub`. Callers still pass `false` for a tile that genuinely does not belong
+ * to this project at all, which is a different statement from "no value".
  */
 export function DenseMetricGrid({
   tiles,
@@ -216,7 +235,16 @@ export function MetricGrid({ children }: { children: React.ReactNode }) {
   // same divider colour raw, as a stray lighter block. Filler cells paint
   // those trailing tracks the same `bg-surface` as a real `MetricCell`,
   // scoped to the breakpoint that actually leaves them empty.
-  const count = Children.count(children);
+  //
+  // `toArray`, not `count`: every caller writes its cells as `{x != null &&
+  // <MetricCell/>}`, and `Children.count` counts the slot regardless — a
+  // `false` from an absent figure counted as a rendered cell. Both grids have
+  // eight such slots, so a token missing exactly one (no `Committed` figure,
+  // say) counted 8, divided evenly, and drew no filler at all — leaving the
+  // one genuinely empty track showing the divider colour, which is the lighter
+  // block this fixes. `toArray` drops `null`/`undefined`/booleans, so the count
+  // is of cells that actually paint.
+  const count = Children.toArray(children).length;
   const rem2 = count % 2;
   const rem4 = count % 4;
   return (
@@ -764,41 +792,63 @@ export function HoldersPanel({
       >
         <DenseMetricGrid
             tiles={[
-              cur != null && { label: "Total Holders", value: fmtNum(cur) },
-              // Kept even when empty: unlike the tiles below, these are metrics
-              // that will populate as snapshots accumulate, and the sub says so.
+              {
+                label: "Total Holders",
+                value: cur != null ? fmtNum(cur) : NA,
+                sub: cur == null ? "no holder snapshot yet" : undefined,
+              },
               ...[7, 30].map((days) => ({
                 label: `Net ${days}d`,
-                value: pctChg(days) != null ? <Delta v={pctChg(days)} /> : "—",
+                value: pctChg(days) != null ? <Delta v={pctChg(days)} /> : NA,
                 sub: chg(days) != null
                   ? `${chg(days)! >= 0 ? "+" : ""}${fmtNum(chg(days))} wallets`
                   : `needs ${days}d of history`,
               })),
-              avgWallet != null && {
-                label: "Avg Wallet", value: fmtNum(avgWallet),
-                sub: avgUsd ? `${fmtUsd(avgUsd)} at spot` : "supply ÷ holders",
+              {
+                label: "Avg Wallet",
+                value: avgWallet != null ? fmtNum(avgWallet) : NA,
+                sub: avgWallet == null
+                  ? "needs supply and holder count"
+                  : avgUsd ? `${fmtUsd(avgUsd)} at spot` : "supply ÷ holders",
               },
-              t10 != null && {
-                label: "Top 10 Concentration", value: `${t10.toFixed(1)}%`,
-                tone: t10 > 60 ? ("bad" as const) : t10 < 35 ? ("good" as const) : undefined,
+              {
+                label: "Top 10 Concentration",
+                value: t10 != null ? `${t10.toFixed(1)}%` : NA,
+                sub: t10 == null ? "no top-holder data" : undefined,
+                tone: t10 == null ? undefined
+                  : t10 > 60 ? ("bad" as const) : t10 < 35 ? ("good" as const) : undefined,
               },
-              t20 != null && {
-                label: "Top 20 Concentration", value: `${t20.toFixed(1)}%`,
-                sub: t10 != null ? `${(t20 - t10).toFixed(1)}% in ranks 11–20` : undefined,
+              {
+                label: "Top 20 Concentration",
+                value: t20 != null ? `${t20.toFixed(1)}%` : NA,
+                sub: t20 != null && t10 != null
+                  ? `${(t20 - t10).toFixed(1)}% in ranks 11–20`
+                  : t20 == null ? "no top-holder data" : undefined,
               },
-              p.circulating_supply != null && {
-                label: "Circulating Supply", value: fmtNum(p.circulating_supply),
-                sub: p.total_supply ? `of ${fmtNum(p.total_supply)} total` : undefined,
-              },
-              p.team_package != null && {
-                label: "Locked (Team)", value: fmtNum(p.team_package),
-                sub: p.total_supply
-                  ? `${((p.team_package / p.total_supply) * 100).toFixed(0)}% of supply`
+              {
+                label: "Circulating Supply",
+                value: p.circulating_supply != null ? fmtNum(p.circulating_supply) : NA,
+                sub: p.circulating_supply != null && p.total_supply
+                  ? `of ${fmtNum(p.total_supply)} total`
                   : undefined,
               },
-              cur && latest?.mcap ? {
-                label: "Market Cap / Holder", value: fmtUsd(latest.mcap / cur),
-              } : false,
+              {
+                label: "Locked (Team)",
+                value: p.team_package != null ? fmtNum(p.team_package) : NA,
+                sub: p.team_package != null && p.total_supply
+                  ? `${((p.team_package / p.total_supply) * 100).toFixed(0)}% of supply`
+                  // Circulating meeting total is the reason there is nothing
+                  // locked, not a gap — the supply sheet accounts for itself.
+                  : p.team_package == null && p.circulating_supply && p.total_supply
+                    && p.circulating_supply >= p.total_supply
+                    ? "none — 100% circulating"
+                    : undefined,
+              },
+              {
+                label: "Market Cap / Holder",
+                value: cur && latest?.mcap ? fmtUsd(latest.mcap / cur) : NA,
+                sub: cur && latest?.mcap ? undefined : "needs market cap and holders",
+              },
             ]}
           />
       </SectionCard>
@@ -1092,24 +1142,34 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
       >
         <DenseMetricGrid
           tiles={[
-            treasuryValue != null && {
+            {
               label: "Current Value",
-              value: treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue),
-              sub: "USDC AUM in the DAO vault",
+              value: treasuryValue == null ? NA
+                : treasuryValue < 1 ? "~$0"
+                  : fmtUsd(treasuryValue),
+              sub: treasuryValue != null
+                ? "USDC AUM in the DAO vault"
+                : p.treasury_address ? "vault not read yet" : "no DAO vault on record",
             },
-            p.raise_amount_usd != null && {
+            {
               label: "Raised",
-              value: p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd),
+              value: p.raise_amount_usd == null ? NA
+                : p.raise_amount_usd === 0 ? "$0"
+                  : fmtUsd(p.raise_amount_usd),
+              sub: p.raise_amount_usd == null ? "no raise on record" : undefined,
             },
-            vsRaise != null && {
+            {
               label: "Remaining vs Raise",
-              value: `${(vsRaise * 100).toFixed(0)}%`,
-              tone: vsRaise > 0.7 ? ("good" as const) : vsRaise < 0.2 ? ("bad" as const) : undefined,
+              value: vsRaise != null ? `${(vsRaise * 100).toFixed(0)}%` : NA,
+              sub: vsRaise == null ? "needs a treasury and a raise figure" : undefined,
+              tone: vsRaise == null ? undefined
+                : vsRaise > 0.7 ? ("good" as const) : vsRaise < 0.2 ? ("bad" as const) : undefined,
             },
-            vsMcap != null && {
+            {
               label: "Treasury / Mkt Cap",
-              value: `${(vsMcap * 100).toFixed(0)}%`,
-              sub: vsMcap > 0.5 ? "backed above half of valuation" : undefined,
+              value: vsMcap != null ? `${(vsMcap * 100).toFixed(0)}%` : NA,
+              sub: vsMcap == null ? "needs a treasury and a market cap"
+                : vsMcap > 0.5 ? "backed above half of valuation" : undefined,
             },
           ]}
         />
@@ -1211,6 +1271,11 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   const hh = holderHistory.filter((h) => h.holder_count != null);
   const holdersNow = hh.length ? hh[hh.length - 1].holder_count : null;
 
+  // A raise that took money without a launchpad track was a private round, and
+  // that is *why* the public-sale slots are blank for it — no commitment book,
+  // no contributor roll — rather than data we failed to collect.
+  const privateRound = p.raise_track == null && !!p.raise_amount_usd && p.raise_amount_usd > 0;
+
   // Five glanceable cards above the detail grid below, each real: price and
   // ROI read straight off the candle history against the raise price; market
   // cap multiplies that same price series by today's circulating supply, so
@@ -1233,64 +1298,80 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   // The trend cards and the detail grid are the same story told twice over —
   // glanceable first, then itemised — so they share one card. Two stacked
   // containers read as two unrelated sections that happen to be adjacent.
-  const showTrends = rp || treasuryGrowth != null || holderGrowth != null;
-
+  //
+  // The block used to be gated on having at least one figure to plot. It is
+  // not any more: the five cards name the five things this page measures a
+  // token by, and a project missing all of them is exactly the case a reader
+  // most needs told — silence there is indistinguishable from a section that
+  // failed to load.
   return (
     <section className="card overflow-hidden">
-      {showTrends && (
-        <div className="px-5 py-5 sm:px-6">
+      <div className="px-5 py-5 sm:px-6">
           <TrendSectionHeader
             title="Track this token from raise to today."
             subtitle="ROI, treasury growth, holder growth and market cap evolution, all since day one."
             action={<CardAction href={p.raise_source_url}>Data source</CardAction>}
             divider
           />
+          {/* All five cards always render. A card with no figure keeps its
+              label and drops to the short form — see `TrendCard`'s `empty`. */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          {rp && cur != null && candles.length > 0 && (
-            <TrendCard
-              color="var(--accent)" label="Raise vs Current"
-              value={fmtPrice(cur)}
-              deltaPct={roi} deltaLabel={`vs raise ${fmtPrice(rp.usd)}`}
-              series={candles.map((c) => c.c)}
-            />
-          )}
-          {roi != null && (
-            <TrendCard
-              color="var(--good)" label="ROI Since Raise"
-              value={fmtPct(roi)}
-              deltaPct={roi} deltaLabel="vs raise price"
-              series={candles.map((c) => ((c.c - rp!.usd) / rp!.usd) * 100)}
-            />
-          )}
-          {mcapGrowth != null && (
-            <TrendCard
-              color="var(--warn)" label="Market Cap Growth"
-              value={fmtUsd(curMcap)}
-              deltaPct={mcapGrowth} deltaLabel={`vs raise ${fmtUsd(raiseMcap)}`}
-              series={mcapSeries}
-              title={`Raise-time cap here is raise price × today's circulating supply, so it moves with ROI rather than history — not the same figure as "Raise Valuation" below, which uses the supply that actually existed at the raise.`}
-            />
-          )}
-          {holderGrowth != null && (
-            <TrendCard
-              color="var(--good)" label="Holder Growth"
-              value={fmtNum(holdersNow)}
-              deltaPct={holderGrowth} deltaLabel="since tracking began"
-              series={hh.map((h) => h.holder_count!)}
-            />
-          )}
-          {treasuryValue != null && (
-            <TrendCard
-              color="var(--accent)" label="Treasury Growth"
-              value={treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)}
-              deltaPct={treasuryGrowth}
-              deltaLabel={p.raise_amount_usd ? `vs raised ${fmtUsd(p.raise_amount_usd)}` : undefined}
-              series={treasurySeries}
-            />
-          )}
+          <TrendCard
+            color="var(--accent)" label="Raise vs Current"
+            value={cur != null ? fmtPrice(cur) : null}
+            deltaPct={roi} deltaLabel={rp ? `vs raise ${fmtPrice(rp.usd)}` : undefined}
+            series={candles.map((c) => c.c)}
+            empty={
+              !rp ? "no raise price to measure from"
+                : cur == null ? "no live quote"
+                  : candles.length === 0 ? "no price history yet"
+                    : undefined
+            }
+          />
+          <TrendCard
+            color="var(--good)" label="ROI Since Raise"
+            value={roi != null ? fmtPct(roi) : null}
+            deltaPct={roi} deltaLabel="vs raise price"
+            series={rp ? candles.map((c) => ((c.c - rp.usd) / rp.usd) * 100) : []}
+            empty={roi == null ? "needs a raise price and a live quote" : undefined}
+          />
+          <TrendCard
+            color="var(--warn)" label="Market Cap Growth"
+            value={fmtUsd(curMcap)}
+            deltaPct={mcapGrowth} deltaLabel={`vs raise ${fmtUsd(raiseMcap)}`}
+            series={mcapSeries}
+            title={`Raise-time cap here is raise price × today's circulating supply, so it moves with ROI rather than history — not the same figure as "Raise Valuation" below, which uses the supply that actually existed at the raise.`}
+            empty={
+              mcapGrowth == null
+                ? (supply ? "needs a raise price and a market cap" : "no circulating supply on record")
+                : undefined
+            }
+          />
+          <TrendCard
+            color="var(--good)" label="Holder Growth"
+            value={fmtNum(holdersNow)}
+            deltaPct={holderGrowth} deltaLabel="since tracking began"
+            series={hh.map((h) => h.holder_count!)}
+            empty={
+              holderGrowth == null
+                ? (hh.length ? "needs a second holder snapshot" : "no holder snapshots yet")
+                : undefined
+            }
+          />
+          <TrendCard
+            color="var(--accent)" label="Treasury Growth"
+            value={treasuryValue != null && treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)}
+            deltaPct={treasuryGrowth}
+            deltaLabel={p.raise_amount_usd ? `vs raised ${fmtUsd(p.raise_amount_usd)}` : undefined}
+            series={treasurySeries}
+            empty={
+              treasuryValue == null
+                ? (p.treasury_address ? "vault not read yet" : "no DAO vault on record")
+                : undefined
+            }
+          />
           </div>
-        </div>
-      )}
+      </div>
 
       <div className="border-t border-grid px-5 py-3.5 sm:px-6">
         <h3 className="text-[14px] font-semibold">Performance Since Raise</h3>
@@ -1299,54 +1380,58 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
         </p>
       </div>
       <MetricGrid>
-        {rp && (
-          <MetricCell
-            label="Raise Price"
-            value={`${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`}
-            sub={rp.derived ? "derived: raise ÷ 10M sold" : undefined}
-          />
-        )}
-        {drawdown != null && (
-          <MetricCell label="Current Drawdown" value={<Delta v={drawdown} />} sub="from all-time high" />
-        )}
-        {ath != null && (
-          <MetricCell
-            label="ATH"
-            value={fmtPrice(ath)}
-            sub={athRet != null ? `${fmtPct(athRet)} vs raise` : undefined}
-          />
-        )}
-        {atl != null && (
-          <MetricCell
-            label="ATL"
-            value={fmtPrice(atl)}
-            sub={atlRet != null ? `${fmtPct(atlRet)} vs raise` : undefined}
-          />
-        )}
-        {daysToAth != null && (
-          <MetricCell label="Days to ATH" value={`${daysToAth}d`} sub={athTs ? fmtDate(athTs) : undefined} />
-        )}
-        {p.raise_contributors != null && (
-          <MetricCell label="Contributors at Raise" value={fmtNum(p.raise_contributors)} />
-        )}
-        {p.raise_committed_usd != null && (
-          <MetricCell
-            label="Committed"
-            value={fmtUsd(p.raise_committed_usd)}
-            sub={
-              p.raise_amount_usd
-                ? `${Math.round(p.raise_committed_usd / p.raise_amount_usd)}× oversubscribed`
+        <MetricCell
+          label="Raise Price"
+          value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : NA}
+          sub={rp?.derived ? "derived: raise ÷ 10M sold" : undefined}
+        />
+        <MetricCell
+          label="Current Drawdown"
+          value={drawdown != null ? <Delta v={drawdown} /> : NA}
+          sub={drawdown != null ? "from all-time high" : undefined}
+        />
+        <MetricCell
+          label="ATH"
+          value={ath != null ? fmtPrice(ath) : NA}
+          sub={athRet != null ? `${fmtPct(athRet)} vs raise` : undefined}
+        />
+        <MetricCell
+          label="ATL"
+          value={atl != null ? fmtPrice(atl) : NA}
+          sub={atlRet != null ? `${fmtPct(atlRet)} vs raise` : undefined}
+        />
+        <MetricCell
+          label="Days to ATH"
+          value={daysToAth != null ? `${daysToAth}d` : NA}
+          sub={daysToAth != null && athTs ? fmtDate(athTs) : undefined}
+        />
+        <MetricCell
+          label="Contributors at Raise"
+          value={p.raise_contributors != null ? fmtNum(p.raise_contributors) : NA}
+          sub={p.raise_contributors == null && privateRound ? "private round" : undefined}
+        />
+        <MetricCell
+          label="Committed"
+          value={p.raise_committed_usd != null ? fmtUsd(p.raise_committed_usd) : NA}
+          sub={
+            p.raise_committed_usd != null && p.raise_amount_usd
+              ? `${Math.round(p.raise_committed_usd / p.raise_amount_usd)}× oversubscribed`
+              : p.raise_committed_usd == null && privateRound
+                ? "no commitment book"
                 : undefined
-            }
-          />
-        )}
-        {p.raise_fdv_usd != null && <MetricCell label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />}
+          }
+        />
+        <MetricCell
+          label="Raise FDV"
+          value={p.raise_fdv_usd != null ? fmtUsd(p.raise_fdv_usd) : NA}
+        />
       </MetricGrid>
       {!p.raise_track && (
         <CardNote>
-          Not a launchpad sale, so the public-sale figures — per-token price,
-          minimum, commitments, contributor count — do not exist for this token
-          and are omitted rather than shown empty.
+          Not a launchpad sale, so the public-sale figures — minimum,
+          commitments, contributor count — do not exist for this token. They are
+          marked N/A above rather than left blank: nothing was collected and
+          lost, there was never a public book to collect from.
         </CardNote>
       )}
     </section>

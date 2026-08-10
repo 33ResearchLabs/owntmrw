@@ -15,7 +15,7 @@ import {
   HoldersPanel, SmartMoneyPanel, TreasuryPanel, CompareRaisePanel, NewsPanel,
   ResearchPanel, GovernancePanel, TimelinePanel, InsightList,
   ListingsPanel, RiskPanel, SectionCard, Metric,
-  DashboardCard, CardAction, CardTag, MetricGrid, MetricCell, CardNote,
+  DashboardCard, CardAction, CardTag, MetricGrid, MetricCell, CardNote, NA,
 } from "@/components/panels";
 import { TradeTerminal } from "@/components/TradeTerminal";
 import { PortfolioCard } from "@/components/PortfolioCard";
@@ -69,6 +69,16 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
     ? p.raise_committed_usd / p.raise_amount_usd : null;
   const lockedPct = p.team_package && p.total_supply
     ? (p.team_package / p.total_supply) * 100 : null;
+
+  /**
+   * A raise that took money without a launchpad track was a private round, and
+   * that is *why* half the sheet is blank for it — no cap, no commitment book,
+   * no team package — rather than data we failed to collect. Where we know the
+   * reason, the N/A carries it.
+   */
+  const privateRound = p.raise_track == null && !!p.raise_amount_usd && p.raise_amount_usd > 0;
+  const fullFloat = !!p.circulating_supply && !!p.total_supply
+    && p.circulating_supply >= p.total_supply;
 
   const hs = healthScore(d);
   // Freshness stamp for the health panel: the newest of the snapshot streams the
@@ -141,56 +151,70 @@ export default async function ProjectPage({ params }: { params: Promise<{ slug: 
           }
         >
           <MetricGrid>
-            {p.raise_amount_usd != null && (
-              <MetricCell
-                label="Raised"
-                value={p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd)}
-                sub={
-                  p.raise_amount_usd === 0
+            <MetricCell
+              label="Raised"
+              value={
+                p.raise_amount_usd == null ? NA
+                  : p.raise_amount_usd === 0 ? "$0"
+                    : fmtUsd(p.raise_amount_usd)
+              }
+              sub={
+                p.raise_amount_usd == null
+                  ? "no raise on record"
+                  : p.raise_amount_usd === 0
                     ? "fully refunded"
                     : p.raise_end_ts ? `closed ${fmtDate(p.raise_end_ts)}` : undefined
-                }
-              />
-            )}
-            {p.raise_goal_usd != null && (
-              <MetricCell label="Minimum / Goal" value={fmtUsd(p.raise_goal_usd)} />
-            )}
-            {p.raise_committed_usd != null && (
-              <MetricCell
-                label="Committed"
-                value={fmtUsd(p.raise_committed_usd)}
-                sub={
-                  oversubscribed != null
-                    ? `${oversubscribed < 10 ? oversubscribed.toFixed(1) : Math.round(oversubscribed)}× oversubscribed · ${refunded!.toFixed(0)}% refunded`
+              }
+            />
+            <MetricCell
+              label="Minimum / Goal"
+              value={p.raise_goal_usd != null ? fmtUsd(p.raise_goal_usd) : NA}
+              sub={p.raise_goal_usd == null && privateRound ? "no cap — private round" : undefined}
+            />
+            <MetricCell
+              label="Committed"
+              value={p.raise_committed_usd != null ? fmtUsd(p.raise_committed_usd) : NA}
+              sub={
+                oversubscribed != null
+                  ? `${oversubscribed < 10 ? oversubscribed.toFixed(1) : Math.round(oversubscribed)}× oversubscribed · ${refunded!.toFixed(0)}% refunded`
+                  : p.raise_committed_usd == null && privateRound
+                    ? "no commitment book"
                     : undefined
-                }
-              />
-            )}
-            {rp && (
-              <MetricCell
-                label="Raise Price"
-                value={`${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`}
-                sub={rp.derived ? "derived: raise ÷ 10M tokens sold" : undefined}
-              />
-            )}
-            {p.raise_fdv_usd != null && <MetricCell label="Raise FDV" value={fmtUsd(p.raise_fdv_usd)} />}
-            {p.raise_contributors != null && (
-              <MetricCell label="Contributors" value={fmtNum(p.raise_contributors)} />
-            )}
-            {p.circulating_supply != null && (
-              <MetricCell
-                label="Circulating Supply"
-                value={fmtNum(p.circulating_supply)}
-                sub={p.total_supply ? `of ${fmtNum(p.total_supply)} total` : undefined}
-              />
-            )}
-            {p.team_package != null && (
-              <MetricCell
-                label="Locked (Team)"
-                value={fmtNum(p.team_package)}
-                sub={lockedPct != null ? `${lockedPct.toFixed(0)}% of supply` : undefined}
-              />
-            )}
+              }
+            />
+            <MetricCell
+              label="Raise Price"
+              value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : NA}
+              sub={rp?.derived ? "derived: raise ÷ 10M tokens sold" : undefined}
+            />
+            <MetricCell
+              label="Raise FDV"
+              value={p.raise_fdv_usd != null ? fmtUsd(p.raise_fdv_usd) : NA}
+            />
+            <MetricCell
+              label="Contributors"
+              value={p.raise_contributors != null ? fmtNum(p.raise_contributors) : NA}
+            />
+            <MetricCell
+              label="Circulating Supply"
+              value={p.circulating_supply != null ? fmtNum(p.circulating_supply) : NA}
+              sub={
+                p.circulating_supply != null && p.total_supply
+                  ? `of ${fmtNum(p.total_supply)} total`
+                  : undefined
+              }
+            />
+            <MetricCell
+              label="Locked (Team)"
+              value={p.team_package != null ? fmtNum(p.team_package) : NA}
+              sub={
+                lockedPct != null
+                  ? `${lockedPct.toFixed(0)}% of supply`
+                  : p.team_package == null && fullFloat
+                    ? "none — 100% circulating"
+                    : undefined
+              }
+            />
           </MetricGrid>
           {p.raise_note && <CardNote>{p.raise_note}</CardNote>}
         </DashboardCard>
