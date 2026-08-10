@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createChart, ColorType, CandlestickSeries, AreaSeries, HistogramSeries,
-  createSeriesMarkers, LineStyle,
+  createSeriesMarkers, LineStyle, CrosshairMode,
   type IChartApi, type ISeriesApi, type SeriesMarker, type Time, type UTCTimestamp,
 } from "lightweight-charts";
 
@@ -572,7 +572,12 @@ export function PriceChart({
         fixLeftEdge: true,
       },
       crosshair: {
-        mode: 1,
+        // Free, not magnetised. The library's default (Magnet) pins the
+        // horizontal line to the hovered bar's *close*, so the line — and the
+        // price label on the axis — ignored where the pointer actually was and
+        // reported one level per candle. Normal puts the line under the cursor
+        // and quotes the price at that height, which is what a desk chart does.
+        mode: CrosshairMode.Normal,
         vertLine: { color: T.muted, width: 1, style: LineStyle.Dashed, labelBackgroundColor: T.axis },
         horzLine: { color: T.muted, width: 1, style: LineStyle.Dashed, labelBackgroundColor: T.axis },
       },

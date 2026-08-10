@@ -1,10 +1,12 @@
 import { raisePriceOf, type ProjectDetail } from "@/lib/queries";
 import { fmtUsd, fmtNum, fmtPct, fmtDate, fmtPrice, timeAgo } from "@/lib/format";
 import { IconBadge, Sparkline, MeterBar, Icon, type IconName } from "./viz";
+import { NA } from "./panels";
 
 interface Tile {
   label: string;
-  value: string;
+  /** A formatted figure, or `NA` where the project has none. */
+  value: React.ReactNode;
   sub?: string;
   tone?: "good" | "bad" | "accent";
   /** Large feature tile spanning two columns. */
@@ -19,8 +21,14 @@ interface Tile {
 
 /**
  * The readable brief: everything the platform knows about a project as a wall
- * of stat tiles, grouped into The Raise / The Token / The DAO. Tiles with no
- * data are omitted — no dashes, no filler.
+ * of stat tiles, grouped into The Raise / The Token / The DAO.
+ *
+ * Every tile in every group renders, always. A figure this project does not
+ * have shows `NA` under its own label rather than taking the label with it —
+ * dropping the tile made an inapplicable measure look identical to one the app
+ * failed to load, and left two projects with different tiles in different
+ * positions. The `sub` line carries the reason, which is what keeps an N/A from
+ * reading as a load failure.
  */
 export function ProjectBrief({ d }: { d: ProjectDetail }) {
   const { project: p, latest, candles, holderHistory, treasuryValue, github, ath, athTs } = d;
@@ -56,106 +64,135 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
           "Not a launchpad sale — demand, per-token price, valuation and contributor figures were never public for this raise.")
         : undefined,
       tiles: [
-        p.raise_amount_usd != null && {
+        {
           label: "Raised",
-          value: p.raise_amount_usd === 0 ? "$0" : fmtUsd(p.raise_amount_usd),
-          sub: p.raise_amount_usd === 0
-            ? "failed — fully refunded"
-            : p.raise_end_ts ? `closed ${fmtDate(p.raise_end_ts)}` : undefined,
-          tone: p.raise_amount_usd === 0 ? ("bad" as const) : ("accent" as const),
+          value: p.raise_amount_usd == null ? NA
+            : p.raise_amount_usd === 0 ? "$0"
+              : fmtUsd(p.raise_amount_usd),
+          sub: p.raise_amount_usd == null
+            ? "no raise on record"
+            : p.raise_amount_usd === 0
+              ? "failed — fully refunded"
+              : p.raise_end_ts ? `closed ${fmtDate(p.raise_end_ts)}` : undefined,
+          tone: p.raise_amount_usd === 0 ? ("bad" as const)
+            : p.raise_amount_usd != null ? ("accent" as const) : undefined,
           wide: true,
-          badge: p.raise_amount_usd === 0 ? "Refunded" : p.raise_end_ts ? "Completed" : undefined,
+          badge: p.raise_amount_usd === 0 ? "Refunded"
+            : p.raise_amount_usd != null && p.raise_end_ts ? "Completed" : undefined,
         },
-        p.raise_committed_usd != null && {
+        {
           label: "Demand",
-          value: fmtUsd(p.raise_committed_usd),
+          value: p.raise_committed_usd != null ? fmtUsd(p.raise_committed_usd) : NA,
           sub: oversub != null
             ? `${oversub < 10 ? oversub.toFixed(1) : Math.round(oversub)}× oversubscribed`
-            : "committed",
+            : p.raise_committed_usd != null ? "committed"
+              // A private round takes cheques, not commitments — there is no
+              // book to be oversubscribed against, disclosed or otherwise.
+              : raiseIsPrivate ? "no commitment book" : "not disclosed",
         },
-        rp != null && {
+        {
           label: "Raise Price",
-          value: `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`,
-          sub: rp.derived ? "raise ÷ 10M sold" : undefined,
+          value: rp != null ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : NA,
+          sub: rp?.derived ? "raise ÷ 10M sold"
+            : rp == null ? "no per-token price published" : undefined,
         },
-        p.raise_fdv_usd != null && {
+        {
           label: "Raise Valuation",
-          value: fmtUsd(p.raise_fdv_usd),
+          value: p.raise_fdv_usd != null ? fmtUsd(p.raise_fdv_usd) : NA,
+          sub: p.raise_fdv_usd == null ? "not disclosed" : undefined,
         },
-        p.raise_contributors != null && {
+        {
           label: "Contributors",
-          value: fmtNum(p.raise_contributors),
+          value: p.raise_contributors != null ? fmtNum(p.raise_contributors) : NA,
+          sub: p.raise_contributors == null
+            ? (raiseIsPrivate ? "private round" : "not disclosed")
+            : undefined,
         },
         // A raise with money but no launchpad track was a private round, and
-        // "Private" is its track, not a gap. Gated on the amount so a token
-        // that never raised at all (Flash.Trade) doesn't inherit the label.
-        (p.raise_track != null || (p.raise_amount_usd != null && p.raise_amount_usd > 0)) && {
+        // "Private" is its track, not a gap. A token that never raised at all
+        // (Flash.Trade) has no track to state, so that one is the real N/A.
+        {
           label: "Track",
           value:
             p.raise_track === "curated" ? "Curated"
             : p.raise_track === "permissionless" ? "Permissionless"
-            : "Private",
+            : p.raise_amount_usd != null && p.raise_amount_usd > 0 ? "Private"
+              : NA,
           sub:
             p.raise_track === "curated" ? "MetaDAO launchpad"
             : p.raise_track === "permissionless" ? "via Futard"
-            : "off-launchpad round",
+            : p.raise_amount_usd != null && p.raise_amount_usd > 0 ? "off-launchpad round"
+              : "never ran a raise",
         },
-      ].filter(Boolean) as Tile[],
+      ],
     },
     {
       title: "The Token",
       icon: "token",
       color: "var(--good)",
       tiles: [
-        roi != null && {
+        {
           label: "Return vs Raise",
-          value: fmtPct(roi),
-          sub: athRet != null ? `peaked at ${fmtPct(athRet)}` : undefined,
-          tone: roi >= 0 ? ("good" as const) : ("bad" as const),
+          value: roi != null ? fmtPct(roi) : NA,
+          sub: athRet != null ? `peaked at ${fmtPct(athRet)}`
+            : roi == null ? "needs a raise price and a live quote" : undefined,
+          tone: roi == null ? undefined : roi >= 0 ? ("good" as const) : ("bad" as const),
           wide: true,
-          // The price path behind the number. Falls back to a "needs history"
-          // rule when the token is too young to have a shape worth plotting.
-          aside: (
+          // The price path behind the number — dropped, not drawn empty, when
+          // there are no candles: a flat line across an empty box would state a
+          // price history this token does not have.
+          aside: candles.length > 0 ? (
             <div className="w-[42%] max-w-[190px] shrink-0">
               <Sparkline values={candles.map((c) => c.c)} height={38} />
             </div>
-          ),
+          ) : undefined,
         },
-        ath != null && {
+        {
           label: "All-Time High",
-          value: fmtPrice(ath),
-          sub: athTs ? fmtDate(athTs) : undefined,
+          value: ath != null ? fmtPrice(ath) : NA,
+          sub: ath != null
+            ? (athTs ? fmtDate(athTs) : undefined)
+            : "no price history yet",
         },
-        floatPct != null && {
+        {
           label: "Tradeable Float",
-          value: `${floatPct.toFixed(0)}%`,
-          sub: "of total supply",
+          value: floatPct != null ? `${floatPct.toFixed(0)}%` : NA,
+          sub: floatPct != null ? "of total supply" : "needs circulating and total supply",
         },
-        lockedPct != null && lockedPct > 0 && {
+        {
+          // Zero is a real answer here and now says so, where it used to fall
+          // through the `> 0` guard and hide the tile alongside a genuine gap.
           label: "Team Lock",
-          value: `${lockedPct.toFixed(0)}%`,
-          sub: "price-milestone unlocks",
+          value: lockedPct != null ? `${lockedPct.toFixed(0)}%` : NA,
+          sub: lockedPct == null ? "no team package on record"
+            : lockedPct > 0 ? "price-milestone unlocks" : "nothing locked",
         },
-        candles.length > 0 && {
+        {
           label: "Trading Since",
-          value: fmtDate(candles[0].ts),
+          value: candles.length > 0 ? fmtDate(candles[0].ts) : NA,
+          sub: candles.length > 0 ? undefined : "no candles recorded yet",
         },
-      ].filter(Boolean) as Tile[],
+      ],
     },
     {
       title: "The DAO",
       icon: "bank",
       color: "#9b7ae0",
       tiles: [
-        treasuryValue != null && {
+        {
           label: "Treasury",
-          value: treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue),
-          sub: treasuryValue < 1
-            ? "vault is empty"
-            : treasuryVsRaise != null
-              ? `${treasuryVsRaise.toFixed(0)}% of the raise still held`
-              : "USDC on-chain",
-          tone: treasuryValue < 1 ? ("bad" as const) : ("good" as const),
+          value: treasuryValue == null ? NA
+            : treasuryValue < 1 ? "~$0"
+              : fmtUsd(treasuryValue),
+          sub: treasuryValue == null
+            ? (p.treasury_address ? "vault not read yet" : "no DAO vault on record")
+            : treasuryValue < 1
+              ? "vault is empty"
+              : treasuryVsRaise != null
+                ? `${treasuryVsRaise.toFixed(0)}% of the raise still held`
+                : "USDC on-chain",
+          tone: treasuryValue == null ? undefined
+            : treasuryValue < 1 ? ("bad" as const) : ("good" as const),
           wide: true,
           // Runway against the raise, which is the only reference point that
           // makes an absolute treasury figure mean anything.
@@ -168,44 +205,54 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
             </div>
           ) : undefined,
         },
-        holderCount != null && {
+        {
           label: "Holders",
-          value: fmtNum(holderCount),
+          value: holderCount != null ? fmtNum(holderCount) : NA,
+          sub: holderCount == null ? "no holder snapshot yet" : undefined,
         },
-        latest?.liquidity_usd != null && {
+        {
           label: "Liquidity",
-          value: fmtUsd(latest.liquidity_usd),
+          value: latest?.liquidity_usd != null ? fmtUsd(latest.liquidity_usd) : NA,
+          sub: latest?.liquidity_usd == null ? "no live pool data" : undefined,
         },
-        github?.stars != null && {
+        {
           label: "Open Source",
-          value: `★ ${fmtNum(github.stars)}`,
-          sub: `${github.repos ?? "?"} public repos`,
+          value: github?.stars != null ? `★ ${fmtNum(github.stars)}` : NA,
+          sub: github?.stars != null
+            ? `${github.repos ?? "?"} public repos`
+            : p.github ? "repo not indexed yet" : "no public repo on record",
         },
         {
           label: "Governance",
           value: "Futarchy",
           sub: "markets decide, not votes",
         },
-      ].filter(Boolean) as Tile[],
+      ],
     },
   ];
 
-  // The three figures worth restating beside the note, each only when real.
-  const footStats = [
-    p.raise_contributors != null && {
-      label: "Contributors", value: fmtNum(p.raise_contributors),
-      icon: "users" as IconName, color: "var(--accent)",
+  // The three figures worth restating beside the note. All three always show,
+  // on the same rule as the tiles above: the label is the point, and a chip
+  // that disappears takes the reader's reference point with it.
+  const footStats: { label: string; value: React.ReactNode; icon: IconName; color: string }[] = [
+    {
+      label: "Contributors",
+      value: p.raise_contributors != null ? fmtNum(p.raise_contributors) : NA,
+      icon: "users", color: "var(--accent)",
     },
-    oversub != null && {
+    {
       label: "Oversubscribed",
-      value: `${oversub < 10 ? oversub.toFixed(1) : Math.round(oversub)}×`,
-      icon: "pie" as IconName, color: "var(--good)",
+      value: oversub != null
+        ? `${oversub < 10 ? oversub.toFixed(1) : Math.round(oversub)}×`
+        : NA,
+      icon: "pie", color: "var(--good)",
     },
-    p.raise_fdv_usd != null && {
-      label: "Raise Valuation", value: fmtUsd(p.raise_fdv_usd),
-      icon: "shield" as IconName, color: "#9b7ae0",
+    {
+      label: "Raise Valuation",
+      value: p.raise_fdv_usd != null ? fmtUsd(p.raise_fdv_usd) : NA,
+      icon: "shield", color: "#9b7ae0",
     },
-  ].filter(Boolean) as { label: string; value: string; icon: IconName; color: string }[];
+  ];
 
   const toneCls = (t?: Tile["tone"]) =>
     t === "good" ? "text-good" : t === "bad" ? "text-bad" : t === "accent" ? "text-brand" : "";
@@ -236,7 +283,7 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {groups.filter((g) => g.tiles.length).map((g) => (
+        {groups.map((g) => (
           <div key={g.title} className="card overflow-hidden">
             <div className="flex items-center gap-2.5 border-b border-grid px-5 py-3.5">
               <IconBadge name={g.icon} color={g.color} size={28} />
@@ -287,29 +334,28 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
         ))}
       </div>
 
-      {((p.raise_note && !raiseIsPrivate) || footStats.length > 0) && (
-        <div className="mt-4 flex flex-col gap-4 rounded-xl border border-line bg-surface px-5 py-4 lg:flex-row lg:items-center">
-          {p.raise_note && !raiseIsPrivate && (
-            <div className="flex min-w-0 flex-1 gap-3">
-              <span className="mt-0.5 shrink-0 text-muted"><Icon name="info" size={15} /></span>
-              <p className="text-[12px] leading-relaxed text-muted">{p.raise_note}</p>
+      {/* The note only appears where it is not already the group's own note —
+          a private raise states its reason inside The Raise, and repeating it
+          here read as the page saying the same thing twice. */}
+      <div className="mt-4 flex flex-col gap-4 rounded-xl border border-line bg-surface px-5 py-4 lg:flex-row lg:items-center">
+        {p.raise_note && !raiseIsPrivate && (
+          <div className="flex min-w-0 flex-1 gap-3">
+            <span className="mt-0.5 shrink-0 text-muted"><Icon name="info" size={15} /></span>
+            <p className="text-[12px] leading-relaxed text-muted">{p.raise_note}</p>
+          </div>
+        )}
+        <div className="flex shrink-0 flex-wrap gap-x-6 gap-y-3">
+          {footStats.map((s) => (
+            <div key={s.label} className="flex items-center gap-2.5">
+              <IconBadge name={s.icon} color={s.color} size={28} />
+              <div>
+                <div className="num text-[14px] font-semibold leading-none">{s.value}</div>
+                <div className="mt-1 text-[11px] text-muted">{s.label}</div>
+              </div>
             </div>
-          )}
-          {footStats.length > 0 && (
-            <div className="flex shrink-0 flex-wrap gap-x-6 gap-y-3">
-              {footStats.map((s) => (
-                <div key={s.label} className="flex items-center gap-2.5">
-                  <IconBadge name={s.icon} color={s.color} size={28} />
-                  <div>
-                    <div className="num text-[14px] font-semibold leading-none">{s.value}</div>
-                    <div className="mt-1 text-[11px] text-muted">{s.label}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          ))}
         </div>
-      )}
+      </div>
 
       {p.updated_ts && (
         <p className="mt-2.5 flex items-center gap-1.5 text-[11px] text-faint">

@@ -292,7 +292,7 @@ export function TrendSectionHeader({
  * leaves the reader a signal that the line above it is decoration.
  */
 export function TrendCard({
-  color, label, value, deltaPct, deltaLabel, series, title,
+  color, label, value, deltaPct, deltaLabel, series, title, empty,
 }: {
   /** Tints the sparkline stroke. */
   color: string;
@@ -311,6 +311,18 @@ export function TrendCard({
    * the gap reads as a bug unless the card says why.
    */
   title?: string;
+  /**
+   * Why this card has no figure. Set it and the card keeps its label but drops
+   * to a short form — `N/A` and this reason, no delta and no chart.
+   *
+   * The card is a label, a number and a line about that number. With no figure
+   * there is nothing for a chart to be *of*, so drawing the plot area anyway
+   * would give an absent measure the same visual weight as a real one. Short
+   * and labelled says "this project has no such figure"; omitting the card
+   * entirely says nothing at all, and leaves the row a different shape on every
+   * project.
+   */
+  empty?: string;
 }) {
   return (
     <div className="rounded-xl border border-line bg-surface2/30 p-4">
@@ -318,6 +330,13 @@ export function TrendCard({
         {label}
         {title && <span className="text-faint"> ⓘ</span>}
       </span>
+      {empty ? (
+        <>
+          <div className="num mt-2.5 text-[20px] font-semibold leading-none text-faint">N/A</div>
+          <div className="mt-1.5 text-[11px] leading-snug text-muted">{empty}</div>
+        </>
+      ) : (
+      <>
       <div className="num mt-2.5 text-[20px] font-semibold leading-none">{value}</div>
       {deltaPct !== undefined && (
         <div className="mt-1.5 flex items-center gap-1.5 text-[11px]">
@@ -328,6 +347,8 @@ export function TrendCard({
       <div className="mt-3">
         <Sparkline values={series} height={32} color={color} fallback />
       </div>
+      </>
+      )}
     </div>
   );
 }
