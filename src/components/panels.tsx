@@ -1,3 +1,4 @@
+import { Children } from "react";
 import Link from "next/link";
 import { raisePriceOf, tradingStart, type ProjectDetail, type RiskFlag } from "@/lib/queries";
 import type { Insight } from "@/lib/analytics";
@@ -210,9 +211,22 @@ export function CardTag({ children }: { children: React.ReactNode }) {
  * borders would leave a stray edge on whichever cell happens to end a row.
  */
 export function MetricGrid({ children }: { children: React.ReactNode }) {
+  // The 1px gaps are what draw the hairlines — see the note above — so any
+  // grid track left empty by a count that doesn't divide evenly shows that
+  // same divider colour raw, as a stray lighter block. Filler cells paint
+  // those trailing tracks the same `bg-surface` as a real `MetricCell`,
+  // scoped to the breakpoint that actually leaves them empty.
+  const count = Children.count(children);
+  const rem2 = count % 2;
+  const rem4 = count % 4;
   return (
     <div className="grid grid-cols-1 gap-px border-y border-grid bg-grid sm:grid-cols-2 lg:grid-cols-4">
       {children}
+      {rem2 !== 0 && <div aria-hidden className="hidden bg-surface sm:block lg:hidden" />}
+      {rem4 !== 0 &&
+        Array.from({ length: 4 - rem4 }, (_, i) => (
+          <div key={i} aria-hidden className="hidden bg-surface lg:block" />
+        ))}
     </div>
   );
 }
