@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useWallet } from "./wallet";
 import { fmtUsd } from "@/lib/format";
 
@@ -58,13 +59,29 @@ export function PortfolioCard({
         {([
           ["USDC", w.session && w.usdcBalance != null ? fmtUsd(w.usdcBalance) : "—"],
           ["SOL", w.session && w.solBalance != null ? w.solBalance.toFixed(3) : "—"],
-          ["Positions", w.session ? "soon" : "—"],
         ] as const).map(([k, v]) => (
           <div key={k}>
             <div className="text-[10.5px] uppercase tracking-[0.07em] text-faint">{k}</div>
             <div className="num mt-0.5 text-[13.5px] font-bold">{hidden && w.session ? "•••" : v}</div>
           </div>
         ))}
+        {/* Was the literal string "soon", from before the portfolio page
+            existed. It does now, and it counts the positions this card cannot
+            — that needs the tracked mint list and a wallet scan, which is the
+            page's whole job — so this points at it rather than restating a
+            promise that has already been kept. */}
+        <div>
+          <div className="text-[10.5px] uppercase tracking-[0.07em] text-faint">Positions</div>
+          <div className="mt-0.5 text-[13.5px] font-bold">
+            {w.session ? (
+              <Link href="/portfolio" className="text-brand transition-colors hover:text-brandhi">
+                View
+              </Link>
+            ) : (
+              <span className="num">—</span>
+            )}
+          </div>
+        </div>
       </div>
 
       {!w.session && (
