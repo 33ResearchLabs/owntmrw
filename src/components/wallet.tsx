@@ -83,13 +83,22 @@ function providerFor(id: string): InjectedProvider | null {
  *  than whichever wallet happens to sort first. */
 const LAST_WALLET_KEY = "underly.lastWallet";
 
-const RPC = "https://api.mainnet-beta.solana.com";
-const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-/** Original SPL Token, then Token-2022. A mint under either is a real balance. */
-const TOKEN_PROGRAMS = [
-  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
-];
+/**
+ * Balances come from this site's own route rather than straight from a public
+ * Solana endpoint.
+ *
+ * The direct call was `api.mainnet-beta.solana.com`, and it never once
+ * succeeded from a browser: that endpoint answers 403 "Access forbidden" to
+ * any request carrying an `Origin` header. `getBalance` and
+ * `getTokenAccountsByOwner` both failed on every load, which is why the header
+ * chip read "$0" — a failed USDC read rendering as a number — and why the
+ * portfolio scan found nothing to show. The same call from the server, where
+ * there is no `Origin` to reject, works.
+ *
+ * See `app/api/wallet/balances/route.ts` for what the server does and does not
+ * do with the address.
+ */
+const BALANCES_URL = "/api/wallet/balances";
 
 /**
  * Signature bytes for the wire. Base64 rather than the base58 Solana usually
@@ -102,18 +111,53 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(s);
 }
 
-async function rpc<T>(method: string, params: unknown[]): Promise<T | null> {
-  try {
-    const res = await fetch(RPC, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    });
-    const j = await res.json();
-    return (j.result as T) ?? null;
-  } catch {
-    return null;
+interface OwnerBalances {
+  sol: number | null;
+  usdc: number | null;
+  tokens: Record<string, number> | null;
+}
+
+const FAILED: OwnerBalances = { sol: null, usdc: null, tokens: null };
+
+/**
+ * One read of every balance, shared by the three callers below.
+ *
+ * Briefly memoised per address because they fire together — the header wants
+ * SOL and USDC the moment a wallet reconnects, the trade panel asks for one
+ * mint, and the portfolio asks for all of them. Without this that is three
+ * identical scans of the same wallet within a second of each other, against a
+ * free endpoint that rate-limits.
+ */
+const FRESH_MS = 15_000;
+let balCache: { owner: string; at: number; data: OwnerBalances } | null = null;
+let balInflight: { owner: string; promise: Promise<OwnerBalances> } | null = null;
+
+async function fetchBalances(owner: string, force = false): Promise<OwnerBalances> {
+  if (!force && balCache?.owner === owner && Date.now() - balCache.at < FRESH_MS) {
+    return balCache.data;
   }
+  if (balInflight?.owner === owner) return balInflight.promise;
+
+  const promise = (async () => {
+    try {
+      const res = await fetch(`${BALANCES_URL}?address=${encodeURIComponent(owner)}`, {
+        cache: "no-store",
+      });
+      // 401 signed out, 403 a wallet other than the session's. Both are "not
+      // known" rather than "empty", and are reported as such.
+      if (!res.ok) return FAILED;
+      const data = (await res.json()) as OwnerBalances;
+      balCache = { owner, at: Date.now(), data };
+      return data;
+    } catch {
+      return FAILED;
+    } finally {
+      balInflight = null;
+    }
+  })();
+
+  balInflight = { owner, promise };
+  return promise;
 }
 
 export interface WalletState {
@@ -188,19 +232,11 @@ export function WalletProvider({
   }, [activeWallet, installedWallets]);
 
   const refreshBalances = useCallback(async (addr: string) => {
-    const [lamports, usdc] = await Promise.all([
-      rpc<{ value: number }>("getBalance", [addr]),
-      rpc<{ value: { account: { data: { parsed: { info: { tokenAmount: { uiAmount: number } } } } } }[] }>(
-        "getTokenAccountsByOwner",
-        [addr, { mint: USDC_MINT }, { encoding: "jsonParsed" }]
-      ),
-    ]);
-    setSol(lamports ? lamports.value / 1e9 : null);
-    setUsdc(
-      usdc?.value?.length
-        ? usdc.value.reduce((s, a) => s + (a.account.data.parsed.info.tokenAmount.uiAmount ?? 0), 0)
-        : 0
-    );
+    const { sol, usdc } = await fetchBalances(addr);
+    setSol(sol);
+    // Null, not zero, when the read failed. The old code collapsed both to 0,
+    // which is how a wallet that could not be read came to display "$0".
+    setUsdc(usdc);
   }, []);
 
   useEffect(() => {
@@ -338,12 +374,10 @@ export function WalletProvider({
 
   const tokenBalance = useCallback(async (mint: string) => {
     if (!address) return null;
-    const r = await rpc<{ value: { account: { data: { parsed: { info: { tokenAmount: { uiAmount: number } } } } } }[] }>(
-      "getTokenAccountsByOwner",
-      [address, { mint }, { encoding: "jsonParsed" }]
-    );
-    if (!r?.value) return null;
-    return r.value.reduce((s, a) => s + (a.account.data.parsed.info.tokenAmount.uiAmount ?? 0), 0);
+    const { tokens } = await fetchBalances(address);
+    // Read out of the same scan the other two callers use. A mint absent from
+    // a successful scan is a real zero; a failed scan stays null.
+    return tokens ? tokens[mint] ?? 0 : null;
   }, [address]);
 
   /**
@@ -360,25 +394,14 @@ export function WalletProvider({
    */
   const allTokenBalances = useCallback(async () => {
     if (!address) return null;
-    const out = new Map<string, number>();
-    const results = await Promise.all(
-      TOKEN_PROGRAMS.map((programId) =>
-        rpc<{
-          value: { account: { data: { parsed: { info: { mint: string; tokenAmount: { uiAmount: number | null } } } } } }[];
-        }>("getTokenAccountsByOwner", [address, { programId }, { encoding: "jsonParsed" }])
-      )
-    );
-    // A null result is a failed call, not an empty wallet — surface nothing
+    // Forced: the portfolio is the one caller a reader opens expecting a read
+    // to have just happened, and a cached scan from the header's reconnect a
+    // few seconds earlier would quietly be what they get instead.
+    const { tokens } = await fetchBalances(address, true);
+    // A null map is a failed call, not an empty wallet — surface nothing
     // rather than an all-zero portfolio.
-    if (results.every((r) => r == null)) return null;
-    for (const r of results) {
-      for (const a of r?.value ?? []) {
-        const { mint, tokenAmount } = a.account.data.parsed.info;
-        const amt = tokenAmount.uiAmount ?? 0;
-        if (amt > 0) out.set(mint, (out.get(mint) ?? 0) + amt);
-      }
-    }
-    return out;
+    if (!tokens) return null;
+    return new Map(Object.entries(tokens));
   }, [address]);
 
   const value = useMemo(

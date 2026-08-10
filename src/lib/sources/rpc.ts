@@ -51,6 +51,69 @@ export async function usdcBalance(owner: string): Promise<number | null> {
   );
 }
 
+/** Original SPL Token, then Token-2022. A mint under either is a real balance. */
+const TOKEN_PROGRAMS = [
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+];
+
+export interface OwnerBalances {
+  /** SOL, in SOL rather than lamports. Null when the read failed. */
+  sol: number | null;
+  /** USDC. Null when the read failed; 0 is a real, held zero. */
+  usdc: number | null;
+  /** Every non-zero SPL balance as mint → amount. Null when the read failed. */
+  tokens: Record<string, number> | null;
+}
+
+/**
+ * Everything the portfolio needs about one wallet, in one pass.
+ *
+ * Two token-account calls rather than one per mint: asking by `programId`
+ * returns the whole account list at once, so checking a wallet against twenty
+ * mints costs the same as checking it against one. Both programs, because a
+ * mint issued under Token-2022 is invisible to a query for the original and
+ * would read as a zero balance.
+ *
+ * Null and zero are kept apart throughout. A failed call means "not known" and
+ * must not render as an empty wallet — the distinction the rest of this file
+ * already makes for treasuries, applied to the reader's own balances.
+ */
+export async function ownerBalances(owner: string): Promise<OwnerBalances> {
+  type Accounts = {
+    value?: {
+      account: { data: { parsed: { info: { mint: string; tokenAmount: { uiAmount: number | null } } } } };
+    }[];
+  };
+
+  const [lamports, ...programs] = await Promise.all([
+    rpc<{ value: number }>("getBalance", [owner]),
+    ...TOKEN_PROGRAMS.map((programId) =>
+      rpc<Accounts>("getTokenAccountsByOwner", [owner, { programId }, { encoding: "jsonParsed" }])
+    ),
+  ]);
+
+  // Every program call failing is a failed read, not an empty wallet.
+  const tokens = programs.every((r) => r == null)
+    ? null
+    : programs.reduce<Record<string, number>>((acc, r) => {
+        for (const a of r?.value ?? []) {
+          const { mint, tokenAmount } = a.account.data.parsed.info;
+          const amt = tokenAmount.uiAmount ?? 0;
+          if (amt > 0) acc[mint] = (acc[mint] ?? 0) + amt;
+        }
+        return acc;
+      }, {});
+
+  return {
+    sol: lamports ? lamports.value / 1e9 : null,
+    // USDC comes out of the same scan rather than its own call — the account
+    // is already in the list, and a second request would be the same answer.
+    usdc: tokens ? tokens[USDC_MINT] ?? 0 : null,
+    tokens,
+  };
+}
+
 /** Resolve the owner wallet of a token account. */
 export async function tokenAccountOwner(tokenAccount: string): Promise<string | null> {
   const r = await rpc<{ value?: { data?: { parsed?: { info?: { owner?: string } } } } }>(

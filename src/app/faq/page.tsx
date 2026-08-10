@@ -167,7 +167,7 @@ const ITEMS: FaqItem[] = [
   {
     q: "Is a wallet required?",
     a: [
-      "Not for research. Project profiles, the timeline, the signals feed and global search are open to everyone with no account and no wallet. A wallet is needed for the signed-in areas — the screener and your portfolio. Sign-in works by signing a short message that proves you control the wallet; it approves no transaction and cannot move funds. Underly never asks for a private key, seed phrase or recovery phrase, and portfolio balances are read from the chain in your browser rather than stored on a server.",
+      "Not for research. Project profiles, the timeline, the signals feed and global search are open to everyone with no account and no wallet. A wallet is needed for the signed-in areas — the screener and your portfolio. Sign-in works by signing a short message that proves you control the wallet; it approves no transaction and cannot move funds. Underly never asks for a private key, seed phrase or recovery phrase, and portfolio balances are read live from the chain each time you open the page rather than stored on a server.",
     ],
   },
   {

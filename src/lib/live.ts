@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { pairsForMints } from "./sources/dexscreener";
-import { jupTokens, jupVolume } from "./sources/jupiter";
+import { jupPrices, jupTokens, jupVolume, SOL_MINT } from "./sources/jupiter";
 import { treasuryAum } from "./sources/metadao";
 import { capFromSupply, marketCap } from "./quote";
 
@@ -195,6 +195,56 @@ export async function liveTreasury(): Promise<Map<string, number>> {
 
   triggerTreasuryRefresh();
   return treasuryCached.map;
+}
+
+/**
+ * SOL in USD, for the one balance the portfolio holds that is not a tracked
+ * project token.
+ *
+ * Its own cache rather than a row in `liveQuotes`: that map is keyed by the
+ * mints of tracked projects and every consumer iterates it as "the projects",
+ * so adding SOL there would put a non-project into every screener, explorer
+ * and ticker that walks it. A separate scalar keeps the blast radius at zero.
+ *
+ * Null, never a guess, when the venue is unreachable — the portfolio drops SOL
+ * out of its total and says so rather than valuing it at a stale or invented
+ * price. Same reasoning as `priceIsReliable`: an absent number beats a wrong
+ * one, and a net worth is exactly where a wrong one does the most damage.
+ */
+const SOL_FRESH_MS = 60_000;
+let solCached: { at: number; usd: number | null } | null = null;
+let solInflight: Promise<number | null> | null = null;
+
+function triggerSolRefresh(): Promise<number | null> {
+  if (solInflight) return solInflight;
+
+  solInflight = jupPrices([SOL_MINT])
+    .then((p) => {
+      const usd = p[SOL_MINT];
+      // Hold the last good price when the call answers without this mint,
+      // rather than blanking a figure that was fine a minute ago.
+      const next = Number.isFinite(usd) && usd > 0 ? usd : solCached?.usd ?? null;
+      solCached = { at: Date.now(), usd: next };
+      return next;
+    })
+    .catch(() => {
+      solCached = { at: Date.now(), usd: solCached?.usd ?? null };
+      return solCached.usd;
+    })
+    .finally(() => { solInflight = null; });
+
+  return solInflight;
+}
+
+/** Stale-while-revalidate, same reasoning as `liveQuotes` above. */
+export async function liveSolPrice(): Promise<number | null> {
+  const now = Date.now();
+  const ttl = solCached?.usd != null ? SOL_FRESH_MS : BACKOFF_MS;
+  if (solCached && now - solCached.at < ttl) return solCached.usd;
+  if (!solCached) return triggerSolRefresh();
+
+  triggerSolRefresh();
+  return solCached.usd;
 }
 
 /** When the served quotes were fetched, for the freshness indicator. */
