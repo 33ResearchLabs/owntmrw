@@ -21,10 +21,10 @@ export const metadata: Metadata = {
  * lines are questions, which are paragraphs and which are list items — that is,
  * how the text is laid out, not what it says.
  *
- * The bracketed address in the last entry is the document's own, reproduced as
- * written. "Privacy Policy" and "Terms of Use" in the legal entry are left as
- * plain text rather than linked, because turning copy into a link is a change
- * to the copy.
+ * The one departure is the emphasis markers around the dimension names in
+ * "What are the different intelligence dimensions?": the accordion renders its
+ * strings as text, so a literal `**Treasury**` would print its asterisks. The
+ * words are unchanged.
  *
  * Any change to these answers should come from their owner as new copy, not be
  * made in place here.
@@ -37,302 +37,168 @@ const ITEMS: FaqItem[] = [
   {
     q: "What is Underly?",
     a: [
-      "Underly is a platform built to help you discover, research, and trade the next generation of technology-driven assets.",
-      "We bring deep company and token research, market data, insights, and trading into one place.",
+      "Underly is an intelligence terminal for projects launched through MetaDAO and Futard. Instead of another price explorer, it maintains one permanent research profile per project — covering the raise, market, holders, treasury, governance, development, community and news — assembled automatically from public sources. The goal is simple: understand what a project actually is, not just what its token did today.",
     ],
   },
   {
-    q: "What does Underly help me discover?",
+    q: "What does Underly provide?",
     a: [
-      "Underly focuses on emerging companies, technologies, protocols, and digital assets that could shape the future.",
-      "Our goal is to help you understand what is being built, why it matters, and how the market is valuing it.",
-    ],
-  },
-  {
-    q: "What can I do on Underly?",
-    a: [
-      "With Underly, you can:",
+      "Underly brings institutional-grade research into a single workspace. For each tracked project you get:",
       [
-        "Discover emerging technology companies and projects",
-        "Research their technology and ecosystem",
-        "Explore token fundamentals and tokenomics",
-        "Analyze market data",
-        "Understand project activity and development",
-        "Compare opportunities",
-        "Connect your wallet",
-        "Buy and sell supported tokens",
+        "A full intelligence profile with Overview, Holders, Smart Money, Treasury, Development, Governance, Timeline, News and Research tabs",
+        "A composite Project Health Score across seven measurable dimensions",
+        "Price history charts with event markers (raise closed, launch, proposals, releases)",
+        "A screener for sorting and filtering the entire ecosystem",
+        "A chronological ecosystem-wide event timeline",
+        "An automatically generated signals feed",
+        "Global search across projects, tokens, wallets and proposals",
       ],
     ],
   },
   {
-    q: "Do I need to create an account?",
+    q: "What can users analyze?",
     a: [
-      "No.",
-      "Underly is designed around wallet-based access. You can explore and research the platform without creating a traditional account.",
-      "Connect your wallet when you want to access supported trading functionality.",
-    ],
-  },
-  {
-    q: "Why do I need to connect my wallet?",
-    a: [
-      "Your wallet allows Underly to interact with supported blockchain functionality and lets you approve transactions.",
-      "Your wallet remains under your control at all times.",
-      "Underly never asks for your private key, seed phrase, or recovery phrase.",
-    ],
-  },
-  {
-    q: "Can Underly access my funds?",
-    a: [
-      "No.",
-      "Underly does not have access to your private keys or recovery phrase.",
-      "Transactions require approval through your connected wallet.",
-      "Always review the transaction details in your wallet before signing.",
-    ],
-  },
-  {
-    q: "What assets can I trade?",
-    a: ["Underly focuses on technology-driven digital assets."],
-  },
-  {
-    q: "Does Underly list every token?",
-    a: [
-      "No.",
-      "Underly is designed to focus on selected technology-driven assets rather than attempting to list every token available in the market.",
-      "Assets may be evaluated based on factors such as technology, ecosystem, activity, liquidity, market data, security considerations, and availability of reliable information.",
-    ],
-  },
-  {
-    q: "Does being listed on Underly mean you recommend the asset?",
-    a: [
-      "No.",
-      "A listing does not represent an endorsement, recommendation, or guarantee from Underly.",
-      "Underly provides information and research to help users make their own decisions.",
-    ],
-  },
-  {
-    q: "What information does Underly provide?",
-    a: [
-      "Depending on the asset, Underly may provide:",
+      "You can analyze every tracked project across:",
       [
-        "Company or project overview",
-        "Technology overview",
-        "Product information",
-        "Token utility",
-        "Tokenomics",
-        "Supply information",
-        "Market capitalization",
-        "Trading volume",
-        "Price history",
-        "Liquidity",
-        "Ecosystem information",
-        "Development activity",
-        "Market insights",
-        "Risk information",
-        "Other relevant research",
+        "Fundraising and raise performance (committed vs. accepted, raise price, ROI since raise)",
+        "Treasury health, balance history and runway against the amount raised",
+        "Holder counts, distribution and top-wallet concentration",
+        "Liquidity depth, market cap, FDV, volume and price history",
+        "Developer activity across public repositories",
+        "Governance activity",
+        "Contract risk checks and exchange listings",
+        "News, announcements and repository releases",
       ],
     ],
   },
   {
-    q: "What makes Underly different?",
+    q: "How does the platform work?",
     a: [
-      "Most platforms focus primarily on price and trading.",
-      "Underly is built around the idea that understanding the technology and company behind an asset matters just as much as understanding its price.",
-      "We want to make it easier to go from:",
-      "Discover → Research → Understand → Trade",
+      "An ingestion pipeline pulls data from public sources on a schedule and writes it into a permanent local archive. Each run appends a new snapshot — nothing is overwritten or deleted — so holder counts, treasury balances, prices and development activity build up into real history over time. The site then reads that archive and presents it as profiles, scores, charts and signals. Live market prices are fetched at request time and merged over the stored snapshot, so quotes are current even between ingest runs.",
     ],
   },
   {
-    q: "Can I buy and sell assets on Underly?",
+    q: "Where does the data come from?",
     a: [
-      "Yes, where trading is available for a supported asset.",
-      "Trading may be facilitated through blockchain networks, decentralized protocols, liquidity providers, exchanges, aggregators, or other third-party infrastructure.",
-    ],
-  },
-  {
-    q: "Is Underly a centralized exchange?",
-    a: [
-      "Underly is designed around wallet-based, non-custodial interaction.",
-      "Depending on the specific functionality, transactions may interact directly with blockchain protocols and third-party infrastructure rather than requiring Underly to custody your assets.",
-    ],
-  },
-  {
-    q: "Does Underly hold my tokens?",
-    a: [
-      "Underly is designed so that your assets remain under your wallet's control.",
-      "When you authorize a transaction, the relevant blockchain protocol or smart contract executes the transaction according to its rules.",
-    ],
-  },
-  {
-    q: "Are trades guaranteed to execute?",
-    a: [
-      "No.",
-      "Transactions can fail or execute differently from the expected price because of:",
+      "Public sources only, with no proprietary or paywalled feeds:",
       [
-        "Market movements",
-        "Liquidity",
-        "Slippage",
-        "Blockchain congestion",
-        "Network conditions",
-        "Smart-contract conditions",
-        "Third-party protocol issues",
+        "MetaDAO launchpad and on-chain records — project registry, raises, DAOs",
+        "Solana RPC — token supply, holder accounts, wallet resolution",
+        "DexScreener and Jupiter — live price, market cap, FDV, liquidity, volume",
+        "GeckoTerminal — daily OHLCV price history and holder counts",
+        "GitHub — repositories, commits, contributors, releases, issues, languages",
+        "CoinGecko — exchange listings and token metadata",
+        "RugCheck — automated contract risk checks",
+        "Publisher RSS feeds — news coverage",
       ],
-      "Always review the transaction before approving it.",
+      "Every metric traces back to a public source that can be independently verified.",
     ],
   },
   {
-    q: "What is slippage?",
+    q: "How often is the data updated?",
     a: [
-      "Slippage is the difference between the expected execution price and the actual execution price of a trade.",
-      "It can occur when market prices move or when there is insufficient liquidity for your transaction.",
+      "Market data — price, market cap, liquidity, volume and 24-hour change — is fetched live at request time, so what you see is current to within seconds. Archival data such as holder snapshots, treasury balances, development activity, governance and news refreshes each time the ingestion pipeline runs, and every project page carries a “last updated” stamp so you always know how fresh the underlying reading is.",
     ],
   },
   {
-    q: "What fees do I pay?",
+    q: "What is the Project Health Score?",
     a: [
-      "Depending on the transaction, fees may include:",
+      "The Project Health Score is a single 0–100 composite that summarises how a project is performing across the dimensions public data can actually verify. It is shown as a dial with a plain-language verdict — Strong, Moderate, Needs Attention or Critical — alongside a breakdown of every dimension that produced it. It is a research summary, not a rating, recommendation or price target.",
+    ],
+  },
+  {
+    q: "How is the Health Score calculated?",
+    a: [
+      "Each of seven dimensions is scored 0–100 from measured data, and the overall score is the average of the dimensions that could be measured. Two rules keep it honest:",
       [
-        "Blockchain network fees",
-        "Protocol fees",
-        "Liquidity or exchange fees",
-        "Aggregator fees",
-        "Any applicable Underly fees",
+        "A dimension with no data available is excluded from the average rather than scored as zero — an unmeasured dimension is not a failing one.",
+        "Every project page shows how many of the seven dimensions were measurable, and each dimension displays the exact figure behind its score (for example “top 10 hold 61.4% of supply” or “last push 3d ago”).",
       ],
-      "Review the transaction details before confirming your trade.",
+      "There is no black box: the number is always reproducible from the data shown beside it.",
     ],
   },
   {
-    q: "Does Underly provide investment advice?",
+    q: "What are the different intelligence dimensions?",
     a: [
-      "No.",
-      "Underly provides research, information, analytics, and market data.",
-      "Nothing on Underly should be considered financial, investment, legal, or tax advice.",
-      "You are responsible for your own decisions.",
-    ],
-  },
-  {
-    q: "Can I lose money?",
-    a: [
-      "Yes.",
-      "Digital assets can be highly volatile and may lose some or all of their value.",
-      "Past performance does not guarantee future results.",
-      "Only trade with funds you can afford to lose.",
-    ],
-  },
-  {
-    q: "Are Underly's insights or signals guaranteed?",
-    a: [
-      "No.",
-      "Research, analytics, rankings, signals, and other insights are informational tools.",
-      "Markets can change rapidly, and no research model or signal can guarantee a particular outcome.",
-    ],
-  },
-  {
-    q: "How does Underly select assets?",
-    a: [
-      "Underly may consider multiple factors, including:",
+      "The Health Score is built from seven dimensions:",
       [
-        "Technology",
-        "Product",
-        "Team and development activity",
-        "Ecosystem",
-        "Adoption",
-        "Tokenomics",
-        "Liquidity",
-        "Market activity",
-        "Security considerations",
-        "Available public information",
+        "Treasury — how much of the raised capital is still held on-chain",
+        "Holder Growth — the trend in holder count across tracked snapshots",
+        "Distribution — how concentrated ownership is, based on top-10 supply share",
+        "Liquidity — pool depth relative to market cap",
+        "Developer Activity — recency of public code activity",
+        "Governance — indexed proposal throughput",
+        "Momentum — 30-day price trend blended with volume-to-liquidity turnover",
       ],
-      "The methodology may evolve as Underly develops.",
+      "Project pages go further, adding contract risk, supply allocation, exchange listings, smart-money flow, news and an AI-assembled research memo.",
     ],
   },
   {
-    q: "Can an asset be removed from Underly?",
+    q: "Can users compare projects?",
     a: [
-      "Yes.",
-      "Underly may add, remove, suspend, or restrict an asset at any time.",
-      "Reasons may include changes in liquidity, security concerns, technical issues, project developments, regulatory considerations, or changes to our listing criteria.",
+      "Yes. The screener puts every tracked project into one sortable, filterable table — price, 24-hour change, market cap, liquidity, 24-hour volume, amount raised, raise price, ROI vs. raise, ATH return, distance from ATH, treasury, holder count, GitHub stars and last commit. Health Scores are calculated for every project on the same basis, so they can be ranked directly, and each project page includes a “Performance Since Raise” view tracking ROI, treasury, holders and market cap from day one.",
     ],
   },
   {
-    q: "What happens if a transaction fails?",
+    q: "What information is available about holders and treasury?",
     a: [
-      "A blockchain transaction may fail because of network congestion, insufficient fees, smart-contract conditions, liquidity limitations, or other technical reasons.",
-      "Depending on the blockchain, network fees may still be charged for a failed transaction.",
+      "The Holders tab shows total holder count, how that count has moved over the tracked window, concentration figures such as the share of supply held by the top wallets, the largest individual wallets with labels where they can be identified, and how supply is allocated between treasury, pools and circulation. Wallets link through to their own pages.",
+      "The Treasury tab shows the on-chain vault balance and pool depth, the treasury measured against both the amount raised and the current market cap, and a full history of recorded balance changes so runway can be tracked over time.",
     ],
   },
   {
-    q: "Can Underly reverse a blockchain transaction?",
+    q: "How does development activity tracking work?",
     a: [
-      "Generally, no.",
-      "Confirmed blockchain transactions are typically irreversible.",
-      "Always verify the asset, amount, network, and destination address before approving a transaction.",
+      "Where a project has a public GitHub organisation, Underly reads it directly and reports commits over the last 90 days, unique contributors, tagged releases, stars, forks, open and closed issues, pull requests, active repositories, last commit time, language breakdown and week-by-week code frequency. These roll up into a Developer Score covering recency, commit volume, contributors, active repositories and issue hygiene. Where no public repository is linked, the platform says so plainly rather than showing an empty or invented figure.",
     ],
   },
   {
-    q: "What if I send assets to the wrong address?",
+    q: "What is the role of AI insights?",
     a: [
-      "Blockchain transactions are generally irreversible.",
-      "Underly may not be able to recover assets sent to an incorrect or unsupported address.",
-      "Always verify the destination address before confirming a transaction.",
+      "AI insights turn measured data into readable analysis. The Research tab assembles a memo for each project — summary, bull case, bear case, strengths, weaknesses, risks, recent developments, momentum and outlook — where every point cites the number behind it. Points with no supporting data are omitted rather than filled with generic commentary. Alongside this, the Signals feed automatically surfaces observations such as holder shifts, volume changes, concentration moves and development spikes. Insights are informational and never predictive.",
     ],
   },
   {
-    q: "Is my wallet information stored by Underly?",
+    q: "Can users track or save projects?",
     a: [
-      "Underly does not require a traditional user account for its basic experience.",
-      "When you connect a wallet, your public wallet address and blockchain activity may be visible or processed as necessary to provide Platform functionality.",
-      "Blockchain information is generally public by nature.",
+      "Yes. Every project has a permanent profile at a stable URL, so research is always where you left it and history accumulates rather than resetting. The Timeline feed follows ecosystem-wide events chronologically, the Signals feed surfaces new observations as they are generated, and connecting a wallet gives you a Portfolio view of your holdings across every token the terminal tracks.",
     ],
   },
   {
-    q: "Is Underly available in every country?",
+    q: "Is a wallet required?",
     a: [
-      "Not necessarily.",
-      "Digital asset laws and regulations differ between jurisdictions.",
-      "Underly may restrict access to certain countries, users, assets, wallets, or transactions where required by law or for operational or compliance reasons.",
+      "Not for research. Project profiles, the timeline, the signals feed and global search are open to everyone with no account and no wallet. A wallet is needed for the signed-in areas — the screener and your portfolio. Sign-in works by signing a short message that proves you control the wallet; it approves no transaction and cannot move funds. Underly never asks for a private key, seed phrase or recovery phrase, and portfolio balances are read from the chain in your browser rather than stored on a server.",
     ],
   },
   {
-    q: "How can I research a company or token?",
+    q: "Can users trade through Underly?",
     a: [
-      "Start with the asset's Underly research page.",
-      "Review the technology, product, ecosystem, tokenomics, market data, development activity, and risks.",
-      "We also recommend reviewing primary sources such as the project's official documentation and technical materials before making a trading decision.",
+      "Underly is research-first and fully non-custodial. The trade panel lets you size an order against live market data and shows the quantities, slippage setting and the share of pool depth an order of that size would consume — real risk context before you act. Where trading functionality is available, it is wallet-based: your assets stay under your own wallet's control and Underly never takes custody of funds or holds tokens on your behalf.",
     ],
   },
   {
-    q: "How does Underly protect users?",
+    q: "Is Underly an investment advisor?",
     a: [
-      "Underly is designed around wallet-based access and does not require users to provide private keys or recovery phrases.",
-      "However, no blockchain application or digital asset platform can eliminate all risks.",
-      "Always verify the Underly website and transaction details before connecting or signing.",
+      "No. Underly provides research, analytics and market data. Nothing on the platform is financial, investment, legal or tax advice, and no score, signal or memo is a recommendation to buy or sell. Digital assets are volatile and can lose value. All decisions, and their outcomes, are your own.",
     ],
   },
   {
-    q: "Does Underly guarantee the future success of a company or token?",
+    q: "How does Underly handle data transparency?",
     a: [
-      "No.",
-      "Underly's purpose is to help you discover and understand what is being built, not to predict which company or asset will succeed.",
-      "The future remains uncertain.",
-    ],
-  },
-  {
-    q: "Where can I read the legal information?",
-    a: [
-      "You can review:",
+      "Transparency is enforced in the product, not just promised:",
       [
-        "Privacy Policy — how Underly handles information.",
-        "Terms of Use — the rules and conditions governing your use of Underly.",
+        "Market cap is calculated from circulating supply and FDV from total supply, rather than repeating a venue's figure that conflates the two.",
+        "Raise figures are read from on-chain launch records with a citation per project, and the amount committed is always distinguished from the amount actually accepted.",
+        "Return metrics are withheld when a token's liquidity is too thin for its quoted price to be meaningful, and the page explains why.",
+        "Unmeasurable dimensions are excluded from the Health Score rather than counted as zero.",
+        "Where data is genuinely unavailable, the page says so — no dimension is ever filled with an estimate presented as fact.",
       ],
     ],
   },
   {
-    q: "Still have questions?",
+    q: "Who is Underly designed for?",
     a: [
-      "We're building Underly for people who want to understand what's next before it's obvious.",
-      "For support or general questions:",
-      "[support@underly.com]",
-      "Discover. Trade. Own tomorrow.",
+      "Underly is built for anyone who needs to understand a project rather than just watch its price: researchers and analysts, allocators evaluating launches, founders and teams benchmarking themselves against the ecosystem, and participants tracking MetaDAO and Futard projects from raise through to today. If you want verifiable, source-linked intelligence in one place instead of a dozen tabs, the terminal is built for you.",
     ],
   },
 ];
