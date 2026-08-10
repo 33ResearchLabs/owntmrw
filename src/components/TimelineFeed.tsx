@@ -48,7 +48,10 @@ const NEUTRAL = { color: "var(--ink-muted)", icon: "info" as IconName };
 function styleOf(type: string) {
   return TYPE_STYLE[type] ?? {
     ...NEUTRAL,
-    label: type.replace(/_/g, " "),
+    // Title-cased, so an unmapped type reads like the mapped ones beside it:
+    // `github_commit` becomes "Github Commit", not "github commit" sitting
+    // lowercase in a row of capitalised chips.
+    label: type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
   };
 }
 
