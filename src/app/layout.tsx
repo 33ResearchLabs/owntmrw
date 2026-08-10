@@ -128,10 +128,48 @@ export default async function RootLayout({
               viewport edge past 1660px while the header and `<main>` above it
               stayed capped and centred on the same value — the one wrapper
               that had drifted from the invariant the rest of the page keeps. */}
-          <div className="mx-auto flex max-w-[1660px] flex-col justify-between gap-3 px-6 text-[11.5px] leading-relaxed text-faint sm:flex-row sm:items-start sm:gap-10 md:px-12">
+          {/* Below `sm` the three blocks stack, so they are centred on the cross
+              axis and their text with them — a left-aligned stack leaves the
+              icon row hanging off one edge of the column. `sm:` restores the
+              row exactly as it was: start-aligned, left-aligned, gap-10.
+              `flex-wrap` is inert until the row genuinely cannot fit, at which
+              point a block drops to a second line instead of overflowing —
+              both navs are `shrink-0`, so without it the band could scroll
+              sideways on a narrow tablet. */}
+          <div className="mx-auto flex max-w-[1660px] flex-col flex-wrap items-center justify-between gap-3 px-6 text-center text-[11.5px] leading-relaxed text-faint sm:flex-row sm:items-start sm:gap-10 sm:text-left md:px-12">
             <div className="min-w-0">
               © 2026 Underly. All rights reserved.
             </div>
+
+            {/* Social. Sits between the two existing blocks, so `justify-between`
+                centres it without any of the three needing a width. The marks are
+                16px inside the band's own 11.5px/relaxed line box, which is taller
+                than that — the footer keeps its height. */}
+            <nav aria-label="Social" className="flex shrink-0 items-center gap-4">
+              <a
+                href="https://x.com/underlyxyz"
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label="Underly on X"
+                className="transition-colors duration-150 hover:text-ink2"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-4 w-4">
+                  <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" />
+                </svg>
+              </a>
+
+              <a
+                href="https://t.me/+fkQU_C4N4OliOGQ1"
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label="Underly on Telegram"
+                className="transition-colors duration-150 hover:text-ink2"
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-4 w-4">
+                  <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212-.07-.062-.174-.041-.249-.024-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+                </svg>
+              </a>
+            </nav>
 
             <nav aria-label="Legal" className="flex shrink-0 items-center gap-4">
               <Link
