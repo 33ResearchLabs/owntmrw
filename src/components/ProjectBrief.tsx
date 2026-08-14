@@ -47,6 +47,7 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
     github,
     ath,
     athTs,
+    governance,
   } = d;
 
   const holders = holderHistory.filter((h) => h.holder_count != null);
@@ -331,8 +332,8 @@ export function ProjectBrief({ d }: { d: ProjectDetail }) {
         },
         {
           label: "Governance",
-          value: p.governance_type ?? NA,
-          sub: p.governance_description ?? undefined,
+          value: governance?.protocol ?? governance?.type ?? NA,
+          sub: governance?.voting_model ?? undefined,
         },
       ],
     },
