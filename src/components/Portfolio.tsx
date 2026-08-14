@@ -25,6 +25,7 @@ export interface PortfolioToken {
   change_24h: number | null;
   liquidity_usd: number | null;
   raise_price: number | null;
+  usdcBalance: number | null;
   roi_since_raise: number | null;
   ath: number | null;
   from_ath: number | null;
