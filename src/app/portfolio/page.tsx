@@ -18,7 +18,8 @@ export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Portfolio — Underly",
-  description: "What your wallet holds across every project tracked on Underly.",
+  description:
+    "What your wallet holds across every project tracked on Underly.",
 };
 
 /** Days of daily closes shipped per token — the longest range the chart offers. */
@@ -60,11 +61,9 @@ export default async function PortfolioPage() {
       roi_since_raise: r.roi_since_raise,
       ath: r.ath,
       from_ath: r.from_ath,
-      // The pool behind this row cannot defend its own price, so every return
-      // derived from it is arithmetic rather than a measurement. Carried
-      // through so the table can say so instead of printing the number.
       returns_thin: r.returns_thin,
       closes: closes.get(r.slug) ?? [],
+      usdcBalance: 0,
     }));
 
   /*
@@ -82,7 +81,8 @@ export default async function PortfolioPage() {
    */
   const byStory = new Map<string, PortfolioFeedItem>();
   for (const e of globalTimeline(160)) {
-    const key = e.type === "news" ? `news|${e.title}` : `${e.type}|${e.slug}|${e.ts}`;
+    const key =
+      e.type === "news" ? `news|${e.title}` : `${e.type}|${e.slug}|${e.ts}`;
     const seen = byStory.get(key);
     if (seen) {
       if (!seen.slugs.includes(e.slug)) {
@@ -92,12 +92,19 @@ export default async function PortfolioPage() {
       continue;
     }
     byStory.set(key, {
-      ts: e.ts, type: e.type, title: e.title, slugs: [e.slug], names: [e.name],
+      ts: e.ts,
+      type: e.type,
+      title: e.title,
+      slugs: [e.slug],
+      names: [e.name],
     });
   }
 
   const signals: PortfolioSignal[] = allObservations(120)
-    .filter((o): o is typeof o & { slug: string; name: string } => !!o.slug && !!o.name)
+    .filter(
+      (o): o is typeof o & { slug: string; name: string } =>
+        !!o.slug && !!o.name,
+    )
     .map((o) => ({ slug: o.slug, name: o.name, text: o.text }));
 
   return (
@@ -105,7 +112,8 @@ export default async function PortfolioPage() {
       <div>
         <h1 className="text-[20px] font-semibold tracking-tight">Portfolio</h1>
         <p className="mt-1 text-[12.5px] text-muted">
-          What your wallet holds across the {tokens.length} projects tracked here.
+          What your wallet holds across the {tokens.length} projects tracked
+          here.
         </p>
       </div>
       <Portfolio

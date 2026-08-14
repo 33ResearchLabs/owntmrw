@@ -87,7 +87,7 @@ export async function buildInvestmentTransaction(
 
   const amountRaw = BigInt(Math.round(input.amountUsdt * 10 ** decimals));
 
-  if (amountRaw <= 0n) {
+  if (amountRaw <= 0) {
     throw new Error("Investment amount is too small.");
   }
 

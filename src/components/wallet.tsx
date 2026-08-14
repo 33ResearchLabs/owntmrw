@@ -394,6 +394,12 @@ export interface WalletState {
   usdtBalance: number | null;
 
   /**
+   * Alias for stable USD balance used by portfolio UI.
+   * USDT is the app's stablecoin balance for this wallet.
+   */
+  usdcBalance: number | null;
+
+  /**
    * Authenticated session address.
    */
   session: string | null;
@@ -1049,6 +1055,8 @@ export function WalletProvider({
 
       usdtBalance,
 
+      usdcBalance: usdtBalance,
+
       session,
 
       signingIn,
@@ -1069,9 +1077,6 @@ export function WalletProvider({
 
       signAndSendTransaction,
 
-      /**
-       * Explicitly expose Devnet.
-       */
       network: SOLANA_NETWORK,
 
       rpcUrl: SOLANA_RPC_URL,
