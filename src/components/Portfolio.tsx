@@ -98,7 +98,7 @@ export function Portfolio({
 
         if (cancelled) return;
 
-        if (!balances) {
+        if (address && !balances) {
           setScan({
             owner: address,
             holdings: null,
@@ -119,7 +119,7 @@ export function Portfolio({
          */
         const found = tokens
           .map((t) => {
-            const amount = balances.get(t.mint) ?? 0;
+            const amount = (balances && balances.get(t.mint)) ?? 0;
 
             return {
               ...t,
@@ -129,19 +129,22 @@ export function Portfolio({
           })
           .filter((h) => h.amount > 0)
           .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-
-        setScan({
-          owner: address,
-          holdings: found,
-        });
+        if (address) {
+          setScan({
+            owner: address,
+            holdings: found,
+          });
+        }
       } catch (error) {
         console.error("Portfolio balance refresh failed:", error);
 
         if (!cancelled) {
-          setScan({
-            owner: address,
-            holdings: null,
-          });
+          if (address) {
+            setScan({
+              owner: address,
+              holdings: null,
+            });
+          }
         }
       }
     }
