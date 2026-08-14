@@ -1,0 +1,1 @@
+export { detectGovernance } from "./detector";

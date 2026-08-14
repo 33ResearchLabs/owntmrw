@@ -13,6 +13,9 @@
     "ingest": "tsx scripts/ingest.ts"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
+    "@solana/spl-token": "^0.4.15",
+    "@solana/web3.js": "^1.98.4",
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^13.0.2",
     "bs58": "^6.0.0",

@@ -1,123 +1,432 @@
 import { postJSON, sleep } from "./http";
 
-const RPC = process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com";
+/**
+ * ============================================================
+ * SOLANA DEVNET
+ * ============================================================
+ */
 
-interface RpcResp<T> { result?: T; error?: { message: string } }
-
-async function rpc<T>(method: string, params: unknown[]): Promise<T | null> {
-  const res = await postJSON<RpcResp<T>>(RPC, { jsonrpc: "2.0", id: 1, method, params });
-  await sleep(400); // be polite to the public endpoint
-  return res?.result ?? null;
-}
-
-export async function tokenSupply(mint: string): Promise<number | null> {
-  const r = await rpc<{ value?: { uiAmount?: number } }>("getTokenSupply", [mint]);
-  return r?.value?.uiAmount ?? null;
-}
-
-export interface LargestAccount { address: string; uiAmount: number }
-
-export async function largestTokenAccounts(mint: string): Promise<LargestAccount[]> {
-  const r = await rpc<{ value?: { address: string; uiAmount: number | null }[] }>(
-    "getTokenLargestAccounts", [mint]
-  );
-  return (r?.value ?? []).map((v) => ({ address: v.address, uiAmount: v.uiAmount ?? 0 }));
-}
-
-export const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const RPC = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
 
 /**
- * USDC held by a DAO vault, read straight from its token accounts.
+ * Devnet USDT mint.
  *
- * MetaDAO's tickers feed carries `treasury_usdc_aum`, but only for the tokens
- * it lists — Ranger and ZKLSOL are absent from it, so their treasuries showed
- * as unknown when both are verifiably empty. Reading the vault directly
- * settles it, and agrees with the feed to the cent where both exist (ORDR:
- * $105,000 either way), so the two are interchangeable rather than rival
- * figures.
+ * .env.local:
  *
- * Returns null only when the vault cannot be read. A wallet holding no USDC
- * has no token account at all, which is a real zero and reported as one —
- * the same distinction the tickers feed needs for FAF.
+ * SOLANA_USDT_MINT=YOUR_DEVNET_USDT_MINT
  */
-export async function usdcBalance(owner: string): Promise<number | null> {
-  const r = await rpc<{ value?: { account: { data: { parsed: { info: { tokenAmount: { uiAmount: number | null } } } } } }[] }>(
-    "getTokenAccountsByOwner", [owner, { mint: USDC_MINT }, { encoding: "jsonParsed" }]
-  );
-  if (!r?.value) return null;
-  return r.value.reduce(
-    (sum, a) => sum + (a.account.data.parsed.info.tokenAmount.uiAmount ?? 0),
-    0
-  );
+export const USDT_MINT = process.env.SOLANA_USDT_MINT || "";
+
+console.log("[SOLANA] RPC:", RPC);
+console.log("[SOLANA] USDT MINT:", USDT_MINT || "NOT SET");
+
+/**
+ * ============================================================
+ * RPC TYPES
+ * ============================================================
+ */
+
+interface RpcResp<T> {
+  jsonrpc?: string;
+  id?: number | string;
+
+  result?: T;
+
+  error?: {
+    code?: number;
+    message: string;
+    data?: unknown;
+  };
 }
 
-/** Original SPL Token, then Token-2022. A mint under either is a real balance. */
+/**
+ * ============================================================
+ * GENERIC RPC
+ * ============================================================
+ */
+
+async function rpc<T>(method: string, params: unknown[]): Promise<T | null> {
+  try {
+    console.log("[SOLANA RPC REQUEST]", {
+      method,
+      params,
+    });
+
+    const response = await postJSON<RpcResp<T>>(RPC, {
+      jsonrpc: "2.0",
+      id: 1,
+      method,
+      params,
+    });
+
+    console.log("[SOLANA RPC RESPONSE]", {
+      method,
+      response,
+    });
+
+    if (!response) {
+      console.error("[SOLANA RPC] Empty response");
+
+      return null;
+    }
+
+    if (response.error) {
+      console.error("[SOLANA RPC] Error:", response.error);
+
+      return null;
+    }
+
+    await sleep(400);
+
+    return response.result ?? null;
+  } catch (error) {
+    console.error("[SOLANA RPC] Request failed:", {
+      method,
+      error,
+    });
+
+    return null;
+  }
+}
+
+/**
+ * ============================================================
+ * TOKEN SUPPLY
+ * ============================================================
+ */
+
+export async function tokenSupply(mint: string): Promise<number | null> {
+  const response = await rpc<{
+    value?: {
+      uiAmount?: number | null;
+    };
+  }>("getTokenSupply", [mint]);
+
+  return response?.value?.uiAmount ?? null;
+}
+
+/**
+ * ============================================================
+ * USDC BALANCE
+ * ============================================================
+ *
+ * Reads the USDC balance of a wallet.
+ *
+ * USDC mint:
+ * Mainnet:
+ *   EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+ *
+ * Your existing app uses SOLANA_RPC_URL, so this works with
+ * the configured RPC endpoint.
+ */
+
+const USDC_MINT =
+  process.env.SOLANA_USDC_MINT ||
+  "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+export async function usdcBalance(owner: string): Promise<number | null> {
+  type TokenAccount = {
+    account: {
+      data: {
+        parsed: {
+          info: {
+            mint: string;
+            tokenAmount: {
+              uiAmount: number | null;
+            };
+          };
+        };
+      };
+    };
+  };
+
+  type Response = {
+    value?: TokenAccount[];
+  };
+
+  const response = await rpc<Response>("getTokenAccountsByOwner", [
+    owner,
+    {
+      mint: USDC_MINT,
+    },
+    {
+      encoding: "jsonParsed",
+    },
+  ]);
+
+  if (response === null) {
+    return null;
+  }
+
+  let balance = 0;
+
+  for (const account of response.value ?? []) {
+    const amount = account.account.data.parsed.info.tokenAmount.uiAmount;
+
+    if (amount != null) {
+      balance += amount;
+    }
+  }
+
+  return balance;
+}
+/**
+ * ============================================================
+ * LARGEST TOKEN ACCOUNTS
+ * ============================================================
+ */
+
+export interface LargestAccount {
+  address: string;
+  uiAmount: number;
+}
+
+export async function largestTokenAccounts(
+  mint: string,
+): Promise<LargestAccount[]> {
+  const response = await rpc<{
+    value?: {
+      address: string;
+      uiAmount: number | null;
+    }[];
+  }>("getTokenLargestAccounts", [mint]);
+
+  return (response?.value ?? []).map((account) => ({
+    address: account.address,
+    uiAmount: account.uiAmount ?? 0,
+  }));
+}
+
+/**
+ * ============================================================
+ * TOKEN PROGRAMS
+ * ============================================================
+ */
+
 const TOKEN_PROGRAMS = [
+  /**
+   * Original SPL Token program
+   */
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+
+  /**
+   * Token-2022 program
+   */
   "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
 ];
 
+/**
+ * ============================================================
+ * OWNER BALANCES
+ * ============================================================
+ */
+
 export interface OwnerBalances {
-  /** SOL, in SOL rather than lamports. Null when the read failed. */
+  /**
+   * Native SOL balance.
+   */
   sol: number | null;
-  /** USDC. Null when the read failed; 0 is a real, held zero. */
-  usdc: number | null;
-  /** Every non-zero SPL balance as mint → amount. Null when the read failed. */
+
+  /**
+   * Devnet USDT balance.
+   */
+  usdt: number | null;
+
+  /**
+   * All non-zero SPL tokens.
+   *
+   * mint -> balance
+   */
   tokens: Record<string, number> | null;
 }
 
 /**
- * Everything the portfolio needs about one wallet, in one pass.
- *
- * Two token-account calls rather than one per mint: asking by `programId`
- * returns the whole account list at once, so checking a wallet against twenty
- * mints costs the same as checking it against one. Both programs, because a
- * mint issued under Token-2022 is invisible to a query for the original and
- * would read as a zero balance.
- *
- * Null and zero are kept apart throughout. A failed call means "not known" and
- * must not render as an empty wallet — the distinction the rest of this file
- * already makes for treasuries, applied to the reader's own balances.
+ * ============================================================
+ * OWNER BALANCES
+ * ============================================================
  */
+
 export async function ownerBalances(owner: string): Promise<OwnerBalances> {
-  type Accounts = {
-    value?: {
-      account: { data: { parsed: { info: { mint: string; tokenAmount: { uiAmount: number | null } } } } };
-    }[];
+  type TokenAccount = {
+    account: {
+      data: {
+        parsed: {
+          info: {
+            mint: string;
+
+            tokenAmount: {
+              uiAmount: number | null;
+
+              uiAmountString?: string;
+            };
+          };
+        };
+      };
+    };
   };
 
-  const [lamports, ...programs] = await Promise.all([
-    rpc<{ value: number }>("getBalance", [owner]),
-    ...TOKEN_PROGRAMS.map((programId) =>
-      rpc<Accounts>("getTokenAccountsByOwner", [owner, { programId }, { encoding: "jsonParsed" }])
-    ),
-  ]);
+  type AccountsResponse = {
+    value?: TokenAccount[];
+  };
 
-  // Every program call failing is a failed read, not an empty wallet.
-  const tokens = programs.every((r) => r == null)
-    ? null
-    : programs.reduce<Record<string, number>>((acc, r) => {
-        for (const a of r?.value ?? []) {
-          const { mint, tokenAmount } = a.account.data.parsed.info;
-          const amt = tokenAmount.uiAmount ?? 0;
-          if (amt > 0) acc[mint] = (acc[mint] ?? 0) + amt;
+  console.log("==============================================");
+
+  console.log("[OWNER BALANCES]", owner);
+
+  console.log("[OWNER BALANCES] RPC:", RPC);
+
+  console.log("[OWNER BALANCES] USDT MINT:", USDT_MINT || "NOT SET");
+
+  console.log("==============================================");
+
+  /**
+   * ==========================================================
+   * SOL
+   * ==========================================================
+   */
+
+  const lamports = await rpc<{
+    value: number;
+  }>("getBalance", [owner]);
+
+  const sol = lamports !== null ? lamports.value / 1_000_000_000 : null;
+
+  console.log("[OWNER BALANCES] SOL:", sol);
+
+  /**
+   * ==========================================================
+   * TOKEN ACCOUNTS
+   * ==========================================================
+   */
+
+  const programResults: (AccountsResponse | null)[] = [];
+
+  for (const programId of TOKEN_PROGRAMS) {
+    console.log("[OWNER BALANCES] Reading token program:", programId);
+
+    const response = await rpc<AccountsResponse>("getTokenAccountsByOwner", [
+      owner,
+      {
+        programId,
+      },
+      {
+        encoding: "jsonParsed",
+      },
+    ]);
+
+    programResults.push(response);
+
+    console.log("[OWNER BALANCES] Token program result:", {
+      programId,
+      accounts: response?.value?.length ?? 0,
+      failed: response === null,
+    });
+  }
+
+  /**
+   * ==========================================================
+   * TOKEN BALANCES
+   * ==========================================================
+   */
+
+  const allProgramsFailed = programResults.every(
+    (response) => response === null,
+  );
+
+  let tokens: Record<string, number> | null;
+
+  if (allProgramsFailed) {
+    console.error("[OWNER BALANCES] ALL TOKEN PROGRAM RPC CALLS FAILED");
+
+    tokens = null;
+  } else {
+    tokens = {};
+
+    for (const response of programResults) {
+      if (!response?.value) {
+        continue;
+      }
+
+      for (const account of response.value) {
+        const { mint, tokenAmount } = account.account.data.parsed.info;
+
+        const amount = tokenAmount.uiAmount ?? 0;
+
+        if (amount <= 0) {
+          continue;
         }
-        return acc;
-      }, {});
 
-  return {
-    sol: lamports ? lamports.value / 1e9 : null,
-    // USDC comes out of the same scan rather than its own call — the account
-    // is already in the list, and a second request would be the same answer.
-    usdc: tokens ? tokens[USDC_MINT] ?? 0 : null,
+        tokens[mint] = (tokens[mint] ?? 0) + amount;
+      }
+    }
+  }
+
+  /**
+   * ==========================================================
+   * USDT
+   * ==========================================================
+   */
+
+  const usdt =
+    tokens === null ? null : USDT_MINT ? (tokens[USDT_MINT] ?? 0) : 0;
+
+  /**
+   * ==========================================================
+   * DEBUG
+   * ==========================================================
+   */
+
+  console.log(
+    "[PORTFOLIO DEBUG] TOKEN MINTS:",
+    tokens ? Object.keys(tokens) : null,
+  );
+
+  console.log("[PORTFOLIO DEBUG] TOKEN BALANCES:", tokens);
+
+  console.log("[PORTFOLIO DEBUG] USDT:", usdt);
+
+  /**
+   * ==========================================================
+   * FINAL RESULT
+   * ==========================================================
+   */
+
+  const result: OwnerBalances = {
+    sol,
+    usdt,
     tokens,
   };
+
+  console.log("[OWNER BALANCES] FINAL RESULT:", result);
+
+  return result;
 }
 
-/** Resolve the owner wallet of a token account. */
-export async function tokenAccountOwner(tokenAccount: string): Promise<string | null> {
-  const r = await rpc<{ value?: { data?: { parsed?: { info?: { owner?: string } } } } }>(
-    "getAccountInfo", [tokenAccount, { encoding: "jsonParsed" }]
-  );
-  return r?.value?.data?.parsed?.info?.owner ?? null;
+/**
+ * ============================================================
+ * TOKEN ACCOUNT OWNER
+ * ============================================================
+ */
+
+export async function tokenAccountOwner(
+  tokenAccount: string,
+): Promise<string | null> {
+  const response = await rpc<{
+    value?: {
+      data?: {
+        parsed?: {
+          info?: {
+            owner?: string;
+          };
+        };
+      };
+    };
+  }>("getAccountInfo", [
+    tokenAccount,
+    {
+      encoding: "jsonParsed",
+    },
+  ]);
+
+  return response?.value?.data?.parsed?.info?.owner ?? null;
 }

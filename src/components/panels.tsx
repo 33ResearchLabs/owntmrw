@@ -1,6 +1,11 @@
 import { Children } from "react";
 import Link from "next/link";
-import { raisePriceOf, tradingStart, type ProjectDetail, type RiskFlag } from "@/lib/queries";
+import {
+  raisePriceOf,
+  tradingStart,
+  type ProjectDetail,
+  type RiskFlag,
+} from "@/lib/queries";
 import type { Insight } from "@/lib/analytics";
 import type { Memo } from "@/lib/research";
 import { entityColor } from "@/lib/sources/wallets";
@@ -105,18 +110,35 @@ export function Metric({
 export function DenseMetricGrid({
   tiles,
 }: {
-  tiles: (false | null | undefined | {
-    label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "good" | "bad";
-  })[];
+  tiles: (
+    | false
+    | null
+    | undefined
+    | {
+        label: string;
+        value: React.ReactNode;
+        sub?: React.ReactNode;
+        tone?: "good" | "bad";
+      }
+  )[];
 }) {
   const shown = tiles.filter(Boolean) as {
-    label: string; value: React.ReactNode; sub?: React.ReactNode; tone?: "good" | "bad";
+    label: string;
+    value: React.ReactNode;
+    sub?: React.ReactNode;
+    tone?: "good" | "bad";
   }[];
   if (!shown.length) return null;
   return (
     <div className="grid grid-cols-2 gap-x-6 gap-y-4 px-4 py-4 md:grid-cols-4">
       {shown.map((t) => (
-        <Metric key={t.label} label={t.label} value={t.value} sub={t.sub} tone={t.tone} />
+        <Metric
+          key={t.label}
+          label={t.label}
+          value={t.value}
+          sub={t.sub}
+          tone={t.tone}
+        />
       ))}
     </div>
   );
@@ -145,7 +167,11 @@ export function SectionCard({
             against the far edge instead of between them. */}
         <div>
           <h3 className="text-[14px] font-semibold">{title}</h3>
-          {subtitle && <p className="mt-0.5 text-[12px] font-normal text-ink2">{subtitle}</p>}
+          {subtitle && (
+            <p className="mt-0.5 text-[12px] font-normal text-ink2">
+              {subtitle}
+            </p>
+          )}
         </div>
         {right}
       </div>
@@ -182,9 +208,15 @@ export function DashboardCard({
             themselves at two different weights. */}
         <div>
           <h3 className="text-[15px] font-semibold">{title}</h3>
-          {subtitle && <p className="mt-0.5 text-[12.5px] font-normal text-ink2">{subtitle}</p>}
+          {subtitle && (
+            <p className="mt-0.5 text-[12.5px] font-normal text-ink2">
+              {subtitle}
+            </p>
+          )}
         </div>
-        {right != null && <div className="flex flex-wrap items-center gap-2">{right}</div>}
+        {right != null && (
+          <div className="flex flex-wrap items-center gap-2">{right}</div>
+        )}
       </div>
       {children}
     </section>
@@ -192,7 +224,13 @@ export function DashboardCard({
 }
 
 /** Outlined action in a card header. Renders nothing without a destination. */
-export function CardAction({ href, children }: { href: string | null; children: React.ReactNode }) {
+export function CardAction({
+  href,
+  children,
+}: {
+  href: string | null;
+  children: React.ReactNode;
+}) {
   if (!href) return null;
   return (
     <a
@@ -203,10 +241,19 @@ export function CardAction({ href, children }: { href: string | null; children: 
     >
       {children}
       <svg
-        width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
       >
-        <path d="M14 4h6v6" /><path d="M20 4 10.5 13.5" /><path d="M19 14.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4.5" />
+        <path d="M14 4h6v6" />
+        <path d="M20 4 10.5 13.5" />
+        <path d="M19 14.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4.5" />
       </svg>
     </a>
   );
@@ -250,7 +297,9 @@ export function MetricGrid({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-1 gap-px border-y border-grid bg-grid sm:grid-cols-2 lg:grid-cols-4">
       {children}
-      {rem2 !== 0 && <div aria-hidden className="hidden bg-surface sm:block lg:hidden" />}
+      {rem2 !== 0 && (
+        <div aria-hidden className="hidden bg-surface sm:block lg:hidden" />
+      )}
       {rem4 !== 0 &&
         Array.from({ length: 4 - rem4 }, (_, i) => (
           <div key={i} aria-hidden className="hidden bg-surface lg:block" />
@@ -276,7 +325,9 @@ export function MetricCell({
       {/* Matched to the Market Depth tiles — 10.5 / 22 / 11.5. Those sit on the
           same screen, so a figure that changed size between the two panels read
           as two different kinds of number rather than one scale. */}
-      <div className="text-[10.5px] uppercase tracking-[0.08em] text-muted">{label}</div>
+      <div className="text-[10.5px] uppercase tracking-[0.08em] text-muted">
+        {label}
+      </div>
       <div
         className={`num mt-2 text-[22px] font-bold leading-none tracking-tight ${
           tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : ""
@@ -284,7 +335,9 @@ export function MetricCell({
       >
         {value}
       </div>
-      {sub != null && <div className="mt-2 text-[11.5px] leading-snug text-muted">{sub}</div>}
+      {sub != null && (
+        <div className="mt-2 text-[11.5px] leading-snug text-muted">{sub}</div>
+      )}
     </div>
   );
 }
@@ -322,7 +375,8 @@ const SAFETY_BANDS = [
 ] as const;
 
 const safetyBand = (score: number) =>
-  SAFETY_BANDS.find((b) => score >= b.floor) ?? SAFETY_BANDS[SAFETY_BANDS.length - 1];
+  SAFETY_BANDS.find((b) => score >= b.floor) ??
+  SAFETY_BANDS[SAFETY_BANDS.length - 1];
 
 /**
  * Where this token's safety score falls on the 0-100 scale, and which band that
@@ -337,11 +391,17 @@ function SafetyMeter({ score }: { score: number | null }) {
       {/* The band word sits against the number, not out at the right edge:
           it is the part that survives when the colour cannot be judged. */}
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="text-[28px] font-semibold leading-none" style={{ color: band?.color }}>
+        <span
+          className="text-[28px] font-semibold leading-none"
+          style={{ color: band?.color }}
+        >
           {score ?? "—"}
         </span>
         <span className="text-[12px] text-faint">/ 100</span>
-        <span className="text-[13px] font-medium" style={{ color: band?.color }}>
+        <span
+          className="text-[13px] font-medium"
+          style={{ color: band?.color }}
+        >
           {band?.label ?? "Not scored"}
         </span>
         <span className="text-[11px] text-muted">RugCheck safety score</span>
@@ -358,7 +418,10 @@ function SafetyMeter({ score }: { score: number | null }) {
         {score != null && (
           <div
             className="h-full rounded-full"
-            style={{ width: `${Math.max(0, Math.min(100, score))}%`, background: band!.color }}
+            style={{
+              width: `${Math.max(0, Math.min(100, score))}%`,
+              background: band!.color,
+            }}
           />
         )}
         {/* Band edges are cut out of the track rather than drawn over it — a
@@ -375,7 +438,11 @@ function SafetyMeter({ score }: { score: number | null }) {
       <div className="num relative mt-1 h-3 text-[10px] text-faint">
         <span className="absolute left-0">0</span>
         {SAFETY_BANDS.slice(0, -1).map((b) => (
-          <span key={b.floor} className="absolute -translate-x-1/2" style={{ left: `${b.floor}%` }}>
+          <span
+            key={b.floor}
+            className="absolute -translate-x-1/2"
+            style={{ left: `${b.floor}%` }}
+          >
             {b.floor}
           </span>
         ))}
@@ -478,7 +545,7 @@ export function RiskPanel({
           }
         />
         <Metric
-          label="Holders (on-chain)"
+          label="REGISTERED ACCOUNTS"
           value={risk.total_holders != null ? fmtNum(risk.total_holders) : "—"}
           sub="per RugCheck"
         />
@@ -561,7 +628,12 @@ export function ListingsPanel({
     <tr key={`${l.exchange}|${l.pair}`}>
       <td className="font-medium">
         {l.url ? (
-          <a href={l.url} target="_blank" rel="noopener noreferrer" className="hover:text-brand">
+          <a
+            href={l.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-brand"
+          >
             {l.exchange}
           </a>
         ) : (
@@ -614,7 +686,7 @@ export function ListingsPanel({
               <th>Venue</th>
               <th>Pair</th>
               <th>Type</th>
-              <th className="!text-right">24h Volume</th>
+              <th className="!text-right">Totel Volume</th>
               <th className="!text-right">Share</th>
             </tr>
           </thead>
@@ -688,15 +760,31 @@ function SupplyAllocation({ p }: { p: ProjectDetail["project"] }) {
 
   // Sub-0.05% figures are rounding dust from the supply feed, not allocations.
   const dust = total * 0.0005;
-  const clean = (n: number | null | undefined) => (n != null && n > dust ? n : 0);
+  const clean = (n: number | null | undefined) =>
+    n != null && n > dust ? n : 0;
   const team = clean(p.team_package);
   const circulating = clean(p.circulating_supply);
   const unattributed = Math.max(0, total - team - circulating);
 
   const segments = [
-    { key: "circulating", label: "Circulating", value: circulating, color: "var(--accent)" },
-    { key: "team", label: "Team locked", value: team, color: "var(--series-2)" },
-    { key: "unattributed", label: "Unattributed", value: unattributed, color: "var(--series-none)" },
+    {
+      key: "circulating",
+      label: "Circulating",
+      value: circulating,
+      color: "var(--accent)",
+    },
+    {
+      key: "team",
+      label: "Team locked",
+      value: team,
+      color: "var(--series-2)",
+    },
+    {
+      key: "unattributed",
+      label: "Unattributed",
+      value: unattributed,
+      color: "var(--series-none)",
+    },
   ].filter((s) => s.value > dust);
 
   // One segment is a one-bar bar chart — the Metric tiles already say it better.
@@ -715,7 +803,10 @@ function SupplyAllocation({ p }: { p: ProjectDetail["project"] }) {
             <div
               key={s.key}
               className={`h-full ${i === 0 ? "rounded-l-full" : ""} ${i === segments.length - 1 ? "rounded-r-full" : ""}`}
-              style={{ width: `${(s.value / total) * 100}%`, background: s.color }}
+              style={{
+                width: `${(s.value / total) * 100}%`,
+                background: s.color,
+              }}
             />
           ))}
         </div>
@@ -731,7 +822,9 @@ function SupplyAllocation({ p }: { p: ProjectDetail["project"] }) {
               <span className="num text-[12px] font-medium">
                 {((s.value / total) * 100).toFixed(1)}%
               </span>
-              <span className="num text-[11px] text-faint">{fmtNum(s.value)}</span>
+              <span className="num text-[11px] text-faint">
+                {fmtNum(s.value)}
+              </span>
             </div>
           ))}
         </div>
@@ -739,7 +832,10 @@ function SupplyAllocation({ p }: { p: ProjectDetail["project"] }) {
         <p className="mt-3 text-[11px] text-muted">
           {fmtNum(total)} total supply
           {pool > 0 && (
-            <> · {fmtNum(pool)} of the circulating float sits in liquidity pools</>
+            <>
+              {" "}
+              · {fmtNum(pool)} of the circulating float sits in liquidity pools
+            </>
           )}
         </p>
       </div>
@@ -747,11 +843,7 @@ function SupplyAllocation({ p }: { p: ProjectDetail["project"] }) {
   );
 }
 
-export function HoldersPanel({
-  d,
-}: {
-  d: ProjectDetail;
-}) {
+export function HoldersPanel({ d }: { d: ProjectDetail }) {
   const { project: p, topHolders, holderHistory, latest } = d;
   const hh = holderHistory.filter((h) => h.holder_count != null);
   const cur = hh.length ? hh[hh.length - 1].holder_count! : null;
@@ -791,66 +883,89 @@ export function HoldersPanel({
         }
       >
         <DenseMetricGrid
-            tiles={[
-              {
-                label: "Total Holders",
-                value: cur != null ? fmtNum(cur) : NA,
-                sub: cur == null ? "no holder snapshot yet" : undefined,
-              },
-              ...[7, 30].map((days) => ({
-                label: `Net ${days}d`,
-                value: pctChg(days) != null ? <Delta v={pctChg(days)} /> : NA,
-                sub: chg(days) != null
+          tiles={[
+            {
+              label: "Total Holders",
+              value: cur != null ? fmtNum(cur) : NA,
+              sub: cur == null ? "no holder snapshot yet" : undefined,
+            },
+            ...[7, 30].map((days) => ({
+              label: `Net ${days}d`,
+              value: pctChg(days) != null ? <Delta v={pctChg(days)} /> : NA,
+              sub:
+                chg(days) != null
                   ? `${chg(days)! >= 0 ? "+" : ""}${fmtNum(chg(days))} wallets`
                   : `needs ${days}d of history`,
-              })),
-              {
-                label: "Avg Wallet",
-                value: avgWallet != null ? fmtNum(avgWallet) : NA,
-                sub: avgWallet == null
+            })),
+            {
+              label: "Avg Wallet",
+              value: avgWallet != null ? fmtNum(avgWallet) : NA,
+              sub:
+                avgWallet == null
                   ? "needs supply and holder count"
-                  : avgUsd ? `${fmtUsd(avgUsd)} at spot` : "supply ÷ holders",
-              },
-              {
-                label: "Top 10 Concentration",
-                value: t10 != null ? `${t10.toFixed(1)}%` : NA,
-                sub: t10 == null ? "no top-holder data" : undefined,
-                tone: t10 == null ? undefined
-                  : t10 > 60 ? ("bad" as const) : t10 < 35 ? ("good" as const) : undefined,
-              },
-              {
-                label: "Top 20 Concentration",
-                value: t20 != null ? `${t20.toFixed(1)}%` : NA,
-                sub: t20 != null && t10 != null
+                  : avgUsd
+                    ? `${fmtUsd(avgUsd)} at spot`
+                    : "supply ÷ holders",
+            },
+            {
+              label: "Top 10 Concentration",
+              value: t10 != null ? `${t10.toFixed(1)}%` : NA,
+              sub: t10 == null ? "no top-holder data" : undefined,
+              tone:
+                t10 == null
+                  ? undefined
+                  : t10 > 60
+                    ? ("bad" as const)
+                    : t10 < 35
+                      ? ("good" as const)
+                      : undefined,
+            },
+            {
+              label: "Top 20 Concentration",
+              value: t20 != null ? `${t20.toFixed(1)}%` : NA,
+              sub:
+                t20 != null && t10 != null
                   ? `${(t20 - t10).toFixed(1)}% in ranks 11–20`
-                  : t20 == null ? "no top-holder data" : undefined,
-              },
-              {
-                label: "Circulating Supply",
-                value: p.circulating_supply != null ? fmtNum(p.circulating_supply) : NA,
-                sub: p.circulating_supply != null && p.total_supply
+                  : t20 == null
+                    ? "no top-holder data"
+                    : undefined,
+            },
+            {
+              label: "Circulating Supply",
+              value:
+                p.circulating_supply != null
+                  ? fmtNum(p.circulating_supply)
+                  : NA,
+              sub:
+                p.circulating_supply != null && p.total_supply
                   ? `of ${fmtNum(p.total_supply)} total`
                   : undefined,
-              },
-              {
-                label: "Locked (Team)",
-                value: p.team_package != null ? fmtNum(p.team_package) : NA,
-                sub: p.team_package != null && p.total_supply
+            },
+            {
+              label: "Locked (Team)",
+              value: p.team_package != null ? fmtNum(p.team_package) : NA,
+              sub:
+                p.team_package != null && p.total_supply
                   ? `${((p.team_package / p.total_supply) * 100).toFixed(0)}% of supply`
-                  // Circulating meeting total is the reason there is nothing
-                  // locked, not a gap — the supply sheet accounts for itself.
-                  : p.team_package == null && p.circulating_supply && p.total_supply
-                    && p.circulating_supply >= p.total_supply
+                  : // Circulating meeting total is the reason there is nothing
+                    // locked, not a gap — the supply sheet accounts for itself.
+                    p.team_package == null &&
+                      p.circulating_supply &&
+                      p.total_supply &&
+                      p.circulating_supply >= p.total_supply
                     ? "none — 100% circulating"
                     : undefined,
-              },
-              {
-                label: "Market Cap / Holder",
-                value: cur && latest?.mcap ? fmtUsd(latest.mcap / cur) : NA,
-                sub: cur && latest?.mcap ? undefined : "needs market cap and holders",
-              },
-            ]}
-          />
+            },
+            {
+              label: "Market Cap / Holder",
+              value: cur && latest?.mcap ? fmtUsd(latest.mcap / cur) : NA,
+              sub:
+                cur && latest?.mcap
+                  ? undefined
+                  : "needs market cap and holders",
+            },
+          ]}
+        />
       </SectionCard>
 
       <SupplyAllocation p={p} />
@@ -937,12 +1052,15 @@ export function HoldersPanel({
                         {(() => {
                           const evidenced = org?.isOrganisation ? org : null;
                           const band = evidenced ? null : holdingBand(h.pct);
-                          const label = evidenced?.label ?? band?.label ?? "Unidentified";
+                          const label =
+                            evidenced?.label ?? band?.label ?? "Unidentified";
                           return (
                             <span
                               className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-[11px]"
                               style={{
-                                color: evidenced ? entityColor(evidenced.type) : "var(--ink-muted)",
+                                color: evidenced
+                                  ? entityColor(evidenced.type)
+                                  : "var(--ink-muted)",
                                 background: "var(--surface-2)",
                               }}
                               title={
@@ -1046,7 +1164,13 @@ export function SmartMoneyPanel({ d }: { d: ProjectDetail }) {
  * same summary without pulling in the detail table and address link that
  * belong to the full Treasury tab underneath it.
  */
-export function TreasuryTrendCards({ d, nowSec }: { d: ProjectDetail; nowSec: number }) {
+export function TreasuryTrendCards({
+  d,
+  nowSec,
+}: {
+  d: ProjectDetail;
+  nowSec: number;
+}) {
   const { treasuryValue, treasuryHistory, liquidityHistory, latest } = d;
 
   // Real series, not derived figures: treasuryHistory is already deduped to
@@ -1058,12 +1182,22 @@ export function TreasuryTrendCards({ d, nowSec }: { d: ProjectDetail; nowSec: nu
   const treasurySeries = treasuryHistory
     .map((t) => ({ ts: t.ts, v: t.value_usd }))
     .filter((r): r is { ts: number; v: number } => r.v != null);
-  const treasuryDelta = changeVsAgo(treasuryValue, treasurySeries, 7 * DAY, nowSec);
+  const treasuryDelta = changeVsAgo(
+    treasuryValue,
+    treasurySeries,
+    7 * DAY,
+    nowSec,
+  );
 
   const liquiditySeries = liquidityHistory
     .map((l) => ({ ts: l.ts, v: l.liquidity_usd }))
     .filter((r): r is { ts: number; v: number } => r.v != null);
-  const liquidityDelta = changeVsAgo(latest?.liquidity_usd, liquiditySeries, 7 * DAY, nowSec);
+  const liquidityDelta = changeVsAgo(
+    latest?.liquidity_usd,
+    liquiditySeries,
+    7 * DAY,
+    nowSec,
+  );
 
   if (!treasurySeries.length && !liquiditySeries.length) return null;
 
@@ -1071,17 +1205,27 @@ export function TreasuryTrendCards({ d, nowSec }: { d: ProjectDetail; nowSec: nu
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {treasurySeries.length > 0 && (
         <TrendCard
-          color="var(--good)" label="Treasury Value"
-          value={treasuryValue != null ? (treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)) : "—"}
-          deltaPct={treasuryDelta} deltaLabel="vs 7d ago"
+          color="var(--good)"
+          label="Treasury Value"
+          value={
+            treasuryValue != null
+              ? treasuryValue < 1
+                ? "~$0"
+                : fmtUsd(treasuryValue)
+              : "—"
+          }
+          deltaPct={treasuryDelta}
+          deltaLabel="vs 7d ago"
           series={treasurySeries.map((s) => s.v)}
         />
       )}
       {liquiditySeries.length > 0 && (
         <TrendCard
-          color="var(--accent)" label="Available Liquidity"
+          color="var(--accent)"
+          label="Available Liquidity"
           value={fmtUsd(latest?.liquidity_usd ?? null)}
-          deltaPct={liquidityDelta} deltaLabel="vs 7d ago"
+          deltaPct={liquidityDelta}
+          deltaLabel="vs 7d ago"
           series={liquiditySeries.map((s) => s.v)}
         />
       )}
@@ -1089,7 +1233,13 @@ export function TreasuryTrendCards({ d, nowSec }: { d: ProjectDetail; nowSec: nu
   );
 }
 
-export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number }) {
+export function TreasuryPanel({
+  d,
+  nowSec,
+}: {
+  d: ProjectDetail;
+  nowSec: number;
+}) {
   const {
     project: p,
     treasuryValue,
@@ -1114,7 +1264,8 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
             p.treasury_address ? (
               <a
                 href={`https://solscan.io/account/${p.treasury_address}`}
-                target="_blank" rel="noopener noreferrer"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="rounded-lg border border-line px-3 py-1.5 text-[12px] font-medium text-ink2 hover:border-accent hover:text-brand"
               >
                 View vault ↗
@@ -1144,32 +1295,55 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
           tiles={[
             {
               label: "Current Value",
-              value: treasuryValue == null ? NA
-                : treasuryValue < 1 ? "~$0"
-                  : fmtUsd(treasuryValue),
-              sub: treasuryValue != null
-                ? "USDC AUM in the DAO vault"
-                : p.treasury_address ? "vault not read yet" : "no DAO vault on record",
+              value:
+                treasuryValue == null
+                  ? NA
+                  : treasuryValue < 1
+                    ? "~$0"
+                    : fmtUsd(treasuryValue),
+              sub:
+                treasuryValue != null
+                  ? "USDC AUM in the DAO vault"
+                  : p.treasury_address
+                    ? "vault not read yet"
+                    : "no DAO vault on record",
             },
             {
               label: "Raised",
-              value: p.raise_amount_usd == null ? NA
-                : p.raise_amount_usd === 0 ? "$0"
-                  : fmtUsd(p.raise_amount_usd),
-              sub: p.raise_amount_usd == null ? "no raise on record" : undefined,
+              value:
+                p.raise_amount_usd == null
+                  ? NA
+                  : p.raise_amount_usd === 0
+                    ? "$0"
+                    : fmtUsd(p.raise_amount_usd),
+              sub:
+                p.raise_amount_usd == null ? "no raise on record" : undefined,
             },
             {
               label: "Remaining vs Raise",
               value: vsRaise != null ? `${(vsRaise * 100).toFixed(0)}%` : NA,
-              sub: vsRaise == null ? "needs a treasury and a raise figure" : undefined,
-              tone: vsRaise == null ? undefined
-                : vsRaise > 0.7 ? ("good" as const) : vsRaise < 0.2 ? ("bad" as const) : undefined,
+              sub:
+                vsRaise == null
+                  ? "needs a treasury and a raise figure"
+                  : undefined,
+              tone:
+                vsRaise == null
+                  ? undefined
+                  : vsRaise > 0.7
+                    ? ("good" as const)
+                    : vsRaise < 0.2
+                      ? ("bad" as const)
+                      : undefined,
             },
             {
               label: "Treasury / Mkt Cap",
               value: vsMcap != null ? `${(vsMcap * 100).toFixed(0)}%` : NA,
-              sub: vsMcap == null ? "needs a treasury and a market cap"
-                : vsMcap > 0.5 ? "backed above half of valuation" : undefined,
+              sub:
+                vsMcap == null
+                  ? "needs a treasury and a market cap"
+                  : vsMcap > 0.5
+                    ? "backed above half of valuation"
+                    : undefined,
             },
           ]}
         />
@@ -1214,7 +1388,8 @@ export function TreasuryPanel({ d, nowSec }: { d: ProjectDetail; nowSec: number 
                     // a balance that changed 6 days ago read as "held 6h" the
                     // moment ingest fell behind, flatly contradicting the date
                     // right next to it. Staleness is what treasuryLastRead is for.
-                    const until = i === 0 ? Math.floor(Date.now() / 1000) : arr[i - 1].ts;
+                    const until =
+                      i === 0 ? Math.floor(Date.now() / 1000) : arr[i - 1].ts;
                     return (
                       <tr key={t.ts}>
                         <td className="num text-ink2">{fmtDate(t.ts)}</td>
@@ -1274,7 +1449,8 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   // A raise that took money without a launchpad track was a private round, and
   // that is *why* the public-sale slots are blank for it — no commitment book,
   // no contributor roll — rather than data we failed to collect.
-  const privateRound = p.raise_track == null && !!p.raise_amount_usd && p.raise_amount_usd > 0;
+  const privateRound =
+    p.raise_track == null && !!p.raise_amount_usd && p.raise_amount_usd > 0;
 
   // Five glanceable cards above the detail grid below, each real: price and
   // ROI read straight off the candle history against the raise price; market
@@ -1287,13 +1463,21 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   const supply = p.circulating_supply;
   const raiseMcap = rp && supply ? rp.usd * supply : null;
   const curMcap = latest?.mcap ?? (cur && supply ? cur * supply : null);
-  const mcapGrowth = raiseMcap && curMcap ? ((curMcap - raiseMcap) / raiseMcap) * 100 : null;
+  const mcapGrowth =
+    raiseMcap && curMcap ? ((curMcap - raiseMcap) / raiseMcap) * 100 : null;
   const mcapSeries = supply ? candles.map((c) => c.c * supply) : [];
   const holderBaseline = hh.length ? hh[0].holder_count : null;
-  const holderGrowth = holderBaseline && holdersNow ? ((holdersNow - holderBaseline) / holderBaseline) * 100 : null;
-  const treasuryGrowth = treasuryValue != null && p.raise_amount_usd
-    ? ((treasuryValue - p.raise_amount_usd) / p.raise_amount_usd) * 100 : null;
-  const treasurySeries = treasuryHistory.map((t) => t.value_usd).filter((v): v is number => v != null);
+  const holderGrowth =
+    holderBaseline && holdersNow
+      ? ((holdersNow - holderBaseline) / holderBaseline) * 100
+      : null;
+  const treasuryGrowth =
+    treasuryValue != null && p.raise_amount_usd
+      ? ((treasuryValue - p.raise_amount_usd) / p.raise_amount_usd) * 100
+      : null;
+  const treasurySeries = treasuryHistory
+    .map((t) => t.value_usd)
+    .filter((v): v is number => v != null);
 
   // The trend cards and the detail grid are the same story told twice over —
   // glanceable first, then itemised — so they share one card. Two stacked
@@ -1307,70 +1491,102 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
   return (
     <section className="card overflow-hidden">
       <div className="px-5 py-5 sm:px-6">
-          <TrendSectionHeader
-            title="Track this token from raise to today."
-            subtitle="ROI, treasury growth, holder growth and market cap evolution, all since day one."
-            action={<CardAction href={p.raise_source_url}>Data source</CardAction>}
-            divider
-          />
-          {/* All five cards always render. A card with no figure keeps its
+        <TrendSectionHeader
+          title="Track this token from raise to today."
+          subtitle="ROI, treasury growth, holder growth and market cap evolution, all since day one."
+          action={
+            <CardAction href={p.raise_source_url}>Data source</CardAction>
+          }
+          divider
+        />
+        {/* All five cards always render. A card with no figure keeps its
               label and drops to the short form — see `TrendCard`'s `empty`. */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <TrendCard
-            color="var(--accent)" label="Raise vs Current"
+            color="var(--accent)"
+            label="Raise vs Current"
             value={cur != null ? fmtPrice(cur) : null}
-            deltaPct={roi} deltaLabel={rp ? `vs raise ${fmtPrice(rp.usd)}` : undefined}
+            deltaPct={roi}
+            deltaLabel={rp ? `vs raise ${fmtPrice(rp.usd)}` : undefined}
             series={candles.map((c) => c.c)}
             empty={
-              !rp ? "no raise price to measure from"
-                : cur == null ? "no live quote"
-                  : candles.length === 0 ? "no price history yet"
+              !rp
+                ? "no raise price to measure from"
+                : cur == null
+                  ? "no live quote"
+                  : candles.length === 0
+                    ? "no price history yet"
                     : undefined
             }
           />
           <TrendCard
-            color="var(--good)" label="ROI Since Raise"
+            color="var(--good)"
+            label="ROI Since Raise"
             value={roi != null ? fmtPct(roi) : null}
-            deltaPct={roi} deltaLabel="vs raise price"
-            series={rp ? candles.map((c) => ((c.c - rp.usd) / rp.usd) * 100) : []}
-            empty={roi == null ? "needs a raise price and a live quote" : undefined}
+            deltaPct={roi}
+            deltaLabel="vs raise price"
+            series={
+              rp ? candles.map((c) => ((c.c - rp.usd) / rp.usd) * 100) : []
+            }
+            empty={
+              roi == null ? "needs a raise price and a live quote" : undefined
+            }
           />
           <TrendCard
-            color="var(--warn)" label="Market Cap Growth"
+            color="var(--warn)"
+            label="Market Cap Growth"
             value={fmtUsd(curMcap)}
-            deltaPct={mcapGrowth} deltaLabel={`vs raise ${fmtUsd(raiseMcap)}`}
+            deltaPct={mcapGrowth}
+            deltaLabel={`vs raise ${fmtUsd(raiseMcap)}`}
             series={mcapSeries}
             title={`Raise-time cap here is raise price × today's circulating supply, so it moves with ROI rather than history — not the same figure as "Raise Valuation" below, which uses the supply that actually existed at the raise.`}
             empty={
               mcapGrowth == null
-                ? (supply ? "needs a raise price and a market cap" : "no circulating supply on record")
+                ? supply
+                  ? "needs a raise price and a market cap"
+                  : "no circulating supply on record"
                 : undefined
             }
           />
           <TrendCard
-            color="var(--good)" label="Holder Growth"
+            color="var(--good)"
+            label="Holder Growth"
             value={fmtNum(holdersNow)}
-            deltaPct={holderGrowth} deltaLabel="since tracking began"
+            deltaPct={holderGrowth}
+            deltaLabel="since tracking began"
             series={hh.map((h) => h.holder_count!)}
             empty={
               holderGrowth == null
-                ? (hh.length ? "needs a second holder snapshot" : "no holder snapshots yet")
+                ? hh.length
+                  ? "needs a second holder snapshot"
+                  : "no holder snapshots yet"
                 : undefined
             }
           />
           <TrendCard
-            color="var(--accent)" label="Treasury Growth"
-            value={treasuryValue != null && treasuryValue < 1 ? "~$0" : fmtUsd(treasuryValue)}
+            color="var(--accent)"
+            label="Treasury Growth"
+            value={
+              treasuryValue != null && treasuryValue < 1
+                ? "~$0"
+                : fmtUsd(treasuryValue)
+            }
             deltaPct={treasuryGrowth}
-            deltaLabel={p.raise_amount_usd ? `vs raised ${fmtUsd(p.raise_amount_usd)}` : undefined}
+            deltaLabel={
+              p.raise_amount_usd
+                ? `vs raised ${fmtUsd(p.raise_amount_usd)}`
+                : undefined
+            }
             series={treasurySeries}
             empty={
               treasuryValue == null
-                ? (p.treasury_address ? "vault not read yet" : "no DAO vault on record")
+                ? p.treasury_address
+                  ? "vault not read yet"
+                  : "no DAO vault on record"
                 : undefined
             }
           />
-          </div>
+        </div>
       </div>
 
       <div className="border-t border-grid px-5 py-3.5 sm:px-6">
@@ -1407,12 +1623,20 @@ export function CompareRaisePanel({ d }: { d: ProjectDetail }) {
         />
         <MetricCell
           label="Contributors at Raise"
-          value={p.raise_contributors != null ? fmtNum(p.raise_contributors) : NA}
-          sub={p.raise_contributors == null && privateRound ? "private round" : undefined}
+          value={
+            p.raise_contributors != null ? fmtNum(p.raise_contributors) : NA
+          }
+          sub={
+            p.raise_contributors == null && privateRound
+              ? "private round"
+              : undefined
+          }
         />
         <MetricCell
           label="Committed"
-          value={p.raise_committed_usd != null ? fmtUsd(p.raise_committed_usd) : NA}
+          value={
+            p.raise_committed_usd != null ? fmtUsd(p.raise_committed_usd) : NA
+          }
           sub={
             p.raise_committed_usd != null && p.raise_amount_usd
               ? `${Math.round(p.raise_committed_usd / p.raise_amount_usd)}× oversubscribed`
@@ -1617,16 +1841,10 @@ export function ResearchPanel({ memo }: { memo: Memo }) {
       </SectionCard>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard
-          title="Bull Case"
-          subtitle="What has to go right."
-        >
+        <SectionCard title="Bull Case" subtitle="What has to go right.">
           <List items={memo.bull} tone="good" />
         </SectionCard>
-        <SectionCard
-          title="Bear Case"
-          subtitle="What could go wrong."
-        >
+        <SectionCard title="Bear Case" subtitle="What could go wrong.">
           <List items={memo.bear} tone="bad" />
         </SectionCard>
       </div>
@@ -1644,10 +1862,7 @@ export function ResearchPanel({ memo }: { memo: Memo }) {
             </p>
           )}
         </SectionCard>
-        <SectionCard
-          title="Weaknesses"
-          subtitle="Where it is thin."
-        >
+        <SectionCard title="Weaknesses" subtitle="Where it is thin.">
           {memo.weaknesses.length ? (
             <List items={memo.weaknesses} tone="bad" />
           ) : (
@@ -1666,18 +1881,12 @@ export function ResearchPanel({ memo }: { memo: Memo }) {
       </SectionCard>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <SectionCard
-          title="Momentum"
-          subtitle="Which way it is trending."
-        >
+        <SectionCard title="Momentum" subtitle="Which way it is trending.">
           <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
             {memo.momentum}
           </p>
         </SectionCard>
-        <SectionCard
-          title="Competition"
-          subtitle="Who else is building this."
-        >
+        <SectionCard title="Competition" subtitle="Who else is building this.">
           <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink2">
             {memo.competition}
           </p>

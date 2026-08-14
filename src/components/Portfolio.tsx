@@ -6,9 +6,15 @@ import { useWallet } from "./wallet";
 import { Logo } from "./ui";
 import { Sparkline } from "./viz";
 import { CopyButton } from "./CopyButton";
-import { fmtUsd, fmtNum, fmtPct, fmtPrice, shortAddr, timeAgo } from "@/lib/format";
+import {
+  fmtUsd,
+  fmtNum,
+  fmtPct,
+  fmtPrice,
+  shortAddr,
+  timeAgo,
+} from "@/lib/format";
 
-/** One tracked token, with whatever the server knew at render. */
 export interface PortfolioToken {
   slug: string;
   name: string;
@@ -22,13 +28,10 @@ export interface PortfolioToken {
   roi_since_raise: number | null;
   ath: number | null;
   from_ath: number | null;
-  /** The pool cannot defend this price, so returns from it are not measurements. */
   returns_thin: boolean;
-  /** Daily closes, oldest first, for the trend column and the value chart. */
   closes: number[];
 }
 
-/** A timeline entry, already collapsed across the projects one story names. */
 export interface PortfolioFeedItem {
   ts: number;
   type: string;
@@ -50,32 +53,9 @@ interface Holding extends PortfolioToken {
 
 type ScanState = "idle" | "loading" | "done" | "failed";
 
-/** Windows the value chart offers, in days. */
 const RANGES = [7, 30, 90] as const;
 type Range = (typeof RANGES)[number];
 
-/**
- * The connected wallet's position in the tokens this terminal tracks.
- *
- * Balances are read on demand rather than stored: a portfolio is the one
- * figure on the site that belongs to the reader and not to the archive, and
- * persisting it would mean holding someone's holdings in a database that has
- * no reason to remember them.
- *
- * The read itself goes through this site's own route, not straight from the
- * browser as it once did — see `api/wallet/balances`. The public Solana
- * endpoint answers 403 to anything carrying an `Origin`, so the browser-direct
- * version never worked. What survives the move is the part that mattered:
- * the balances are fetched for one request and kept by nobody.
- *
- * Cost basis is deliberately absent rather than estimated. Every "PnL" here
- * would need the price paid at each acquisition, which needs the wallet's full
- * transaction history — the same parsed-indexer gap the wallet pages document.
- * A number derived from anything less would be a guess wearing a currency sign.
- * What the archive *does* know is what each token did against the price its
- * backers paid, so that is what "Since raise" reports — the token's history,
- * labelled as such, never dressed up as the reader's own.
- */
 export function Portfolio({
   tokens,
   solPrice = null,
@@ -83,111 +63,244 @@ export function Portfolio({
   signals = [],
 }: {
   tokens: PortfolioToken[];
-  /** Null when the venue was unreachable — SOL then leaves the total entirely. */
   solPrice?: number | null;
   events?: PortfolioFeedItem[];
   signals?: PortfolioSignal[];
 }) {
   const w = useWallet();
   const { address, allTokenBalances } = w;
-  // The scan is stamped with the wallet it belongs to, which lets the phase be
-  // derived rather than stored: a result for a different address is by
-  // definition still loading. Storing a "loading" flag would mean setting state
-  // synchronously inside the effect, and it can disagree with the result it is
-  // supposed to describe — showing one wallet's holdings under another's name
-  // for a frame after an account switch.
-  const [scan, setScan] = useState<{ owner: string; holdings: Holding[] | null } | null>(null);
+
+  const [scan, setScan] = useState<{
+    owner: string;
+    holdings: Holding[] | null;
+  } | null>(null);
+
   const [range, setRange] = useState<Range>(30);
   const [hidden, setHidden] = useState(false);
 
+  /*
+   * Read the wallet directly from chain.
+   *
+   * This is intentionally done on the client because the connected wallet
+   * belongs to the browser session. Nothing is stored by the portfolio.
+   */
   useEffect(() => {
-    if (!address) return;
+    if (!address) {
+      setScan(null);
+      return;
+    }
+
     let cancelled = false;
-    allTokenBalances().then((balances) => {
-      if (cancelled) return;
-      if (!balances) { setScan({ owner: address, holdings: null }); return; }
-      const found = tokens
-        .map((t) => {
-          const amount = balances.get(t.mint) ?? 0;
-          return { ...t, amount, value: t.price_usd != null ? amount * t.price_usd : null };
-        })
-        .filter((h) => h.amount > 0)
-        .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
-      setScan({ owner: address, holdings: found });
-    });
-    return () => { cancelled = true; };
+
+    async function refreshBalances() {
+      try {
+        const balances = await allTokenBalances();
+
+        if (cancelled) return;
+
+        if (!balances) {
+          setScan({
+            owner: address,
+            holdings: null,
+          });
+          return;
+        }
+
+        /*
+         * Match every tracked project against the actual wallet token mint.
+         *
+         * Example:
+         *
+         * balances.get(META_MINT)
+         *       ↓
+         * 0.83 META
+         *
+         * No META-specific hardcoding is required.
+         */
+        const found = tokens
+          .map((t) => {
+            const amount = balances.get(t.mint) ?? 0;
+
+            return {
+              ...t,
+              amount,
+              value: t.price_usd != null ? amount * t.price_usd : null,
+            };
+          })
+          .filter((h) => h.amount > 0)
+          .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+
+        setScan({
+          owner: address,
+          holdings: found,
+        });
+      } catch (error) {
+        console.error("Portfolio balance refresh failed:", error);
+
+        if (!cancelled) {
+          setScan({
+            owner: address,
+            holdings: null,
+          });
+        }
+      }
+    }
+
+    // Initial read immediately.
+    void refreshBalances();
+
+    /*
+     * Automatically refresh after a trade.
+     *
+     * When the user buys META on the trade page, the Solana transaction
+     * changes the wallet balance. Portfolio will pick that up automatically.
+     */
+    const interval = window.setInterval(() => {
+      void refreshBalances();
+    }, 5000);
+
+    /*
+     * Refresh immediately when the user comes back to this browser tab.
+     */
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void refreshBalances();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [address, allTokenBalances, tokens]);
 
-  const state: ScanState = !address ? "idle"
-    : scan?.owner !== address ? "loading"
-      : scan.holdings === null ? "failed" : "done";
+  const state: ScanState = !address
+    ? "idle"
+    : scan?.owner !== address
+      ? "loading"
+      : scan.holdings === null
+        ? "failed"
+        : "done";
+
   const holdings = useMemo(
     () => (state === "done" ? scan!.holdings! : []),
-    [state, scan]
+    [state, scan],
   );
 
   const held = useMemo(() => new Set(holdings.map((h) => h.slug)), [holdings]);
+
   const feed = useMemo(
     () => events.filter((e) => e.slugs.some((s) => held.has(s))).slice(0, 6),
-    [events, held]
+    [events, held],
   );
+
   const sigs = useMemo(
     () => signals.filter((s) => held.has(s.slug)).slice(0, 6),
-    [signals, held]
+    [signals, held],
   );
 
-  /**
-   * Position value over the window every holding can actually cover.
-   *
-   * Cash is left out rather than carried flat beside the tokens: SOL and USDC
-   * balances are only known as of now, so drawing them across ninety days
-   * would be a second invented history layered on the first. The chart says
-   * "position value" and means it.
+  /*
+   * Historical position curve.
    */
   const curve = useMemo(() => {
-    const withHistory = holdings.filter((h) => h.closes.length >= 2 && h.price_usd != null);
-    if (!withHistory.length) return { points: [] as number[], days: 0, covered: 0 };
+    const withHistory = holdings.filter(
+      (h) => h.closes.length >= 2 && h.price_usd != null,
+    );
+
+    if (!withHistory.length) {
+      return {
+        points: [] as number[],
+        days: 0,
+        covered: 0,
+      };
+    }
+
     const span = Math.min(range, ...withHistory.map((h) => h.closes.length));
+
     const points = Array.from({ length: span }, (_, i) =>
-      withHistory.reduce((s, h) => s + h.amount * h.closes[h.closes.length - span + i], 0));
-    return { points, days: span, covered: withHistory.length };
+      withHistory.reduce(
+        (s, h) => s + h.amount * h.closes[h.closes.length - span + i],
+        0,
+      ),
+    );
+
+    return {
+      points,
+      days: span,
+      covered: withHistory.length,
+    };
   }, [holdings, range]);
 
-  // After the hooks, never before — an early return above them would change
-  // the hook order between connected and disconnected renders.
+  /*
+   * No wallet.
+   */
   if (!address) {
     return (
       <div className="card px-6 py-10 text-center">
         <h2 className="text-[15px] font-semibold">No wallet connected</h2>
+
         <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-muted">
-          Connect a Solana wallet to see what you hold across the {tokens.length} tokens
-          tracked here. Balances are read live from the chain and never stored.
+          Connect a Solana wallet to see what you hold across the{" "}
+          {tokens.length} tokens tracked here. Balances are read live from the
+          chain and never stored.
         </p>
+
         <button
           onClick={() => void w.connect()}
           disabled={w.connecting}
           className="mt-5 inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-bold text-white transition-[filter] duration-150 hover:brightness-[1.08] active:brightness-95 disabled:opacity-60"
         >
-          {w.connecting ? "Connecting…" : w.available ? "Connect wallet" : "Get Phantom"}
+          {w.connecting
+            ? "Connecting…"
+            : w.available
+              ? "Connect wallet"
+              : "Get Phantom"}
         </button>
       </div>
     );
   }
 
+  /*
+   * Total tracked token positions.
+   */
   const positions = holdings.reduce((s, h) => s + (h.value ?? 0), 0);
-  const priced = holdings.filter((h) => h.value != null).length;
-  const unpriced = holdings.length - priced;
-  const solValue = solPrice != null && w.solBalance != null ? w.solBalance * solPrice : null;
-  // Only what can be priced is added up. A missing SOL quote drops SOL from the
-  // total rather than counting it as zero, which would read as an empty wallet.
-  const net = positions + (solValue ?? 0) + (w.usdcBalance ?? 0);
 
-  // Weighted by position, and only over holdings whose 24h figure is a
-  // measurement — a thin pool contributes its value to the base but not a
-  // return, so one illiquid row cannot swing the whole book.
-  const movers = holdings.filter((h) => h.value != null && h.change_24h != null && !h.returns_thin);
+  const priced = holdings.filter((h) => h.value != null).length;
+
+  const unpriced = holdings.length - priced;
+
+  /*
+   * SOL value.
+   */
+  const solValue =
+    solPrice != null && w.solBalance != null ? w.solBalance * solPrice : null;
+
+  /*
+   * Total portfolio value:
+   *
+   * tracked tokens
+   * + SOL
+   * + USDT
+   */
+  const net = positions + (solValue ?? 0) + (w.usdtBalance ?? 0);
+
+  /*
+   * 24h movement.
+   */
+  const movers = holdings.filter(
+    (h) => h.value != null && h.change_24h != null && !h.returns_thin,
+  );
+
   const moverBase = movers.reduce((s, h) => s + h.value!, 0);
-  const chg24Usd = movers.reduce((s, h) => s + h.value! * h.change_24h! / 100, 0);
+
+  const chg24Usd = movers.reduce(
+    (s, h) => s + (h.value! * h.change_24h!) / 100,
+    0,
+  );
+
   const chg24Pct = moverBase > 0 ? (chg24Usd / moverBase) * 100 : null;
 
   const money = (n: number | null | undefined) =>
@@ -195,7 +308,10 @@ export function Portfolio({
 
   return (
     <div className="space-y-5">
-      {/* 1 — net worth ------------------------------------------------- */}
+      {/* ------------------------------------------------------------ */}
+      {/* 1 — NET WORTH                                               */}
+      {/* ------------------------------------------------------------ */}
+
       <section className="card overflow-hidden">
         <div className="grid lg:grid-cols-[minmax(240px,300px)_1fr]">
           <div className="border-b border-grid px-5 py-5 lg:border-b-0 lg:border-r">
@@ -209,22 +325,28 @@ export function Portfolio({
                 {hidden ? "◌" : "◉"}
               </button>
             </div>
-            {/* "…" only while something is genuinely still coming. A failed
-                scan showing the loading ellipsis reads as a page that never
-                finishes, which is the one thing the derived-state comment
-                above is at pains to avoid elsewhere. */}
+
             <div className="num mt-2 text-[30px] font-extrabold leading-none tracking-[-0.025em]">
               {state === "done" ? money(net) : state === "failed" ? "—" : "…"}
             </div>
+
             {state === "failed" && (
               <div className="mt-2 text-[12px] leading-relaxed text-bad">
                 Balance read failed — no total to show.
               </div>
             )}
+
             {state === "done" && chg24Pct != null && (
-              <div className={`num mt-2 text-[12.5px] ${chg24Usd >= 0 ? "text-good" : "text-bad"}`}>
-                {hidden ? "••••" : `${chg24Usd >= 0 ? "+" : "−"}${fmtUsd(Math.abs(chg24Usd))}`}
-                {" · "}{fmtPct(chg24Pct)}
+              <div
+                className={`num mt-2 text-[12.5px] ${
+                  chg24Usd >= 0 ? "text-good" : "text-bad"
+                }`}
+              >
+                {hidden
+                  ? "••••"
+                  : `${chg24Usd >= 0 ? "+" : "−"}${fmtUsd(Math.abs(chg24Usd))}`}
+                {" · "}
+                {fmtPct(chg24Pct)}
                 <span className="text-muted"> 24h</span>
               </div>
             )}
@@ -232,20 +354,38 @@ export function Portfolio({
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 border-t border-grid pt-3">
               <Split
                 label="Positions"
-                value={state === "done" ? money(positions) : state === "failed" ? "—" : "…"}
+                value={
+                  state === "done"
+                    ? money(positions)
+                    : state === "failed"
+                      ? "—"
+                      : "…"
+                }
               />
+
               <Split
                 label="SOL"
-                value={solValue != null ? money(solValue)
-                  : w.solBalance != null ? `${w.solBalance.toFixed(3)} SOL` : "—"}
-                sub={solValue == null && w.solBalance != null ? "no quote" : undefined}
+                value={
+                  solValue != null
+                    ? money(solValue)
+                    : w.solBalance != null
+                      ? `${w.solBalance.toFixed(3)} SOL`
+                      : "—"
+                }
+                sub={
+                  solValue == null && w.solBalance != null
+                    ? "no quote"
+                    : undefined
+                }
               />
-              <Split label="USDC" value={money(w.usdcBalance)} />
+
+              <Split label="USDT" value={money(w.usdtBalance)} />
             </div>
 
             {unpriced > 0 && (
               <p className="mt-3 text-[11px] leading-relaxed text-muted">
-                {unpriced} position{unpriced > 1 ? "s have" : " has"} no live quote and
+                {unpriced} position
+                {unpriced > 1 ? "s have" : " has"} no live quote and
                 {unpriced > 1 ? " are" : " is"} excluded from the total.
               </p>
             )}
@@ -256,6 +396,7 @@ export function Portfolio({
               <span className="text-[10.5px] uppercase tracking-[0.08em] text-muted">
                 Position value
               </span>
+
               <div className="flex gap-1">
                 {RANGES.map((r) => (
                   <button
@@ -276,16 +417,23 @@ export function Portfolio({
             {curve.points.length >= 2 ? (
               <>
                 <ValueChart points={curve.points} hidden={hidden} />
+
                 <p className="mt-2 text-[10.5px] leading-relaxed text-faint">
-                  Today&rsquo;s balances valued at past prices over the {curve.days} days all
-                  {curve.covered === 1 ? " this position covers" : ` ${curve.covered} positions cover`} —
-                  how these holdings would have moved, not your realised return.
+                  Today&rsquo;s balances valued at past prices over the{" "}
+                  {curve.days} days all{" "}
+                  {curve.covered === 1
+                    ? "this position covers"
+                    : ` ${curve.covered} positions cover`}{" "}
+                  — how these holdings would have moved, not your realised
+                  return.
                 </p>
               </>
             ) : (
               <p className="flex h-[150px] items-center justify-center text-[12px] text-muted">
-                {state === "done" ? "Not enough price history to chart."
-                  : state === "failed" ? "No balances to chart."
+                {state === "done"
+                  ? "Not enough price history to chart."
+                  : state === "failed"
+                    ? "No balances to chart."
                     : "Reading balances…"}
               </p>
             )}
@@ -293,17 +441,24 @@ export function Portfolio({
         </div>
       </section>
 
-      {/* 2 — allocation ------------------------------------------------ */}
+      {/* ------------------------------------------------------------ */}
+      {/* 2 — ALLOCATION                                               */}
+      {/* ------------------------------------------------------------ */}
+
       {state === "done" && (
         <section className="card overflow-hidden">
           <CardHead
             title="Allocation"
-            sub={priced > 0
-              ? `Share of position value. Largest holding is ${
-                ((holdings[0].value ?? 0) / positions * 100).toFixed(0)
-              }% of the book.`
-              : "Share of position value, once there is a position to share."}
+            sub={
+              priced > 0
+                ? `Share of position value. Largest holding is ${(
+                    ((holdings[0].value ?? 0) / positions) *
+                    100
+                  ).toFixed(0)}% of the book.`
+                : "Share of position value, once there is a position to share."
+            }
           />
+
           {priced === 0 ? (
             <Placeholder ghost="bars">
               Each token you hold takes a slice here, largest first, so
@@ -311,53 +466,68 @@ export function Portfolio({
               column of values.
             </Placeholder>
           ) : (
-          <div className="flex flex-col gap-2.5 px-5 py-4">
-            {holdings.filter((h) => h.value != null).map((h) => {
-              const share = (h.value! / positions) * 100;
-              return (
-                <div key={h.mint} className="flex items-center gap-3">
-                  <Link
-                    href={`/project/${h.slug}`}
-                    className="flex w-[104px] shrink-0 items-center gap-2 text-[12.5px] font-semibold hover:text-brand"
-                  >
-                    <Logo src={h.image_url} name={h.name} size={16} />
-                    <span className="truncate">{h.symbol ?? h.name}</span>
-                  </Link>
-                  <span className="h-[7px] min-w-0 flex-1 overflow-hidden rounded-full bg-surface2">
-                    <span
-                      className="block h-full rounded-full"
-                      style={{
-                        width: `${share}%`,
-                        background: "linear-gradient(90deg, var(--brand), var(--brand-hi))",
-                      }}
-                    />
-                  </span>
-                  <span className="num w-[80px] shrink-0 text-right text-[12px] text-ink2">
-                    {money(h.value)}
-                  </span>
-                  <span className="num w-[44px] shrink-0 text-right text-[12px] text-muted">
-                    {share.toFixed(1)}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
+            <div className="flex flex-col gap-2.5 px-5 py-4">
+              {holdings
+                .filter((h) => h.value != null)
+                .map((h) => {
+                  const share = (h.value! / positions) * 100;
+
+                  return (
+                    <div key={h.mint} className="flex items-center gap-3">
+                      <Link
+                        href={`/project/${h.slug}`}
+                        className="flex w-[104px] shrink-0 items-center gap-2 text-[12.5px] font-semibold hover:text-brand"
+                      >
+                        <Logo src={h.image_url} name={h.name} size={16} />
+
+                        <span className="truncate">{h.symbol ?? h.name}</span>
+                      </Link>
+
+                      <span className="h-[7px] min-w-0 flex-1 overflow-hidden rounded-full bg-surface2">
+                        <span
+                          className="block h-full rounded-full"
+                          style={{
+                            width: `${share}%`,
+                            background:
+                              "linear-gradient(90deg, var(--brand), var(--brand-hi))",
+                          }}
+                        />
+                      </span>
+
+                      <span className="num w-[80px] shrink-0 text-right text-[12px] text-ink2">
+                        {money(h.value)}
+                      </span>
+
+                      <span className="num w-[44px] shrink-0 text-right text-[12px] text-muted">
+                        {share.toFixed(1)}%
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
           )}
         </section>
       )}
 
-      {/* 3 — holdings -------------------------------------------------- */}
+      {/* ------------------------------------------------------------ */}
+      {/* 3 — HOLDINGS                                                 */}
+      {/* ------------------------------------------------------------ */}
+
       <section className="card overflow-hidden">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-grid px-5 py-4">
           <div>
             <h2 className="text-[15px] font-semibold">Holdings</h2>
+
             <p className="mt-0.5 text-[12px] text-ink2">
               Balances read live from the chain, priced at live quotes.
             </p>
           </div>
+
           <span className="text-[11.5px] text-muted">
-            {state === "loading" ? "reading chain…"
-              : state === "failed" ? "balance read failed"
+            {state === "loading"
+              ? "reading chain…"
+              : state === "failed"
+                ? "balance read failed"
                 : `scanned ${tokens.length} mints`}
           </span>
         </div>
@@ -368,15 +538,10 @@ export function Portfolio({
             zero balance, which would read as an empty wallet.
           </p>
         ) : state !== "done" ? (
-          <p className="px-5 py-8 text-center text-[12.5px] text-muted">Reading balances…</p>
+          <p className="px-5 py-8 text-center text-[12.5px] text-muted">
+            Reading balances…
+          </p>
         ) : holdings.length === 0 ? (
-          /*
-           * The five sections below this one are all gated on holding
-           * something, so a wallet holding nothing collapses the page to two
-           * cards and one grey sentence — which reads as a page that failed to
-           * finish rather than as an answer. This is the answer, stated: the
-           * scan ran, it found nothing, and here is where to go next.
-           */
           <EmptyHoldings scanned={tokens.length} />
         ) : (
           <div className="scroll-x">
@@ -394,27 +559,55 @@ export function Portfolio({
                   <th className="!text-right">Share</th>
                 </tr>
               </thead>
+
               <tbody>
                 {holdings.map((h) => (
                   <tr key={h.mint}>
                     <td>
-                      <Link href={`/project/${h.slug}`} className="flex items-center gap-2.5 hover:text-brand">
+                      <Link
+                        href={`/project/${h.slug}`}
+                        className="flex items-center gap-2.5 hover:text-brand"
+                      >
                         <Logo src={h.image_url} name={h.name} size={22} />
+
                         <span className="font-medium">{h.name}</span>
-                        {h.symbol && <span className="text-[11px] text-muted">{h.symbol}</span>}
+
+                        {h.symbol && (
+                          <span className="text-[11px] text-muted">
+                            {h.symbol}
+                          </span>
+                        )}
                       </Link>
                     </td>
-                    <td className="num text-right">{hidden ? "••••" : fmtNum(h.amount)}</td>
-                    <td className="num text-right text-ink2">{fmtPrice(h.price_usd)}</td>
+
+                    <td className="num text-right">
+                      {hidden ? "••••" : fmtNum(h.amount)}
+                    </td>
+
+                    <td className="num text-right text-ink2">
+                      {fmtPrice(h.price_usd)}
+                    </td>
+
                     <td className="text-right">
                       {h.returns_thin ? <ThinFlag /> : <Pct v={h.change_24h} />}
                     </td>
+
                     <td className="text-right">
-                      {h.returns_thin ? <span className="text-muted">—</span> : <Pct v={lookback(h.closes, 7)} />}
+                      {h.returns_thin ? (
+                        <span className="text-muted">—</span>
+                      ) : (
+                        <Pct v={lookback(h.closes, 7)} />
+                      )}
                     </td>
+
                     <td className="text-right">
-                      {h.returns_thin ? <span className="text-muted">—</span> : <Pct v={lookback(h.closes, 30)} />}
+                      {h.returns_thin ? (
+                        <span className="text-muted">—</span>
+                      ) : (
+                        <Pct v={lookback(h.closes, 30)} />
+                      )}
                     </td>
+
                     <td>
                       <div className="ml-auto w-[84px]">
                         {h.closes.length >= 2 ? (
@@ -422,16 +615,26 @@ export function Portfolio({
                             values={h.closes.slice(-30)}
                             height={24}
                             fallback
-                            color={(lookback(h.closes, 30) ?? 0) >= 0 ? "var(--good)" : "var(--bad)"}
+                            color={
+                              (lookback(h.closes, 30) ?? 0) >= 0
+                                ? "var(--good)"
+                                : "var(--bad)"
+                            }
                           />
                         ) : (
                           <span className="block text-right text-muted">—</span>
                         )}
                       </div>
                     </td>
-                    <td className="num text-right font-semibold">{money(h.value)}</td>
+
+                    <td className="num text-right font-semibold">
+                      {money(h.value)}
+                    </td>
+
                     <td className="num text-right text-muted">
-                      {h.value != null && positions > 0 ? `${((h.value / positions) * 100).toFixed(1)}%` : "—"}
+                      {h.value != null && positions > 0
+                        ? `${((h.value / positions) * 100).toFixed(1)}%`
+                        : "—"}
                     </td>
                   </tr>
                 ))}
@@ -441,180 +644,242 @@ export function Portfolio({
         )}
 
         <div className="border-t border-grid px-5 py-3 text-[11px] leading-relaxed text-muted">
-          {/* Was "read in your browser". That stopped being true when the read
-              moved to this site's own route — the public Solana endpoint
-              refuses any request carrying an `Origin`, so a browser cannot
-              reach it at all. The claim is narrowed to what still holds: read
-              on demand, kept by nobody. */}
-          Balances are read live from the chain for this session and never stored.
+          Balances are read live from the chain for this session and never
+          stored.
           {holdings.length > 0 && (
             <>
-              {" "}A position whose pool sits below the reliability floor shows{" "}
-              <span className="text-warn">thin</span> instead of a return — the arithmetic
-              would be sound on a price the market cannot defend.
+              {" "}
+              A position whose pool sits below the reliability floor shows{" "}
+              <span className="text-warn">thin</span> instead of a return — the
+              arithmetic would be sound on a price the market cannot defend.
             </>
           )}
         </div>
       </section>
 
-      {/* 4 — since raise ----------------------------------------------- */}
+      {/* ------------------------------------------------------------ */}
+      {/* 4 — PERFORMANCE SINCE RAISE                                  */}
+      {/* ------------------------------------------------------------ */}
+
       {state === "done" && (
         <section className="card overflow-hidden">
           <CardHead
             title="Performance since raise"
             sub="What each token has done against the price its backers paid — not against your entry."
           />
+
           {!holdings.some((h) => h.raise_price != null) ? (
             <Placeholder ghost="rows">
               For each token you hold that ran a raise: the price its backers
               paid, where it trades now, and how far it sits below its all-time
-              high. The archive knows the raise price, so this needs nothing
-              from your transaction history.
+              high.
             </Placeholder>
           ) : (
-          <div className="scroll-x">
-            <table className="itable text-[13px]">
-              <thead>
-                <tr>
-                  <th>Token</th>
-                  <th className="!text-right">Raise price</th>
-                  <th className="!text-right">Now</th>
-                  <th className="!text-right">Since raise</th>
-                  <th className="!text-right">From ATH</th>
-                  <th className="!text-right">ATH</th>
-                </tr>
-              </thead>
-              <tbody>
-                {holdings.filter((h) => h.raise_price != null).map((h) => (
-                  <tr key={h.mint}>
-                    <td>
-                      <Link href={`/project/${h.slug}`} className="flex items-center gap-2.5 hover:text-brand">
-                        <Logo src={h.image_url} name={h.name} size={20} />
-                        <span className="font-medium">{h.symbol ?? h.name}</span>
-                      </Link>
-                    </td>
-                    <td className="num text-right text-ink2">{fmtPrice(h.raise_price)}</td>
-                    <td className="num text-right text-ink2">{fmtPrice(h.price_usd)}</td>
-                    <td className="text-right font-semibold"><Pct v={h.roi_since_raise} dp={0} /></td>
-                    <td className="text-right"><Pct v={h.from_ath} dp={0} /></td>
-                    <td className="num text-right text-ink2">{fmtPrice(h.ath)}</td>
+            <div className="scroll-x">
+              <table className="itable text-[13px]">
+                <thead>
+                  <tr>
+                    <th>Token</th>
+                    <th className="!text-right">Raise price</th>
+                    <th className="!text-right">Now</th>
+                    <th className="!text-right">Since raise</th>
+                    <th className="!text-right">From ATH</th>
+                    <th className="!text-right">ATH</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+
+                <tbody>
+                  {holdings
+                    .filter((h) => h.raise_price != null)
+                    .map((h) => (
+                      <tr key={h.mint}>
+                        <td>
+                          <Link
+                            href={`/project/${h.slug}`}
+                            className="flex items-center gap-2.5 hover:text-brand"
+                          >
+                            <Logo src={h.image_url} name={h.name} size={20} />
+
+                            <span className="font-medium">
+                              {h.symbol ?? h.name}
+                            </span>
+                          </Link>
+                        </td>
+
+                        <td className="num text-right text-ink2">
+                          {fmtPrice(h.raise_price)}
+                        </td>
+
+                        <td className="num text-right text-ink2">
+                          {fmtPrice(h.price_usd)}
+                        </td>
+
+                        <td className="text-right font-semibold">
+                          <Pct v={h.roi_since_raise} dp={0} />
+                        </td>
+
+                        <td className="text-right">
+                          <Pct v={h.from_ath} dp={0} />
+                        </td>
+
+                        <td className="num text-right text-ink2">
+                          {fmtPrice(h.ath)}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
           )}
+
           <div className="border-t border-grid px-5 py-3 text-[11px] leading-relaxed text-muted">
-            This is the token&rsquo;s history, not yours. Cost basis, realised PnL and hold
-            duration are not shown: they need the price paid at every acquisition, which
-            requires this wallet&rsquo;s full transaction history from a parsed-transaction
-            indexer.
+            This is the token&rsquo;s history, not yours. Cost basis, realised
+            PnL and hold duration are not shown: they need the price paid at
+            every acquisition.
           </div>
         </section>
       )}
 
-      {/* 5 — exit liquidity -------------------------------------------- */}
+      {/* ------------------------------------------------------------ */}
+      {/* 5 — EXIT LIQUIDITY                                           */}
+      {/* ------------------------------------------------------------ */}
+
       {state === "done" && (
         <section className="card overflow-hidden">
           <CardHead
             title="Exit liquidity"
             sub="Your position measured against the pool that would have to absorb it."
           />
+
           {!holdings.some((h) => h.value != null && h.liquidity_usd) ? (
             <Placeholder ghost="rows">
               Each position weighed against the pool that would have to buy it
-              back. A holding worth more than the liquidity behind it cannot be
-              sold at the price being quoted for it, however green the return
-              column looks.
+              back.
             </Placeholder>
           ) : (
-          <div className="scroll-x">
-            <table className="itable text-[13px]">
-              <thead>
-                <tr>
-                  <th>Token</th>
-                  <th className="!text-right">Position</th>
-                  <th className="!text-right">Pool liquidity</th>
-                  <th className="!text-right">Share of pool</th>
-                  <th className="!text-right">Assessment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {holdings
-                  .filter((h) => h.value != null && h.liquidity_usd)
-                  .map((h) => ({ ...h, share: (h.value! / h.liquidity_usd!) * 100 }))
-                  .sort((a, b) => b.share - a.share)
-                  .map((h) => {
-                    const sev = h.share > 100 ? "crit" : h.share > 5 ? "warn" : "ok";
-                    return (
-                      <tr key={h.mint}>
-                        <td>
-                          <span className="flex items-center gap-2.5">
-                            <span
-                              aria-hidden
-                              className={`h-[5px] w-[5px] shrink-0 rounded-full ${
-                                sev === "crit" ? "bg-bad" : sev === "warn" ? "bg-warn" : "bg-good"
-                              }`}
-                            />
-                            <Link href={`/project/${h.slug}`} className="font-medium hover:text-brand">
-                              {h.symbol ?? h.name}
-                            </Link>
-                          </span>
-                        </td>
-                        <td className="num text-right">{money(h.value)}</td>
-                        <td className="num text-right text-ink2">
-                          {fmtUsd(h.liquidity_usd, { compact: true })}
-                        </td>
-                        <td
-                          className={`num text-right font-semibold ${
-                            sev === "crit" ? "text-bad" : sev === "warn" ? "text-warn" : "text-muted"
-                          }`}
-                        >
-                          {h.share >= 100 ? h.share.toFixed(0) : h.share.toFixed(2)}%
-                        </td>
-                        <td className="text-right">
-                          <span
-                            className={`inline-block rounded-full border px-2.5 py-1 text-[10.5px] ${
-                              sev === "crit" ? "border-bad/40 text-bad"
-                                : sev === "warn" ? "border-warn/40 text-warn"
-                                  : "border-line2 text-ink2"
+            <div className="scroll-x">
+              <table className="itable text-[13px]">
+                <thead>
+                  <tr>
+                    <th>Token</th>
+                    <th className="!text-right">Position</th>
+                    <th className="!text-right">Pool liquidity</th>
+                    <th className="!text-right">Share of pool</th>
+                    <th className="!text-right">Assessment</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {holdings
+                    .filter((h) => h.value != null && h.liquidity_usd)
+                    .map((h) => ({
+                      ...h,
+                      share: (h.value! / h.liquidity_usd!) * 100,
+                    }))
+                    .sort((a, b) => b.share - a.share)
+                    .map((h) => {
+                      const sev =
+                        h.share > 100 ? "crit" : h.share > 5 ? "warn" : "ok";
+
+                      return (
+                        <tr key={h.mint}>
+                          <td>
+                            <span className="flex items-center gap-2.5">
+                              <span
+                                aria-hidden
+                                className={`h-[5px] w-[5px] shrink-0 rounded-full ${
+                                  sev === "crit"
+                                    ? "bg-bad"
+                                    : sev === "warn"
+                                      ? "bg-warn"
+                                      : "bg-good"
+                                }`}
+                              />
+
+                              <Link
+                                href={`/project/${h.slug}`}
+                                className="font-medium hover:text-brand"
+                              >
+                                {h.symbol ?? h.name}
+                              </Link>
+                            </span>
+                          </td>
+
+                          <td className="num text-right">{money(h.value)}</td>
+
+                          <td className="num text-right text-ink2">
+                            {fmtUsd(h.liquidity_usd, {
+                              compact: true,
+                            })}
+                          </td>
+
+                          <td
+                            className={`num text-right font-semibold ${
+                              sev === "crit"
+                                ? "text-bad"
+                                : sev === "warn"
+                                  ? "text-warn"
+                                  : "text-muted"
                             }`}
                           >
-                            {sev === "crit" ? "Cannot exit at quote"
-                              : sev === "warn" ? "Would move the pool"
-                                : "Exits cleanly"}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
+                            {h.share >= 100
+                              ? h.share.toFixed(0)
+                              : h.share.toFixed(2)}
+                            %
+                          </td>
+
+                          <td className="text-right">
+                            <span
+                              className={`inline-block rounded-full border px-2.5 py-1 text-[10.5px] ${
+                                sev === "crit"
+                                  ? "border-bad/40 text-bad"
+                                  : sev === "warn"
+                                    ? "border-warn/40 text-warn"
+                                    : "border-line2 text-ink2"
+                              }`}
+                            >
+                              {sev === "crit"
+                                ? "Cannot exit at quote"
+                                : sev === "warn"
+                                  ? "Would move the pool"
+                                  : "Exits cleanly"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
           )}
+
           <div className="border-t border-grid px-5 py-3 text-[11px] leading-relaxed text-muted">
-            Share of pool is position value ÷ quoted liquidity. Above ~5% a market sell
-            moves the price against you; above 100% the quoted price is unreachable for
-            the full size at any speed.
+            Share of pool is position value ÷ quoted liquidity. Above ~5% a
+            market sell moves the price against you; above 100% the quoted price
+            is unreachable for the full size.
           </div>
         </section>
       )}
 
-      {/* 6 — what's happening in what you hold -------------------------- */}
+      {/* ------------------------------------------------------------ */}
+      {/* 6 — ACTIVITY + SIGNALS                                      */}
+      {/* ------------------------------------------------------------ */}
+
       {state === "done" && (
         <div className="grid gap-5 lg:grid-cols-2">
           <section className="card overflow-hidden">
-            <CardHead title="Activity in your holdings" sub="The timeline, filtered to what you own." />
+            <CardHead
+              title="Activity in your holdings"
+              sub="The timeline, filtered to what you own."
+            />
+
             {feed.length === 0 ? (
               <Placeholder>
                 Raises closing, tokens starting to trade, releases shipping and
-                news breaking — narrowed to the projects in your wallet, so the
-                feed is about your book rather than the whole market.
+                news breaking — narrowed to the projects in your wallet.
               </Placeholder>
             ) : (
               <div className="px-5 pb-3 pt-1">
-                {/* Keyed on the story, not the title: the lifecycle types reuse
-                    one label across projects, so titles alone collide. */}
                 {feed.map((e) => (
                   <div
                     key={`${e.type}|${e.slugs[0]}|${e.ts}`}
@@ -623,7 +888,11 @@ export function Portfolio({
                     <span className="inline-block rounded bg-surface2 px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider text-muted">
                       {e.type.replace(/_/g, " ")}
                     </span>
-                    <div className="mt-1.5 text-[12.5px] font-semibold leading-snug">{e.title}</div>
+
+                    <div className="mt-1.5 text-[12.5px] font-semibold leading-snug">
+                      {e.title}
+                    </div>
+
                     <div className="mt-1 text-[11px] text-faint">
                       {e.names.join(" · ")} · {timeAgo(e.ts)}
                     </div>
@@ -634,13 +903,15 @@ export function Portfolio({
           </section>
 
           <section className="card overflow-hidden">
-            <CardHead title="Signals" sub="Observations on the projects you hold." />
+            <CardHead
+              title="Signals"
+              sub="Observations on the projects you hold."
+            />
+
             {sigs.length === 0 ? (
               <Placeholder>
                 Volume jumps, holder concentration, development going quiet —
-                the same observations the Signals page carries, kept to the
-                projects you own so a warning about one of them cannot be lost
-                in a feed about twenty-two.
+                observations kept to the projects you own.
               </Placeholder>
             ) : (
               <div className="px-5 pb-3 pt-1">
@@ -649,7 +920,10 @@ export function Portfolio({
                     key={`${s.slug}-${i}`}
                     className="border-t border-grid py-3 text-[12.5px] leading-relaxed text-ink2 first:border-t-0"
                   >
-                    <Link href={`/project/${s.slug}`} className="font-semibold text-ink hover:text-brand">
+                    <Link
+                      href={`/project/${s.slug}`}
+                      className="font-semibold text-ink hover:text-brand"
+                    >
                       {s.name}
                     </Link>{" "}
                     · {s.text}
@@ -661,11 +935,19 @@ export function Portfolio({
         </div>
       )}
 
-      {/* 7 — provenance ------------------------------------------------- */}
+      {/* ------------------------------------------------------------ */}
+      {/* 7 — PROVENANCE                                               */}
+      {/* ------------------------------------------------------------ */}
+
       <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
         <span className="num">{shortAddr(address)}</span>
+
         <CopyButton value={address} />
-        <Link href={`/wallet/${address}`} className="text-brand hover:underline">
+
+        <Link
+          href={`/wallet/${address}`}
+          className="text-brand hover:underline"
+        >
           public wallet page →
         </Link>
       </div>
@@ -673,25 +955,31 @@ export function Portfolio({
   );
 }
 
-/* ------------------------------------------------------------------ parts */
+/* ------------------------------------------------------------------ */
+/* Helpers                                                            */
+/* ------------------------------------------------------------------ */
 
-/**
- * Return over `days` of daily closes, or null when the series does not reach
- * back that far. A short history renders nothing rather than a figure measured
- * over whatever days happen to exist — the same rule `periodReturns` applies
- * on the server.
- */
 function lookback(closes: number[], days: number): number | null {
   if (closes.length <= days) return null;
+
   const then = closes[closes.length - 1 - days];
+
   const now = closes[closes.length - 1];
+
   return then > 0 ? ((now - then) / then) * 100 : null;
 }
 
 function Pct({ v, dp = 1 }: { v: number | null | undefined; dp?: number }) {
-  if (v == null || !Number.isFinite(v)) return <span className="text-muted">—</span>;
+  if (v == null || !Number.isFinite(v)) {
+    return <span className="text-muted">—</span>;
+  }
+
   return (
-    <span className={`num ${v > 0 ? "text-good" : v < 0 ? "text-bad" : "text-ink2"}`}>
+    <span
+      className={`num ${
+        v > 0 ? "text-good" : v < 0 ? "text-bad" : "text-ink2"
+      }`}
+    >
       {`${v > 0 ? "+" : ""}${v.toFixed(dp)}%`}
     </span>
   );
@@ -708,18 +996,6 @@ function ThinFlag() {
   );
 }
 
-/**
- * The body a section shows when it has nothing to put in it yet.
- *
- * Every section stays on the page rather than disappearing, so the shape of
- * the portfolio is legible before there is one — a reader can see that exit
- * liquidity is a thing this page will tell them, instead of discovering it
- * only once they happen to hold something.
- *
- * `ghost` draws the section's own silhouette in the divider colour: allocation
- * bars, table rows. Faint enough to read as an outline of what goes here, not
- * as content that failed to load.
- */
 function Placeholder({
   children,
   ghost,
@@ -730,18 +1006,30 @@ function Placeholder({
   return (
     <div className="px-5 py-7">
       {ghost && (
-        <div className="mx-auto mb-5 flex max-w-[520px] flex-col gap-2.5" aria-hidden>
-          {(ghost === "bars" ? [72, 46, 30, 18] : [100, 100, 100]).map((wpc, i) => (
-            <div key={i} className="flex items-center gap-3">
-              {ghost === "bars" && <span className="h-2.5 w-12 rounded bg-grid" />}
-              <span
-                className="h-2.5 flex-1 rounded bg-grid"
-                style={{ maxWidth: ghost === "bars" ? `${wpc}%` : undefined, opacity: 1 - i * 0.22 }}
-              />
-            </div>
-          ))}
+        <div
+          className="mx-auto mb-5 flex max-w-[520px] flex-col gap-2.5"
+          aria-hidden
+        >
+          {(ghost === "bars" ? [72, 46, 30, 18] : [100, 100, 100]).map(
+            (wpc, i) => (
+              <div key={i} className="flex items-center gap-3">
+                {ghost === "bars" && (
+                  <span className="h-2.5 w-12 rounded bg-grid" />
+                )}
+
+                <span
+                  className="h-2.5 flex-1 rounded bg-grid"
+                  style={{
+                    maxWidth: ghost === "bars" ? `${wpc}%` : undefined,
+                    opacity: 1 - i * 0.22,
+                  }}
+                />
+              </div>
+            ),
+          )}
         </div>
       )}
+
       <p className="mx-auto max-w-[460px] text-center text-[12px] leading-relaxed text-muted">
         {children}
       </p>
@@ -749,14 +1037,6 @@ function Placeholder({
   );
 }
 
-/**
- * What the page says when the scan succeeded and found nothing.
- *
- * Deliberately not a placeholder for the hidden sections: an empty Allocation
- * chart and an empty Exit-liquidity table would be five boxes explaining what
- * they would contain, which is a worse page than one that answers the question
- * and points somewhere useful.
- */
 function EmptyHoldings({ scanned }: { scanned: number }) {
   return (
     <div className="px-5 py-10 text-center">
@@ -766,14 +1046,17 @@ function EmptyHoldings({ scanned }: { scanned: number }) {
       >
         ◎
       </span>
+
       <h3 className="mt-3.5 text-[14.5px] font-semibold">
         No tracked projects in this wallet yet
       </h3>
+
       <p className="mx-auto mt-1.5 max-w-[420px] text-[12.5px] leading-relaxed text-muted">
-        All {scanned} mints were checked against your balances and none came back
-        held. Your SOL and USDC are above — they are counted, they are just not
-        positions in anything tracked here.
+        All {scanned} mints were checked against your balances and none came
+        back held. Your SOL and USDT are above — they are counted, they are just
+        not positions in anything tracked here.
       </p>
+
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
         <Link
           href="/screener"
@@ -781,6 +1064,7 @@ function EmptyHoldings({ scanned }: { scanned: number }) {
         >
           Browse the {scanned} projects
         </Link>
+
         <Link
           href="/observations"
           className="inline-flex items-center gap-2 rounded-xl border border-line2 px-4 py-2.5 text-[13px] font-medium text-ink2 transition-colors duration-150 hover:border-accent hover:text-brand"
@@ -788,6 +1072,7 @@ function EmptyHoldings({ scanned }: { scanned: number }) {
           See what&rsquo;s moving
         </Link>
       </div>
+
       <p className="mt-5 text-[11px] leading-relaxed text-faint">
         The sections below fill in from the same scan — each one describes what
         it will show.
@@ -796,11 +1081,21 @@ function EmptyHoldings({ scanned }: { scanned: number }) {
   );
 }
 
-function Split({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function Split({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
   return (
     <div>
       <div className="text-[11px] text-muted">{label}</div>
+
       <div className="num mt-0.5 text-[13.5px] font-semibold">{value}</div>
+
       {sub && <div className="text-[10px] text-faint">{sub}</div>}
     </div>
   );
@@ -810,29 +1105,35 @@ function CardHead({ title, sub }: { title: string; sub: string }) {
   return (
     <div className="border-b border-grid px-5 py-4">
       <h2 className="text-[15px] font-semibold">{title}</h2>
+
       <p className="mt-0.5 text-[12px] text-ink2">{sub}</p>
     </div>
   );
 }
 
-/**
- * The value curve.
- *
- * Drawn here rather than with `Sparkline` because this one carries its own
- * scale: without the end labels a $5k move across a $28k book reads as a
- * collapse, since the path fills the box either way. The labels are what stop
- * the shape from overstating the change.
- */
 function ValueChart({ points, hidden }: { points: number[]; hidden: boolean }) {
-  const W = 640, H = 150;
-  const lo = Math.min(...points), hi = Math.max(...points);
+  const W = 640;
+  const H = 150;
+
+  const lo = Math.min(...points);
+  const hi = Math.max(...points);
+
   const span = hi - lo || Math.max(hi * 0.02, 1);
+
   const pad = span * 0.14;
+
   const x = (i: number) => (i / (points.length - 1)) * W;
+
   const y = (v: number) => H - ((v - (lo - pad)) / (span + pad * 2)) * H;
-  const line = points.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+
+  const line = points
+    .map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`)
+    .join(" ");
+
   const rising = points[points.length - 1] >= points[0];
+
   const stroke = rising ? "var(--good)" : "var(--bad)";
+
   const id = `pv-${rising ? "up" : "dn"}`;
 
   return (
@@ -847,25 +1148,47 @@ function ValueChart({ points, hidden }: { points: number[]; hidden: boolean }) {
         <defs>
           <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={stroke} stopOpacity="0.24" />
+
             <stop offset="100%" stopColor={stroke} stopOpacity="0" />
           </linearGradient>
         </defs>
+
         {[0.25, 0.5, 0.75].map((f) => (
           <line
-            key={f} x1="0" y1={H * f} x2={W} y2={H * f}
-            stroke="var(--grid)" strokeWidth="1" strokeDasharray="2 4"
+            key={f}
+            x1="0"
+            y1={H * f}
+            x2={W}
+            y2={H * f}
+            stroke="var(--grid)"
+            strokeWidth="1"
+            strokeDasharray="2 4"
           />
         ))}
+
         <path d={`${line} L ${W} ${H} L 0 ${H} Z`} fill={`url(#${id})`} />
-        <path d={line} fill="none" stroke={stroke} strokeWidth="1.8" strokeLinejoin="round" />
+
+        <path
+          d={line}
+          fill="none"
+          stroke={stroke}
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
       </svg>
+
       {!hidden && (
         <>
           <span className="num pointer-events-none absolute right-1 top-0 text-[10px] text-faint">
-            {fmtUsd(hi, { compact: true })}
+            {fmtUsd(hi, {
+              compact: true,
+            })}
           </span>
+
           <span className="num pointer-events-none absolute bottom-0 right-1 text-[10px] text-faint">
-            {fmtUsd(lo, { compact: true })}
+            {fmtUsd(lo, {
+              compact: true,
+            })}
           </span>
         </>
       )}

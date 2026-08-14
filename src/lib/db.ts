@@ -9,8 +9,11 @@ const BUNDLED_DB_PATH = path.join(DATA_DIR, "metaintel.db");
 // only /tmp is writable. WAL mode needs to create -shm/-wal sidecar files
 // even for reads, so on read-only filesystems we copy the bundled snapshot
 // into /tmp once per cold start and open it there instead.
-const IS_READONLY_FS = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
-const DB_PATH = IS_READONLY_FS ? path.join("/tmp", "metaintel.db") : BUNDLED_DB_PATH;
+const IS_READONLY_FS =
+  !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+const DB_PATH = IS_READONLY_FS
+  ? path.join("/tmp", "metaintel.db")
+  : BUNDLED_DB_PATH;
 
 let _db: Database.Database | null = null;
 
@@ -112,6 +115,36 @@ function migrate(d: Database.Database) {
     state TEXT,                -- pending | passed | failed
     pass_price REAL, fail_price REAL,
     url TEXT, description TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS governance (
+    project_id INTEGER PRIMARY KEY REFERENCES projects(id),
+  
+    detected INTEGER NOT NULL DEFAULT 0,
+    type TEXT NOT NULL DEFAULT 'unknown',
+    protocol TEXT,
+  
+    governance_address TEXT,
+    governance_program TEXT,
+  
+    voting_model TEXT,
+    voting_token TEXT,
+  
+    proposal_count INTEGER NOT NULL DEFAULT 0,
+    active_proposals INTEGER NOT NULL DEFAULT 0,
+    passed_proposals INTEGER NOT NULL DEFAULT 0,
+    failed_proposals INTEGER NOT NULL DEFAULT 0,
+  
+    quorum REAL,
+    approval_threshold REAL,
+  
+    treasury_address TEXT,
+  
+    mint_authority TEXT,
+    freeze_authority TEXT,
+  
+    source_url TEXT,
+    updated_ts INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS events (
@@ -258,54 +291,158 @@ function migrate(d: Database.Database) {
   addColumns(d, "treasury_snapshots", [["last_seen_ts", "INTEGER"]]);
 }
 
-function addColumns(d: Database.Database, table: string, added: [string, string][]) {
+function addColumns(
+  d: Database.Database,
+  table: string,
+  added: [string, string][],
+) {
   const cols = new Set(
-    (d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+    (d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
+      (c) => c.name,
+    ),
   );
   for (const [name, type] of added) {
-    if (!cols.has(name)) d.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+    if (!cols.has(name))
+      d.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
   }
 }
 
 // ---------- typed helpers ----------
 
 export interface Project {
-  id: number; slug: string; name: string; symbol: string | null;
-  description: string | null; category: string | null; status: string | null;
-  image_url: string | null; website: string | null; twitter: string | null;
-  discord: string | null; telegram: string | null; github: string | null;
-  docs: string | null; whitepaper: string | null; mint: string | null;
-  dao_address: string | null; treasury_address: string | null; pool_address: string | null;
-  launch_ts: number | null; raise_start_ts: number | null; raise_end_ts: number | null;
-  raise_amount_usd: number | null; raise_goal_usd: number | null;
-  raise_contributors: number | null; raise_price: number | null;
+  id: number;
+  slug: string;
+  name: string;
+  symbol: string | null;
+  description: string | null;
+  category: string | null;
+  status: string | null;
+  image_url: string | null;
+  website: string | null;
+  twitter: string | null;
+  discord: string | null;
+  telegram: string | null;
+  github: string | null;
+  docs: string | null;
+  whitepaper: string | null;
+  mint: string | null;
+  dao_address: string | null;
+  treasury_address: string | null;
+  pool_address: string | null;
+  launch_ts: number | null;
+  raise_start_ts: number | null;
+  raise_end_ts: number | null;
+  raise_amount_usd: number | null;
+  raise_goal_usd: number | null;
+  raise_contributors: number | null;
+  raise_price: number | null;
   initial_supply: number | null;
-  total_supply: number | null; circulating_supply: number | null;
-  team_package: number | null; liquidity_tokens: number | null;
+  total_supply: number | null;
+  circulating_supply: number | null;
+  team_package: number | null;
+  liquidity_tokens: number | null;
   launch_address: string | null;
   /** Vault holding team_package — the largest holder of most launches. */
   team_address: string | null;
   /** Vaults behind liquidity_tokens, from MetaDAO rather than an aggregator. */
   amm_vault_address: string | null;
   lp_pool_address: string | null;
-  raise_note: string | null; raise_source_url: string | null;
-  raise_committed_usd: number | null; raise_fdv_usd: number | null;
+  raise_note: string | null;
+  raise_source_url: string | null;
+  raise_committed_usd: number | null;
+  raise_fdv_usd: number | null;
   raise_track: string | null;
-  source: string | null; updated_ts: number | null;
+  source: string | null;
+  updated_ts: number | null;
 }
 
-export function upsertProject(p: Partial<Project> & { slug: string; name: string }): number {
+export type GovernanceType =
+  | "metadao"
+  | "realms"
+  | "squads"
+  | "multisig"
+  | "custom"
+  | "none"
+  | "unknown";
+
+export interface Governance {
+  project_id: number;
+  detected: number;
+  type: GovernanceType;
+  protocol: string | null;
+
+  governance_address: string | null;
+  governance_program: string | null;
+
+  voting_model: string | null;
+  voting_token: string | null;
+
+  proposal_count: number;
+  active_proposals: number;
+  passed_proposals: number;
+  failed_proposals: number;
+
+  quorum: number | null;
+  approval_threshold: number | null;
+
+  treasury_address: string | null;
+
+  mint_authority: string | null;
+  freeze_authority: string | null;
+
+  source_url: string | null;
+  updated_ts: number | null;
+}
+
+export function upsertProject(
+  p: Partial<Project> & { slug: string; name: string },
+): number {
   const d = db();
-  const existing = d.prepare("SELECT id FROM projects WHERE slug = ? OR (mint IS NOT NULL AND mint = ?)")
+  const existing = d
+    .prepare(
+      "SELECT id FROM projects WHERE slug = ? OR (mint IS NOT NULL AND mint = ?)",
+    )
     .get(p.slug, p.mint ?? null) as { id: number } | undefined;
   const cols = [
-    "name","symbol","description","category","status","image_url","website","twitter","discord",
-    "telegram","github","docs","whitepaper","mint","dao_address","treasury_address","pool_address",
-    "launch_ts","raise_start_ts","raise_end_ts","raise_amount_usd","raise_goal_usd",
-    "raise_contributors","raise_price","initial_supply",
-    "total_supply","circulating_supply","team_package","liquidity_tokens","launch_address",
-    "team_address","amm_vault_address","lp_pool_address",
-    "raise_note","raise_source_url","raise_committed_usd","raise_fdv_usd","raise_track","source",
+    "name",
+    "symbol",
+    "description",
+    "category",
+    "status",
+    "image_url",
+    "website",
+    "twitter",
+    "discord",
+    "telegram",
+    "github",
+    "docs",
+    "whitepaper",
+    "mint",
+    "dao_address",
+    "treasury_address",
+    "pool_address",
+    "launch_ts",
+    "raise_start_ts",
+    "raise_end_ts",
+    "raise_amount_usd",
+    "raise_goal_usd",
+    "raise_contributors",
+    "raise_price",
+    "initial_supply",
+    "total_supply",
+    "circulating_supply",
+    "team_package",
+    "liquidity_tokens",
+    "launch_address",
+    "team_address",
+    "amm_vault_address",
+    "lp_pool_address",
+    "raise_note",
+    "raise_source_url",
+    "raise_committed_usd",
+    "raise_fdv_usd",
+    "raise_track",
+    "source",
   ] as const;
   if (existing) {
     // only overwrite with non-null incoming values
@@ -313,26 +450,38 @@ export function upsertProject(p: Partial<Project> & { slug: string; name: string
     const vals: unknown[] = [];
     for (const c of cols) {
       const v = (p as Record<string, unknown>)[c];
-      if (v !== undefined && v !== null && v !== "") { sets.push(`${c} = ?`); vals.push(v); }
+      if (v !== undefined && v !== null && v !== "") {
+        sets.push(`${c} = ?`);
+        vals.push(v);
+      }
     }
-    sets.push("updated_ts = ?"); vals.push(Math.floor(Date.now() / 1000));
+    sets.push("updated_ts = ?");
+    vals.push(Math.floor(Date.now() / 1000));
     vals.push(existing.id);
-    d.prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ?`).run(...vals);
+    d.prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ?`).run(
+      ...vals,
+    );
     return existing.id;
   }
   const vals = cols.map((c) => (p as Record<string, unknown>)[c] ?? null);
-  const info = d.prepare(
-    `INSERT INTO projects (slug, ${cols.join(", ")}, updated_ts) VALUES (?, ${cols.map(() => "?").join(", ")}, ?)`
-  ).run(p.slug, ...vals, Math.floor(Date.now() / 1000));
+  const info = d
+    .prepare(
+      `INSERT INTO projects (slug, ${cols.join(", ")}, updated_ts) VALUES (?, ${cols.map(() => "?").join(", ")}, ?)`,
+    )
+    .run(p.slug, ...vals, Math.floor(Date.now() / 1000));
   return Number(info.lastInsertRowid);
 }
 
 export function allProjects(): Project[] {
-  return db().prepare("SELECT * FROM projects ORDER BY name").all() as Project[];
+  return db()
+    .prepare("SELECT * FROM projects ORDER BY name")
+    .all() as Project[];
 }
 
 export function projectBySlug(slug: string): Project | undefined {
-  return db().prepare("SELECT * FROM projects WHERE slug = ?").get(slug) as Project | undefined;
+  return db().prepare("SELECT * FROM projects WHERE slug = ?").get(slug) as
+    | Project
+    | undefined;
 }
 
 /**
@@ -362,15 +511,18 @@ export function recordStructuralEvent(
   ts: number,
   type: StructuralEvent,
   title: string,
-  detail: string | null
+  detail: string | null,
 ): void {
   const d = db();
-  d.prepare("DELETE FROM events WHERE project_id = ? AND type = ? AND ts <> ?")
-    .run(projectId, type, ts);
-  d.prepare(`
+  d.prepare(
+    "DELETE FROM events WHERE project_id = ? AND type = ? AND ts <> ?",
+  ).run(projectId, type, ts);
+  d.prepare(
+    `
     INSERT INTO events (project_id, ts, type, title, detail, url) VALUES (?,?,?,?,?,NULL)
     ON CONFLICT (project_id, ts, type, title) DO UPDATE SET detail = excluded.detail
-  `).run(projectId, ts, type, title, detail);
+  `,
+  ).run(projectId, ts, type, title, detail);
 }
 
 /**
@@ -390,22 +542,109 @@ export function sameBalance(a: number | null, b: number | null): boolean {
  * extends the current row's last_seen_ts — the read is still on file, it just
  * does not pretend to be a new data point. Returns true on a real change.
  */
-export function recordTreasurySnapshot(projectId: number, ts: number, valueUsd: number): boolean {
+export function recordTreasurySnapshot(
+  projectId: number,
+  ts: number,
+  valueUsd: number,
+): boolean {
   const d = db();
-  const prev = d.prepare(
-    "SELECT ts, value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1"
-  ).get(projectId) as { ts: number; value_usd: number | null } | undefined;
+  const prev = d
+    .prepare(
+      "SELECT ts, value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1",
+    )
+    .get(projectId) as { ts: number; value_usd: number | null } | undefined;
 
   if (prev && sameBalance(prev.value_usd, valueUsd)) {
     // max() guards a clock skew or a backfill from walking last_seen_ts backwards.
     d.prepare(
-      "UPDATE treasury_snapshots SET last_seen_ts = max(COALESCE(last_seen_ts, ts), ?) WHERE project_id = ? AND ts = ?"
+      "UPDATE treasury_snapshots SET last_seen_ts = max(COALESCE(last_seen_ts, ts), ?) WHERE project_id = ? AND ts = ?",
     ).run(ts, projectId, prev.ts);
     return false;
   }
 
   d.prepare(
-    "INSERT OR REPLACE INTO treasury_snapshots (project_id, ts, value_usd, last_seen_ts) VALUES (?,?,?,?)"
+    "INSERT OR REPLACE INTO treasury_snapshots (project_id, ts, value_usd, last_seen_ts) VALUES (?,?,?,?)",
   ).run(projectId, ts, valueUsd, ts);
   return true;
+}
+
+export function saveGovernance(
+  projectId: number,
+  data: Omit<Governance, "project_id">,
+): void {
+  const d = db();
+
+  d.prepare(
+    `
+    INSERT INTO governance (
+      project_id,
+      detected,
+      type,
+      protocol,
+      governance_address,
+      governance_program,
+      voting_model,
+      voting_token,
+      proposal_count,
+      active_proposals,
+      passed_proposals,
+      failed_proposals,
+      quorum,
+      approval_threshold,
+      treasury_address,
+      mint_authority,
+      freeze_authority,
+      source_url,
+      updated_ts
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(project_id) DO UPDATE SET
+      detected = excluded.detected,
+      type = excluded.type,
+      protocol = excluded.protocol,
+      governance_address = excluded.governance_address,
+      governance_program = excluded.governance_program,
+      voting_model = excluded.voting_model,
+      voting_token = excluded.voting_token,
+      proposal_count = excluded.proposal_count,
+      active_proposals = excluded.active_proposals,
+      passed_proposals = excluded.passed_proposals,
+      failed_proposals = excluded.failed_proposals,
+      quorum = excluded.quorum,
+      approval_threshold = excluded.approval_threshold,
+      treasury_address = excluded.treasury_address,
+      mint_authority = excluded.mint_authority,
+      freeze_authority = excluded.freeze_authority,
+      source_url = excluded.source_url,
+      updated_ts = excluded.updated_ts
+  `,
+  ).run(
+    projectId,
+    data.detected,
+    data.type,
+    data.protocol,
+    data.governance_address,
+    data.governance_program,
+    data.voting_model,
+    data.voting_token,
+    data.proposal_count,
+    data.active_proposals,
+    data.passed_proposals,
+    data.failed_proposals,
+    data.quorum,
+    data.approval_threshold,
+    data.treasury_address,
+    data.mint_authority,
+    data.freeze_authority,
+    data.source_url,
+    data.updated_ts,
+  );
+}
+
+export function governanceForProject(projectId: number): Governance | null {
+  return (
+    (db()
+      .prepare("SELECT * FROM governance WHERE project_id = ?")
+      .get(projectId) as Governance | undefined) ?? null
+  );
 }
