@@ -1,4 +1,35 @@
 import { db, Project, sameBalance } from "./db";
+
+export type GovernanceType =
+  | "metadao"
+  | "realms"
+  | "squads"
+  | "multisig"
+  | "custom"
+  | "none"
+  | "unknown";
+
+export interface Governance {
+  project_id: number;
+  detected: number;
+  type: GovernanceType;
+  protocol: string | null;
+  governance_address: string | null;
+  governance_program: string | null;
+  voting_model: string | null;
+  voting_token: string | null;
+  proposal_count: number;
+  active_proposals: number;
+  passed_proposals: number;
+  failed_proposals: number;
+  quorum: number | null;
+  approval_threshold: number | null;
+  treasury_address: string | null;
+  mint_authority: string | null;
+  freeze_authority: string | null;
+  source_url: string | null;
+  updated_ts: number | null;
+}
 import { applyQuote, liveQuotes, liveTreasury } from "./live";
 import { ICO_TOKENS_SOLD, raiseFor } from "./sources/raises";
 import { priceIsReliable } from "./quote";
@@ -30,8 +61,11 @@ function raiseAbsenceOf(symbol: string | null | undefined): RaiseAbsence {
 }
 
 export interface ScreenerRow extends Project {
-  price_usd: number | null; mcap: number | null; fdv: number | null;
-  liquidity_usd: number | null; vol24h: number | null;
+  price_usd: number | null;
+  mcap: number | null;
+  fdv: number | null;
+  liquidity_usd: number | null;
+  vol24h: number | null;
   change_24h: number | null;
   /** Reconstructed from the raise rather than recorded — surface it as such. */
   raise_price_derived: boolean;
@@ -49,9 +83,9 @@ export interface ScreenerRow extends Project {
    * ordinary case: the figures are present, or genuinely unknown.
    */
   raise_absence: RaiseAbsence;
-  roi_since_raise: number | null;   // % vs raise price
-  ath_return: number | null;        // % from raise price to ATH (peak return a raise buyer saw)
-  from_ath: number | null;          // % current price vs ATH (drawdown)
+  roi_since_raise: number | null; // % vs raise price
+  ath_return: number | null; // % from raise price to ATH (peak return a raise buyer saw)
+  from_ath: number | null; // % current price vs ATH (drawdown)
   ath: number | null;
   treasury_usd: number | null;
   holder_count: number | null;
@@ -87,16 +121,17 @@ const LAUNCHPAD_TRACKS = new Set(["curated", "permissionless"]);
  * flagged as derived wherever it is shown.
  */
 export function raisePriceOf(
-  p: Pick<Project, "raise_price" | "raise_amount_usd" | "raise_track">
+  p: Pick<Project, "raise_price" | "raise_amount_usd" | "raise_track">,
 ): RaisePrice | null {
-  if (p.raise_price && p.raise_price > 0) return { usd: p.raise_price, derived: false };
+  if (p.raise_price && p.raise_price > 0)
+    return { usd: p.raise_price, derived: false };
   if (!p.raise_track || !LAUNCHPAD_TRACKS.has(p.raise_track)) return null;
   if (!p.raise_amount_usd || p.raise_amount_usd <= 0) return null;
   return { usd: p.raise_amount_usd / ICO_TOKENS_SOLD, derived: true };
 }
 
 export function raisePrice(
-  p: Pick<Project, "raise_price" | "raise_amount_usd" | "raise_track">
+  p: Pick<Project, "raise_price" | "raise_amount_usd" | "raise_track">,
 ): number | null {
   return raisePriceOf(p)?.usd ?? null;
 }
@@ -118,11 +153,12 @@ export function raisePrice(
  */
 export function tradingStart(
   p: Pick<Project, "launch_ts" | "raise_end_ts">,
-  candles: { ts: number }[]
+  candles: { ts: number }[],
 ): number | null {
-  const seen = [p.launch_ts, candles.length ? candles[0].ts : null]
-    .filter((t): t is number => t != null);
-  return seen.length ? Math.min(...seen) : p.raise_end_ts ?? null;
+  const seen = [p.launch_ts, candles.length ? candles[0].ts : null].filter(
+    (t): t is number => t != null,
+  );
+  return seen.length ? Math.min(...seen) : (p.raise_end_ts ?? null);
 }
 
 // Re-exported so existing importers keep working; defined in ./quote because
@@ -152,9 +188,15 @@ export interface PeriodReturns {
 export function periodReturns(
   candles: { ts: number; c: number }[],
   price: number | null,
-  nowSec: number
+  nowSec: number,
 ): PeriodReturns {
-  const empty: PeriodReturns = { d7: null, d30: null, d90: null, ytd: null, allTime: null };
+  const empty: PeriodReturns = {
+    d7: null,
+    d30: null,
+    d90: null,
+    ytd: null,
+    allTime: null,
+  };
   if (!candles.length || price == null) return empty;
 
   // candles is ts-ascending (see the query below), so the last close seen
@@ -167,8 +209,11 @@ export function periodReturns(
     }
     return found;
   };
-  const ret = (base: number | null) => (base ? ((price - base) / base) * 100 : null);
-  const yearStart = Math.floor(Date.UTC(new Date(nowSec * 1000).getUTCFullYear(), 0, 1) / 1000);
+  const ret = (base: number | null) =>
+    base ? ((price - base) / base) * 100 : null;
+  const yearStart = Math.floor(
+    Date.UTC(new Date(nowSec * 1000).getUTCFullYear(), 0, 1) / 1000,
+  );
 
   return {
     d7: ret(closeAtOrBefore(nowSec - 7 * 86400)),
@@ -196,14 +241,22 @@ export function periodReturns(
  * Strictly a fallback: a venue that reports its own change knows about trades
  * inside the window that daily candles cannot see, so it always wins.
  */
-function closeToClose24h(price: number | null, closeADayAgo: number | null): number | null {
+function closeToClose24h(
+  price: number | null,
+  closeADayAgo: number | null,
+): number | null {
   if (price == null || !closeADayAgo) return null;
   return ((price - closeADayAgo) / closeADayAgo) * 100;
 }
 
-function screenerSnapshot(): (ScreenerRow & { ath: number | null; close_24h_ago: number | null })[] {
+function screenerSnapshot(): (ScreenerRow & {
+  ath: number | null;
+  close_24h_ago: number | null;
+})[] {
   const d = db();
-  const rows = d.prepare(`
+  const rows = d
+    .prepare(
+      `
     SELECT p.*,
       ps.price_usd, ps.mcap, ps.fdv, ps.liquidity_usd, ps.vol24h, ps.change_24h,
       hs.holder_count,
@@ -223,7 +276,12 @@ function screenerSnapshot(): (ScreenerRow & { ath: number | null; close_24h_ago:
     LEFT JOIN github_snapshots gh ON gh.project_id = p.id
       AND gh.ts = (SELECT MAX(ts) FROM github_snapshots WHERE project_id = p.id)
     ORDER BY ps.mcap DESC NULLS LAST, p.name
-  `).all() as (ScreenerRow & { ath: number | null; close_24h_ago: number | null })[];
+  `,
+    )
+    .all() as (ScreenerRow & {
+    ath: number | null;
+    close_24h_ago: number | null;
+  })[];
   return rows;
 }
 
@@ -240,7 +298,8 @@ function withReturns(r: ScreenerRow & { ath: number | null }): ScreenerRow {
   const thin = !priceIsReliable(r.liquidity_usd);
   const roi = rp && r.price_usd ? ((r.price_usd - rp) / rp) * 100 : null;
   const athRet = rp && r.ath ? ((r.ath - rp) / rp) * 100 : null;
-  const fromAth = r.ath && r.price_usd ? ((r.price_usd - r.ath) / r.ath) * 100 : null;
+  const fromAth =
+    r.ath && r.price_usd ? ((r.price_usd - r.ath) / r.ath) * 100 : null;
   // raise_price on the row is the resolved figure, so every screener consumer
   // sees the same number the returns were computed from; the flag beside it
   // says whether it was recorded or reconstructed.
@@ -250,7 +309,9 @@ function withReturns(r: ScreenerRow & { ath: number | null }): ScreenerRow {
     raise_price_derived: resolved?.derived ?? false,
     returns_thin: thin,
     raise_absence: raiseAbsenceOf(r.symbol),
-    roi_since_raise: roi, ath_return: athRet, from_ath: fromAth,
+    roi_since_raise: roi,
+    ath_return: athRet,
+    from_ath: fromAth,
   };
 }
 
@@ -260,13 +321,17 @@ export async function screenerRows(): Promise<ScreenerRow[]> {
     const live = applyQuote(r, r.mint ? quotes.get(r.mint) : undefined);
     // Treasury is read live for the same reason price is: the snapshot is only
     // as fresh as the last ingest, and a DAO spends in between.
-    const treasury_usd = (r.mint ? treasury.get(r.mint) : undefined) ?? r.treasury_usd;
+    const treasury_usd =
+      (r.mint ? treasury.get(r.mint) : undefined) ?? r.treasury_usd;
     // ATH is a running peak, so a live price above the last stored candle is
     // the new high — otherwise a token at a fresh high reads as "-0.0% from ATH"
     // only after the next ingest.
-    const ath = live.price_usd != null && (live.ath == null || live.price_usd > live.ath)
-      ? live.price_usd : live.ath;
-    const change_24h = live.change_24h ?? closeToClose24h(live.price_usd, r.close_24h_ago);
+    const ath =
+      live.price_usd != null && (live.ath == null || live.price_usd > live.ath)
+        ? live.price_usd
+        : live.ath;
+    const change_24h =
+      live.change_24h ?? closeToClose24h(live.price_usd, r.close_24h_ago);
     return withReturns({ ...live, ath, treasury_usd, change_24h });
   });
 }
@@ -320,19 +385,24 @@ const WINDOWS = [7, 30, 180] as const;
  * so adding thirty of them would double-count every overlapping hour. Candles
  * are discrete days and sum honestly.
  */
-function volumeWindows(): Map<number, { windows: VolumeWindow[]; days: number }> {
+function volumeWindows(): Map<
+  number,
+  { windows: VolumeWindow[]; days: number }
+> {
   const d = db();
   // SQL's clock, not the caller's — the same way `close_24h_ago` above does it.
   // A page reading `Date.now()` to pass one in would be calling an impure
   // function during render.
-  const now = (d.prepare("SELECT strftime('%s','now') AS n").get() as { n: string }).n;
+  const now = (
+    d.prepare("SELECT strftime('%s','now') AS n").get() as { n: string }
+  ).n;
   const nowSec = Number(now);
 
   // Every candle in one read — 3k rows — because the split-the-window fallback
   // below needs the individual days, not a pre-aggregated sum.
-  const rows = d.prepare(
-    "SELECT project_id AS pid, ts, v FROM candles ORDER BY ts"
-  ).all() as { pid: number; ts: number; v: number }[];
+  const rows = d
+    .prepare("SELECT project_id AS pid, ts, v FROM candles ORDER BY ts")
+    .all() as { pid: number; ts: number; v: number }[];
 
   const byProject = new Map<number, { ts: number; v: number }[]>();
   for (const r of rows) {
@@ -360,7 +430,12 @@ function volumeWindows(): Map<number, { windows: VolumeWindow[]; days: number }>
         const prev = sum(inPrev);
         if (inPrev.length > 0 && prev > 0) {
           const cur = sum(inWindow);
-          return { usd, trend: ((cur - prev) / prev) * 100, trendPartial: false, trendDays: n };
+          return {
+            usd,
+            trend: ((cur - prev) / prev) * 100,
+            trendPartial: false,
+            trendDays: n,
+          };
         }
 
         // Fallback: split this window's own candles. Compared as daily means
@@ -371,8 +446,15 @@ function volumeWindows(): Map<number, { windows: VolumeWindow[]; days: number }>
           const a = mean(inWindow.slice(0, mid));
           const b = mean(inWindow.slice(mid));
           if (a > 0) {
-            const span = Math.round((inWindow[inWindow.length - 1].ts - inWindow[0].ts) / 86400);
-            return { usd, trend: ((b - a) / a) * 100, trendPartial: true, trendDays: span || inWindow.length };
+            const span = Math.round(
+              (inWindow[inWindow.length - 1].ts - inWindow[0].ts) / 86400,
+            );
+            return {
+              usd,
+              trend: ((b - a) / a) * 100,
+              trendPartial: true,
+              trendDays: span || inWindow.length,
+            };
           }
         }
 
@@ -391,7 +473,12 @@ function volumeWindows(): Map<number, { windows: VolumeWindow[]; days: number }>
 export async function explorerRows(): Promise<ExplorerRow[]> {
   const rows = await screenerRows();
   const vols = volumeWindows();
-  const empty: VolumeWindow = { usd: null, trend: null, trendPartial: false, trendDays: 0 };
+  const empty: VolumeWindow = {
+    usd: null,
+    trend: null,
+    trendPartial: false,
+    trendDays: 0,
+  };
   return rows.map((r) => {
     const v = vols.get(r.id);
     const [vol7d, vol30d, vol180d] = v?.windows ?? [empty, empty, empty];
@@ -402,18 +489,30 @@ export async function explorerRows(): Promise<ExplorerRow[]> {
 /** One reading of a project's public engineering output. */
 export interface GithubSnapshot {
   ts: number;
-  stars: number | null; forks: number | null; repos: number | null;
-  last_push_ts: number | null; last_commit_ts: number | null;
-  contributors: number | null; commits_90d: number | null;
-  open_issues: number | null; closed_issues: number | null;
-  open_prs: number | null; merged_prs: number | null;
-  releases_count: number | null; active_repos: number | null;
+  stars: number | null;
+  forks: number | null;
+  repos: number | null;
+  last_push_ts: number | null;
+  last_commit_ts: number | null;
+  contributors: number | null;
+  commits_90d: number | null;
+  open_issues: number | null;
+  closed_issues: number | null;
+  open_prs: number | null;
+  merged_prs: number | null;
+  releases_count: number | null;
+  active_repos: number | null;
   /** JSON as stored; use parseLanguages / parseCodeFrequency to read them. */
   languages: string | null;
   code_frequency: string | null;
 }
 
-export interface RiskFlag { name: string; description: string; level: string; score: number }
+export interface RiskFlag {
+  name: string;
+  description: string;
+  level: string;
+  score: number;
+}
 
 export interface RiskSnapshot {
   ts: number;
@@ -429,16 +528,28 @@ export interface RiskSnapshot {
   risks: string | null;
 }
 
-export const parseRisks = (r: RiskSnapshot | null) => parseJson<RiskFlag>(r?.risks ?? null);
+export const parseRisks = (r: RiskSnapshot | null) =>
+  parseJson<RiskFlag>(r?.risks ?? null);
 
 export interface ExchangeListing {
-  exchange: string; pair: string;
-  volume_usd: number | null; trust: string | null;
-  url: string | null; is_dex: number | null; ts: number | null;
+  exchange: string;
+  pair: string;
+  volume_usd: number | null;
+  trust: string | null;
+  url: string | null;
+  is_dex: number | null;
+  ts: number | null;
 }
 
-export interface Language { name: string; bytes: number }
-export interface CodeWeek { week: number; additions: number; deletions: number }
+export interface Language {
+  name: string;
+  bytes: number;
+}
+export interface CodeWeek {
+  week: number;
+  additions: number;
+  deletions: number;
+}
 
 /** Stored JSON is never trusted blindly — a malformed blob must not 500 a page. */
 function parseJson<T>(raw: string | null): T[] {
@@ -451,23 +562,65 @@ function parseJson<T>(raw: string | null): T[] {
   }
 }
 
-export const parseLanguages = (g: GithubSnapshot | null) => parseJson<Language>(g?.languages ?? null);
-export const parseCodeFrequency = (g: GithubSnapshot | null) => parseJson<CodeWeek>(g?.code_frequency ?? null);
+export const parseLanguages = (g: GithubSnapshot | null) =>
+  parseJson<Language>(g?.languages ?? null);
+export const parseCodeFrequency = (g: GithubSnapshot | null) =>
+  parseJson<CodeWeek>(g?.code_frequency ?? null);
 
 export interface ProjectDetail {
   project: Project;
-  latest: { price_usd: number | null; mcap: number | null; fdv: number | null; liquidity_usd: number | null; vol24h: number | null; change_24h: number | null } | null;
+  latest: {
+    price_usd: number | null;
+    mcap: number | null;
+    fdv: number | null;
+    liquidity_usd: number | null;
+    vol24h: number | null;
+    change_24h: number | null;
+  } | null;
   /**
    * Which venue priced this token on this render, or null when nothing did.
    * Jupiter serves price only, so a tile whose figure is missing can say which
    * source declined to report it rather than showing a bare dash.
    */
   quoteSource: "dexscreener" | "jupiter" | null;
-  candles: { ts: number; o: number; h: number; l: number; c: number; v: number }[];
-  events: { ts: number; type: string; title: string; detail: string | null; url: string | null }[];
-  topHolders: { rank: number; address: string; owner: string | null; amount: number; pct: number; label: string | null }[];
-  holderHistory: { ts: number; holder_count: number | null; top10_pct: number | null; top20_pct: number | null }[];
-  proposals: { number: number | null; title: string | null; state: string | null; created_ts: number | null; url: string | null; author: string | null }[];
+  candles: {
+    ts: number;
+    o: number;
+    h: number;
+    l: number;
+    c: number;
+    v: number;
+  }[];
+  events: {
+    ts: number;
+    type: string;
+    title: string;
+    detail: string | null;
+    url: string | null;
+  }[];
+  topHolders: {
+    rank: number;
+    address: string;
+    owner: string | null;
+    amount: number;
+    pct: number;
+    label: string | null;
+  }[];
+  holderHistory: {
+    ts: number;
+    holder_count: number | null;
+    top10_pct: number | null;
+    top20_pct: number | null;
+  }[];
+  governance: Governance | null;
+  proposals: {
+    number: number | null;
+    title: string | null;
+    state: string | null;
+    created_ts: number | null;
+    url: string | null;
+    author: string | null;
+  }[];
   github: GithubSnapshot | null;
   /**
    * One row per ingest read, unfiltered. Early rows commonly carry nulls for
@@ -477,10 +630,15 @@ export interface ProjectDetail {
    * this function guessing which fields "count" as present.
    */
   githubHistory: {
-    ts: number; commits_90d: number | null; contributors: number | null;
-    stars: number | null; forks: number | null;
-    open_issues: number | null; closed_issues: number | null;
-    merged_prs: number | null; active_repos: number | null;
+    ts: number;
+    commits_90d: number | null;
+    contributors: number | null;
+    stars: number | null;
+    forks: number | null;
+    open_issues: number | null;
+    closed_issues: number | null;
+    merged_prs: number | null;
+    active_repos: number | null;
   }[];
   observations: { ts: number; kind: string | null; text: string }[];
   treasuryValue: number | null;
@@ -490,70 +648,180 @@ export interface ProjectDetail {
    * confirmed it. Coverage is `treasuryLastRead`, not the entry count — a
    * well-tracked vault that never moves is a single long-lived entry.
    */
-  treasuryHistory: { ts: number; value_usd: number | null; last_seen_ts: number }[];
+  treasuryHistory: {
+    ts: number;
+    value_usd: number | null;
+    last_seen_ts: number;
+  }[];
   /** When the vault was last read at all, regardless of whether it moved. */
   treasuryLastRead: number | null;
   /** Pool depth at every ingest read — unlike treasury this moves continuously, so it is not deduped. */
   liquidityHistory: { ts: number; liquidity_usd: number | null }[];
   /** `source` is the publisher (CoinDesk…); `type` is the event class. */
-  news: { ts: number; title: string; url: string | null; source: string | null; type: string }[];
+  news: {
+    ts: number;
+    title: string;
+    url: string | null;
+    source: string | null;
+    type: string;
+  }[];
   /** Git tags from the project's repos — engineering output, not press. */
-  releases: { ts: number; title: string; url: string | null; source: string | null }[];
+  releases: {
+    ts: number;
+    title: string;
+    url: string | null;
+    source: string | null;
+  }[];
   /** `source` carries the git author name here, not a publisher — same column, same reason as `releases`. */
-  recentCommits: { ts: number; message: string; author: string | null; url: string | null }[];
+  recentCommits: {
+    ts: number;
+    message: string;
+    author: string | null;
+    url: string | null;
+  }[];
   listings: ExchangeListing[];
   risk: RiskSnapshot | null;
-  ath: number | null; atl: number | null;
+  ath: number | null;
+  atl: number | null;
   athTs: number | null;
 }
 
-export async function projectDetail(slug: string): Promise<ProjectDetail | null> {
+export async function projectDetail(
+  slug: string,
+): Promise<ProjectDetail | null> {
   const d = db();
-  const project = d.prepare("SELECT * FROM projects WHERE slug = ?").get(slug) as Project | undefined;
+  const project = d
+    .prepare("SELECT * FROM projects WHERE slug = ?")
+    .get(slug) as Project | undefined;
   if (!project) return null;
   const id = project.id;
-  const stored = d.prepare(
-    "SELECT price_usd, mcap, fdv, liquidity_usd, vol24h, change_24h FROM price_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1"
-  ).get(id) as ProjectDetail["latest"];
+  const stored = d
+    .prepare(
+      "SELECT price_usd, mcap, fdv, liquidity_usd, vol24h, change_24h FROM price_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1",
+    )
+    .get(id) as ProjectDetail["latest"];
   // Everything below is archival and reads from the store; the quote is not.
-  const [quotes, treasuryLive] = await Promise.all([liveQuotes(), liveTreasury()]);
+  const [quotes, treasuryLive] = await Promise.all([
+    liveQuotes(),
+    liveTreasury(),
+  ]);
   const quote = project.mint ? quotes.get(project.mint) : undefined;
-  const liveTreasuryUsd = project.mint ? treasuryLive.get(project.mint) : undefined;
+  const liveTreasuryUsd = project.mint
+    ? treasuryLive.get(project.mint)
+    : undefined;
   const latest = stored
     ? applyQuote(stored, quote)
     : quote
       ? {
-          price_usd: quote.price_usd, mcap: quote.mcap, fdv: quote.fdv,
-          liquidity_usd: quote.liquidity_usd, vol24h: quote.vol24h, change_24h: quote.change_24h,
+          price_usd: quote.price_usd,
+          mcap: quote.mcap,
+          fdv: quote.fdv,
+          liquidity_usd: quote.liquidity_usd,
+          vol24h: quote.vol24h,
+          change_24h: quote.change_24h,
         }
       : null;
-  const candles = d.prepare("SELECT ts,o,h,l,c,v FROM candles WHERE project_id = ? ORDER BY ts").all(id) as ProjectDetail["candles"];
-  const events = d.prepare("SELECT ts,type,title,detail,url FROM events WHERE project_id = ? ORDER BY ts DESC LIMIT 100").all(id) as ProjectDetail["events"];
-  const topHolders = d.prepare("SELECT rank,address,owner,amount,pct,label FROM top_holders WHERE project_id = ? ORDER BY rank LIMIT 20").all(id) as ProjectDetail["topHolders"];
-  const holderHistory = d.prepare("SELECT ts,holder_count,top10_pct,top20_pct FROM holder_snapshots WHERE project_id = ? ORDER BY ts").all(id) as ProjectDetail["holderHistory"];
-  const proposals = d.prepare("SELECT number,title,state,created_ts,url,author FROM proposals WHERE project_id = ? ORDER BY created_ts DESC").all(id) as ProjectDetail["proposals"];
-  const github = d.prepare(`
+  const candles = d
+    .prepare(
+      "SELECT ts,o,h,l,c,v FROM candles WHERE project_id = ? ORDER BY ts",
+    )
+    .all(id) as ProjectDetail["candles"];
+  const events = d
+    .prepare(
+      "SELECT ts,type,title,detail,url FROM events WHERE project_id = ? ORDER BY ts DESC LIMIT 100",
+    )
+    .all(id) as ProjectDetail["events"];
+  const topHolders = d
+    .prepare(
+      "SELECT rank,address,owner,amount,pct,label FROM top_holders WHERE project_id = ? ORDER BY rank LIMIT 20",
+    )
+    .all(id) as ProjectDetail["topHolders"];
+  const holderHistory = d
+    .prepare(
+      "SELECT ts,holder_count,top10_pct,top20_pct FROM holder_snapshots WHERE project_id = ? ORDER BY ts",
+    )
+    .all(id) as ProjectDetail["holderHistory"];
+
+  const governance = d
+    .prepare(
+      `
+    SELECT
+      project_id,
+      detected,
+      type,
+      protocol,
+      governance_address,
+      governance_program,
+      voting_model,
+      voting_token,
+      proposal_count,
+      active_proposals,
+      passed_proposals,
+      failed_proposals,
+      quorum,
+      approval_threshold,
+      treasury_address,
+      mint_authority,
+      freeze_authority,
+      source_url,
+      updated_ts
+    FROM governance
+    WHERE project_id = ?
+    LIMIT 1
+  `,
+    )
+    .get(id) as Governance | undefined;
+
+  const proposals = d
+    .prepare(
+      `
+    SELECT number,title,state,created_ts,url,author
+    FROM proposals
+    WHERE project_id = ?
+    ORDER BY created_ts DESC
+  `,
+    )
+    .all(id) as ProjectDetail["proposals"];
+  const github = d
+    .prepare(
+      `
     SELECT ts, stars, forks, repos, last_push_ts, last_commit_ts, contributors, commits_90d,
            open_issues, closed_issues, open_prs, merged_prs, releases_count, active_repos,
            languages, code_frequency
     FROM github_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1
-  `).get(id) as ProjectDetail["github"];
-  const githubHistory = d.prepare(`
+  `,
+    )
+    .get(id) as ProjectDetail["github"];
+  const githubHistory = d
+    .prepare(
+      `
     SELECT ts, commits_90d, contributors, stars, forks,
            open_issues, closed_issues, merged_prs, active_repos
     FROM github_snapshots WHERE project_id = ? ORDER BY ts
-  `).all(id) as ProjectDetail["githubHistory"];
-  const observations = d.prepare("SELECT ts,kind,text FROM observations WHERE project_id = ? ORDER BY ts DESC LIMIT 30").all(id) as ProjectDetail["observations"];
-  const treasury = d.prepare("SELECT value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1").get(id) as { value_usd: number | null } | undefined;
+  `,
+    )
+    .all(id) as ProjectDetail["githubHistory"];
+  const observations = d
+    .prepare(
+      "SELECT ts,kind,text FROM observations WHERE project_id = ? ORDER BY ts DESC LIMIT 30",
+    )
+    .all(id) as ProjectDetail["observations"];
+  const treasury = d
+    .prepare(
+      "SELECT value_usd FROM treasury_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1",
+    )
+    .get(id) as { value_usd: number | null } | undefined;
   // recordTreasurySnapshot keeps this one-row-per-change going forward, but
   // rows written before that ran are one-per-read: a balance that sat still
   // for a day rendered as a dozen identical dates at 0.0%, which reads like a
   // data bug. Collapse runs of equal balances onto the read that first saw the
   // value, carrying last_seen_ts forward, so the date answers "when did the
   // treasury move" — the question the column is there to answer.
-  const treasuryReads = d.prepare(
-    "SELECT ts, value_usd, COALESCE(last_seen_ts, ts) AS last_seen_ts FROM treasury_snapshots WHERE project_id = ? ORDER BY ts"
-  ).all(id) as ProjectDetail["treasuryHistory"];
+  const treasuryReads = d
+    .prepare(
+      "SELECT ts, value_usd, COALESCE(last_seen_ts, ts) AS last_seen_ts FROM treasury_snapshots WHERE project_id = ? ORDER BY ts",
+    )
+    .all(id) as ProjectDetail["treasuryHistory"];
   const treasuryHistory: ProjectDetail["treasuryHistory"] = [];
   for (const read of treasuryReads) {
     const open = treasuryHistory[treasuryHistory.length - 1];
@@ -566,38 +834,60 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
   const treasuryLastRead = treasuryHistory.length
     ? treasuryHistory[treasuryHistory.length - 1].last_seen_ts
     : null;
-  const liquidityHistory = d.prepare(
-    "SELECT ts, liquidity_usd FROM price_snapshots WHERE project_id = ? ORDER BY ts"
-  ).all(id) as ProjectDetail["liquidityHistory"];
+  const liquidityHistory = d
+    .prepare(
+      "SELECT ts, liquidity_usd FROM price_snapshots WHERE project_id = ? ORDER BY ts",
+    )
+    .all(id) as ProjectDetail["liquidityHistory"];
   // News and releases are kept apart. Folding git tags into "news" made the
   // News tab read "17" on a project with no press coverage at all, and half of
   // those tags were from a test repo — an availability claim we cannot support.
   // detail carries the publisher for wire items; fall back to the type so an
   // older row written before the wire existed still labels itself.
-  const news = d.prepare(`
+  const news = d
+    .prepare(
+      `
     SELECT ts, title, url, type, COALESCE(detail, type) AS source FROM events
     WHERE project_id = ? AND type IN ('news','announcement','blog')
     ORDER BY ts DESC LIMIT 50
-  `).all(id) as ProjectDetail["news"];
-  const releases = d.prepare(`
+  `,
+    )
+    .all(id) as ProjectDetail["news"];
+  const releases = d
+    .prepare(
+      `
     SELECT ts, title, url, type AS source FROM events
     WHERE project_id = ? AND type = 'github_release'
     ORDER BY ts DESC LIMIT 50
-  `).all(id) as ProjectDetail["releases"];
-  const recentCommits = d.prepare(`
+  `,
+    )
+    .all(id) as ProjectDetail["releases"];
+  const recentCommits = d
+    .prepare(
+      `
     SELECT ts, title AS message, detail AS author, url FROM events
     WHERE project_id = ? AND type = 'github_commit'
     ORDER BY ts DESC LIMIT 5
-  `).all(id) as ProjectDetail["recentCommits"];
-  const listings = d.prepare(`
+  `,
+    )
+    .all(id) as ProjectDetail["recentCommits"];
+  const listings = d
+    .prepare(
+      `
     SELECT exchange, pair, volume_usd, trust, url, is_dex, ts FROM exchange_listings
     WHERE project_id = ? ORDER BY volume_usd DESC NULLS LAST
-  `).all(id) as ProjectDetail["listings"];
-  const risk = d.prepare(`
+  `,
+    )
+    .all(id) as ProjectDetail["listings"];
+  const risk = d
+    .prepare(
+      `
     SELECT ts, score, score_normalised, rugged, mint_authority, freeze_authority,
            lp_locked_pct, total_holders, total_lp_providers, risks
     FROM risk_snapshots WHERE project_id = ? ORDER BY ts DESC LIMIT 1
-  `).get(id) as ProjectDetail["risk"];
+  `,
+    )
+    .get(id) as ProjectDetail["risk"];
 
   // Candles are written by ingest, so on a deployment that re-ingests
   // occasionally the series stops days short of today and the chart contradicts
@@ -626,9 +916,14 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
     }
   }
 
-  let ath: number | null = null, atl: number | null = null, athTs: number | null = null;
+  let ath: number | null = null,
+    atl: number | null = null,
+    athTs: number | null = null;
   for (const c of candles) {
-    if (ath == null || c.h > ath) { ath = c.h; athTs = c.ts; }
+    if (ath == null || c.h > ath) {
+      ath = c.h;
+      athTs = c.ts;
+    }
     if (atl == null || c.l < atl) atl = c.l;
   }
   // Candles are daily, so a live price above the stored peak is the new high.
@@ -638,14 +933,32 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
     athTs = Math.floor(Date.now() / 1000);
   }
   return {
-    project, latest, quoteSource: quote?.source ?? null,
-    candles, events, topHolders, holderHistory, proposals, github, githubHistory, observations,
+    project,
+    latest,
+    quoteSource: quote?.source ?? null,
+    candles,
+    events,
+    topHolders,
+    holderHistory,
+    governance: governance ?? null,
+    proposals,
+    github,
+    githubHistory,
+    observations,
     // Live where the feed has it, the archived snapshot otherwise. Without
     // this, treasury/market-cap divided a six-day-old balance by a live cap.
     treasuryValue: liveTreasuryUsd ?? treasury?.value_usd ?? null,
-    treasuryHistory, treasuryLastRead, liquidityHistory,
-    news, releases, recentCommits, listings, risk,
-    ath, atl, athTs,
+    treasuryHistory,
+    treasuryLastRead,
+    liquidityHistory,
+    news,
+    releases,
+    recentCommits,
+    listings,
+    risk,
+    ath,
+    atl,
+    athTs,
   };
 }
 
@@ -654,49 +967,119 @@ export async function projectDetail(slug: string): Promise<ProjectDetail | null>
  * organisation classifier — a wallet in many raises is likely a desk or fund.
  */
 export function crossProjectHolderCounts(): Map<string, number> {
-  const rows = db().prepare(`
+  const rows = db()
+    .prepare(
+      `
     SELECT COALESCE(owner, address) AS w, COUNT(DISTINCT project_id) AS n
     FROM top_holders GROUP BY w
-  `).all() as { w: string; n: number }[];
+  `,
+    )
+    .all() as { w: string; n: number }[];
   return new Map(rows.map((r) => [r.w, r.n]));
 }
 
 export function searchAll(q: string) {
   const d = db();
   const like = `%${q}%`;
-  const projects = d.prepare(
-    "SELECT slug, name, symbol, mint FROM projects WHERE name LIKE ? OR symbol LIKE ? OR mint LIKE ? OR slug LIKE ? LIMIT 6"
-  ).all(like, like, like, like) as { slug: string; name: string; symbol: string | null; mint: string | null }[];
-  const proposals = d.prepare(`
+  const projects = d
+    .prepare(
+      "SELECT slug, name, symbol, mint FROM projects WHERE name LIKE ? OR symbol LIKE ? OR mint LIKE ? OR slug LIKE ? LIMIT 6",
+    )
+    .all(like, like, like, like) as {
+    slug: string;
+    name: string;
+    symbol: string | null;
+    mint: string | null;
+  }[];
+  const proposals = d
+    .prepare(
+      `
     SELECT pr.title, pr.url, p.slug, p.name FROM proposals pr JOIN projects p ON p.id = pr.project_id
     WHERE pr.title LIKE ? LIMIT 4
-  `).all(like) as { title: string | null; url: string | null; slug: string; name: string }[];
-  const holders = d.prepare(`
+  `,
+    )
+    .all(like) as {
+    title: string | null;
+    url: string | null;
+    slug: string;
+    name: string;
+  }[];
+  const holders = d
+    .prepare(
+      `
     SELECT th.address, th.owner, th.label, p.slug, p.name FROM top_holders th JOIN projects p ON p.id = th.project_id
     WHERE th.address LIKE ? OR th.owner LIKE ? LIMIT 4
-  `).all(like, like) as { address: string; owner: string | null; label: string | null; slug: string; name: string }[];
+  `,
+    )
+    .all(like, like) as {
+    address: string;
+    owner: string | null;
+    label: string | null;
+    slug: string;
+    name: string;
+  }[];
 
   return [
-    ...projects.map((p) => ({ type: "project", label: `${p.name}${p.symbol ? ` (${p.symbol})` : ""}`, sub: p.mint ? p.mint.slice(0, 8) + "…" : "", href: `/project/${p.slug}` })),
-    ...proposals.map((pr) => ({ type: "proposal", label: pr.title ?? "Proposal", sub: pr.name, href: `/project/${pr.slug}#governance` })),
-    ...holders.map((h) => ({ type: "wallet", label: h.owner ?? h.address, sub: `${h.label ?? "holder"} · ${h.name}`, href: `/project/${h.slug}#holders` })),
+    ...projects.map((p) => ({
+      type: "project",
+      label: `${p.name}${p.symbol ? ` (${p.symbol})` : ""}`,
+      sub: p.mint ? p.mint.slice(0, 8) + "…" : "",
+      href: `/project/${p.slug}`,
+    })),
+    ...proposals.map((pr) => ({
+      type: "proposal",
+      label: pr.title ?? "Proposal",
+      sub: pr.name,
+      href: `/project/${pr.slug}#governance`,
+    })),
+    ...holders.map((h) => ({
+      type: "wallet",
+      label: h.owner ?? h.address,
+      sub: `${h.label ?? "holder"} · ${h.name}`,
+      href: `/project/${h.slug}#holders`,
+    })),
   ];
 }
 
 export function globalTimeline(limit = 120) {
-  return db().prepare(`
+  return db()
+    .prepare(
+      `
     SELECT e.ts, e.type, e.title, e.detail, e.url, p.slug, p.name, p.symbol, p.image_url
     FROM events e JOIN projects p ON p.id = e.project_id
     ORDER BY e.ts DESC LIMIT ?
-  `).all(limit) as { ts: number; type: string; title: string; detail: string | null; url: string | null; slug: string; name: string; symbol: string | null; image_url: string | null }[];
+  `,
+    )
+    .all(limit) as {
+    ts: number;
+    type: string;
+    title: string;
+    detail: string | null;
+    url: string | null;
+    slug: string;
+    name: string;
+    symbol: string | null;
+    image_url: string | null;
+  }[];
 }
 
 export function allObservations(limit = 100) {
-  return db().prepare(`
+  return db()
+    .prepare(
+      `
     SELECT o.ts, o.kind, o.text, p.slug, p.name, p.image_url FROM observations o
     LEFT JOIN projects p ON p.id = o.project_id
     ORDER BY o.ts DESC LIMIT ?
-  `).all(limit) as { ts: number; kind: string | null; text: string; slug: string | null; name: string | null; image_url: string | null }[];
+  `,
+    )
+    .all(limit) as {
+    ts: number;
+    kind: string | null;
+    text: string;
+    slug: string | null;
+    name: string | null;
+    image_url: string | null;
+  }[];
 }
 
 /**
@@ -710,12 +1093,18 @@ export function allObservations(limit = 100) {
  */
 export function recentCloses(days = 30): Map<string, number[]> {
   const d = db();
-  const now = Number((d.prepare("SELECT strftime('%s','now') AS n").get() as { n: string }).n);
-  const rows = d.prepare(`
+  const now = Number(
+    (d.prepare("SELECT strftime('%s','now') AS n").get() as { n: string }).n,
+  );
+  const rows = d
+    .prepare(
+      `
     SELECT p.slug AS slug, c.c AS close FROM candles c
     JOIN projects p ON p.id = c.project_id
     WHERE c.ts >= ? ORDER BY c.ts
-  `).all(now - days * 86400) as { slug: string; close: number }[];
+  `,
+    )
+    .all(now - days * 86400) as { slug: string; close: number }[];
 
   const out = new Map<string, number[]>();
   for (const r of rows) {
