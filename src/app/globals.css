@@ -420,6 +420,25 @@ body {
 @keyframes pulseDot { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
 .pulse { animation: pulseDot 2s infinite; }
 
+/* ---------- market pulse gauge ---------- */
+
+/* Drawn pointing left (the score-0 rest position) and rotated clockwise
+   around the gauge's own pivot up to --needle-rotation, so 0deg is score 0
+   and 180deg is score 100. Sweeping in on load is what makes it read as a
+   live instrument rather than a static icon. */
+@keyframes needleSweep {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(var(--needle-rotation)); }
+}
+.gauge-needle {
+  transform-origin: 130px 128px;
+  transform: rotate(var(--needle-rotation));
+  animation: needleSweep 900ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gauge-needle { animation: none; }
+}
+
 /* ---------- token ticker ---------- */
 
 /*

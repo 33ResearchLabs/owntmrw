@@ -37,7 +37,6 @@ import {
   MetricGrid,
   MetricCell,
   CardNote,
-  StatRowCard,
   NA,
 } from "@/components/panels";
 import { TradeTerminal } from "@/components/TradeTerminal";
@@ -46,6 +45,7 @@ import { PortfolioCard } from "@/components/PortfolioCard";
 import { ProjectBrief } from "@/components/ProjectBrief";
 import { MarketDepthPanel } from "@/components/MarketDepth";
 import { Delta, Logo, StatTile, StatusBadge } from "@/components/ui";
+import { Icon, IconBadge, type IconName } from "@/components/viz";
 import {
   fmtUsd,
   fmtPrice,
@@ -54,6 +54,7 @@ import {
   fmtDate,
   shortAddr,
 } from "@/lib/format";
+import type { Insight } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,297 @@ const EVENT_LABEL: Record<string, string> = {
   unlock: "U",
   buyback: "B",
 };
+
+/**
+ * A label/value pair rendered as plain text — no border, no fill, no card.
+ * The Summary tab reads like a document (headings and rows of figures), not
+ * a dashboard of tiles, so this deliberately skips the bordered, `bg-surface`
+ * treatment `MetricCell` uses everywhere else on this page.
+ */
+function Stat({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  tone?: string;
+}) {
+  return (
+    <div>
+      <div className="text-[10.5px] uppercase tracking-[0.07em] text-muted">
+        {label}
+      </div>
+      <div className={`num mt-1 text-[15px] font-semibold text-ink ${tone ?? ""}`}>
+        {value}
+      </div>
+      {sub != null && (
+        <div className="mt-0.5 text-[11px] leading-snug text-muted">{sub}</div>
+      )}
+    </div>
+  );
+}
+
+/** A section of the Summary: a heading, an optional one-line note, and content below — divided from the next section by a rule, not a card border. */
+function TextSection({
+  title,
+  subtitle,
+  right,
+  first,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+  /** Skip the top divider on the first section of the tab. */
+  first?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={first ? "" : "border-t border-grid pt-6"}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-[16px] font-semibold tracking-tight text-ink">
+          {title}
+        </h2>
+        {right}
+      </div>
+      {subtitle && (
+        <p className="mt-1 text-[12px] leading-5 text-muted">{subtitle}</p>
+      )}
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+/**
+ * Linear 0-100 band, clamped — the same shape `healthScore()` uses
+ * internally, reused here rather than reinvented.
+ */
+function bandScore(v: number, floor: number, ceil: number): number {
+  if (ceil === floor) return 50;
+  return Math.max(0, Math.min(100, Math.round(((v - floor) / (ceil - floor)) * 100)));
+}
+
+/** `Insight.kind` → the closest icon this app's icon set already has. */
+function iconForKind(kind: string): IconName {
+  switch (kind) {
+    case "holders":
+      return "users";
+    case "volume":
+      return "bars";
+    case "price":
+      return "chart";
+    case "liquidity":
+      return "droplet";
+    case "treasury":
+      return "bank";
+    case "dev":
+      return "code";
+    case "raise":
+      return "coin";
+    default:
+      return "info";
+  }
+}
+
+/**
+ * A short title for a signal, from the same `kind`/`tone` `insights()`
+ * already computed — not a new judgement, just a heading for the sentence
+ * that follows it.
+ */
+function signalTitle(kind: string, tone: Insight["tone"]): string {
+  const titles: Record<string, Partial<Record<Insight["tone"], string>>> = {
+    holders: { good: "Holder growth", bad: "Holder decline" },
+    volume: { good: "Volume rising", bad: "Volume falling" },
+    price: { good: "Near all-time high", bad: "Well off all-time high" },
+    liquidity: { good: "Deep liquidity", bad: "Thin liquidity" },
+    treasury: { good: "Strong treasury backing", bad: "Treasury depleted" },
+    dev: { good: "Active development", bad: "Development stalled" },
+    raise: { neutral: "Raise oversubscribed" },
+  };
+  return (
+    titles[kind]?.[tone] ??
+    (tone === "good"
+      ? "Positive signal"
+      : tone === "bad"
+        ? "Risk signal"
+        : "Notable signal")
+  );
+}
+
+const GAUGE_CX = 130;
+const GAUGE_CY = 128;
+const GAUGE_R = 100;
+
+/** A point on the gauge's semicircle for a 0–100 score: 0 is due left, 100 due right, 50 straight up. */
+function gaugePoint(r: number, score: number): { x: number; y: number } {
+  const angle = Math.PI * (1 - score / 100);
+  return {
+    x: GAUGE_CX + r * Math.cos(angle),
+    y: GAUGE_CY - r * Math.sin(angle),
+  };
+}
+
+function gaugeArc(r: number, fromScore: number, toScore: number): string {
+  const a = gaugePoint(r, fromScore);
+  const b = gaugePoint(r, toScore);
+  return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} A ${r} ${r} 0 0 1 ${b.x.toFixed(2)} ${b.y.toFixed(2)}`;
+}
+
+/**
+ * Semicircular SELLING ↔ BUYING speedometer. The needle angle is computed
+ * directly from `score` — never positioned to match a label by hand.
+ *
+ * This app's data model carries no buy/sell volume, trade count or
+ * buyer/seller split (see where `marketBiasScore` is built, below) — so
+ * `score` is a price-momentum read, not the four-signal blend a real
+ * order-flow feed would allow, and `confidence` never reaches "High"
+ * because of that.
+ */
+function MarketPulseGauge({
+  score,
+  label,
+  confidence,
+}: {
+  score: number | null;
+  label: string | null;
+  confidence: "Low" | "Medium" | null;
+}) {
+  const color =
+    score == null
+      ? "var(--ink-muted)"
+      : score >= 65
+        ? "var(--good)"
+        : score >= 36
+          ? "var(--warn)"
+          : "var(--bad)";
+
+  const dim = score == null;
+  // Drawn pointing left by default (score 0); the CSS animation rotates it
+  // clockwise up to this angle, so 0deg stays score 0 and 180deg is score 100.
+  const rotationDeg = ((score ?? 0) / 100) * 180;
+  const needleLen = GAUGE_R - 26;
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg
+        viewBox="0 0 260 158"
+        className="w-full max-w-[300px]"
+        role="meter"
+        aria-valuenow={score ?? undefined}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={
+          score == null
+            ? "Market pulse: insufficient market activity data"
+            : `Market pulse: ${label}, ${score} out of 100, ${confidence ?? "low"} confidence`
+        }
+      >
+        <path
+          d={gaugeArc(GAUGE_R, 0, 35)}
+          fill="none"
+          stroke="var(--bad)"
+          strokeOpacity={dim ? 0.25 : 0.9}
+          strokeWidth="16"
+          strokeLinecap="round"
+        />
+        <path
+          d={gaugeArc(GAUGE_R, 35, 65)}
+          fill="none"
+          stroke="var(--warn)"
+          strokeOpacity={dim ? 0.25 : 0.9}
+          strokeWidth="16"
+        />
+        <path
+          d={gaugeArc(GAUGE_R, 65, 100)}
+          fill="none"
+          stroke="var(--good)"
+          strokeOpacity={dim ? 0.25 : 0.9}
+          strokeWidth="16"
+          strokeLinecap="round"
+        />
+
+        {!dim && (
+          <g
+            className="gauge-needle"
+            style={{ "--needle-rotation": `${rotationDeg}deg` } as React.CSSProperties}
+          >
+            <line
+              x1={GAUGE_CX}
+              y1={GAUGE_CY}
+              x2={GAUGE_CX - needleLen}
+              y2={GAUGE_CY}
+              stroke={color}
+              strokeWidth="3"
+              strokeLinecap="round"
+            />
+            <circle cx={GAUGE_CX} cy={GAUGE_CY} r="6" fill={color} />
+          </g>
+        )}
+
+        <text x="14" y="150" fontSize="10" letterSpacing="0.5" fill="var(--ink-faint)">
+          SELLING
+        </text>
+        <text x={GAUGE_CX} y="150" textAnchor="middle" fontSize="10" letterSpacing="0.5" fill="var(--ink-faint)">
+          NEUTRAL
+        </text>
+        <text x="246" y="150" textAnchor="end" fontSize="10" letterSpacing="0.5" fill="var(--ink-faint)">
+          BUYING
+        </text>
+      </svg>
+
+      {/* Text lives entirely outside the arc's sweep, below the SVG — the
+          needle can point anywhere from due-left to due-right, so anything
+          placed inside the hollow gets crossed at some score. */}
+      <div className="-mt-3 flex flex-col items-center">
+        <span className="num text-[34px] font-bold leading-none tracking-tight" style={{ color }}>
+          {score ?? "—"}
+        </span>
+        <span className="num mt-1 text-[11px] text-faint">/ 100</span>
+        <span className="mt-1.5 text-[13px] font-semibold" style={{ color }}>
+          {label ?? "Insufficient data"}
+        </span>
+      </div>
+
+      {confidence && (
+        <span className="mt-3 rounded-full border border-line px-2.5 py-1 text-[10.5px] text-muted">
+          {confidence} confidence
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** A proportional horizontal bar for Valuation Structure — width scales against the row set's own max, not a fixed 100. */
+function ValueBar({
+  label,
+  value,
+  max,
+  color = "var(--accent)",
+}: {
+  label: string;
+  value: number;
+  max: number;
+  color?: string;
+}) {
+  const pct = max > 0 ? Math.max(3, (value / max) * 100) : 0;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between text-[11.5px]">
+        <span className="text-muted">{label}</span>
+        <span className="num font-semibold text-ink">{fmtUsd(value)}</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-grid">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${pct}%`, background: color }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export default async function ProjectPage({
   params,
@@ -199,6 +491,10 @@ export default async function ProjectPage({
 
   /*
    * Summary helpers
+   *
+   * Kept local and minimal — every value here is derived from `d` (or the
+   * blocks above) rather than a new query, so the Summary stays dynamic for
+   * any project and never fabricates a metric the data model doesn't have.
    */
 
   const healthScoreValue = hs.overall ?? null;
@@ -221,6 +517,10 @@ export default async function ProjectPage({
           ? "text-brand"
           : "text-warn";
 
+  const summaryDescription =
+    p.description ||
+    "No project description is currently available for this project.";
+
   const liquidityLabel =
     latest?.liquidity_usd == null
       ? "Not available"
@@ -235,41 +535,22 @@ export default async function ProjectPage({
         ? "text-success"
         : "text-warn";
 
-  const summaryDescription =
-    p.description ||
-    "No project description is currently available for this project.";
-
-  const topSignals = signals.slice(0, 4);
-
-  const recentEvents = [...events].sort((a, b) => b.ts - a.ts).slice(0, 4);
-
-  /*
-   * Summary-derived metrics
-   *
-   * Keep the Summary data-driven so the same layout works for every project.
-   */
-  const targetRaise = p.raise_goal_usd ?? p.raise_amount_usd ?? null;
-  const acceptedRaise = p.raise_amount_usd ?? null;
-  const committedRaise = p.raise_committed_usd ?? null;
-
-  const refundPct =
-    committedRaise != null && acceptedRaise != null && committedRaise > 0
-      ? Math.max(0, (1 - acceptedRaise / committedRaise) * 100)
+  const liquidityToMcapPct =
+    latest?.liquidity_usd != null && latest?.mcap
+      ? (latest.liquidity_usd / latest.mcap) * 100
       : null;
 
-  const oversubscriptionSummary =
-    committedRaise != null && acceptedRaise != null && acceptedRaise > 0
-      ? committedRaise / acceptedRaise
-      : null;
+  const fdvToMcapMultiple =
+    latest?.fdv != null && latest?.mcap ? latest.fdv / latest.mcap : null;
 
-  const treasuryBackingPct =
-    treasuryValue != null && latest?.mcap != null && latest.mcap > 0
+  const treasuryToMcapPct =
+    treasuryValue != null && latest?.mcap
       ? (treasuryValue / latest.mcap) * 100
       : null;
 
-  const liquidityPct =
-    latest?.liquidity_usd != null && latest?.mcap != null && latest.mcap > 0
-      ? (latest.liquidity_usd / latest.mcap) * 100
+  const turnoverPct =
+    latest?.vol24h != null && latest?.liquidity_usd
+      ? (latest.vol24h / latest.liquidity_usd) * 100
       : null;
 
   const firstHolderSnapshot =
@@ -284,15 +565,259 @@ export default async function ProjectPage({
         100
       : null;
 
-  const holderGrowthDays =
-    firstHolderSnapshot?.ts != null && latestHolders?.ts != null
-      ? Math.max(
-          1,
-          Math.round((latestHolders.ts - firstHolderSnapshot.ts) / 86400),
-        )
+  const circulatingPct =
+    p.circulating_supply != null && p.total_supply
+      ? (p.circulating_supply / p.total_supply) * 100
       : null;
 
-  const launchValuation = p.raise_fdv_usd ?? null;
+  const topSignals = signals.slice(0, 4);
+
+  const recentEvents = [...events].sort((a, b) => b.ts - a.ts).slice(0, 4);
+
+  /*
+   * Market Pulse
+   *
+   * There is no buy/sell volume, trade count or buyer/seller split anywhere
+   * in `ProjectDetail` — confirmed by inspecting `projectDetail()`, `latest`
+   * and every table `queries.ts` reads. (Jupiter's own API separates
+   * `buyVolume`/`sellVolume` — see `src/lib/sources/jupiter.ts` — but this
+   * app's `jupVolume()` already sums them into one figure before it's
+   * stored, so even that split doesn't reach `price_snapshots`. Wiring it
+   * through would mean a schema and ingest change, out of scope for a
+   * Summary-only redesign.) So this reads price momentum only: 24h change,
+   * confirmed against the 30d trend already available from `periods`.
+   * Turnover (volume ÷ liquidity) can't say which direction trading leaned,
+   * so it only raises confidence, never the score itself.
+   */
+
+  const momentum24h = latest?.change_24h ?? null;
+  const momentum30d = periods.d30 ?? null;
+
+  const m24Score = momentum24h != null ? bandScore(momentum24h, -20, 20) : null;
+  const m30Score = momentum30d != null ? bandScore(momentum30d, -50, 50) : null;
+
+  const marketBiasScore =
+    m24Score != null && m30Score != null
+      ? Math.round(m24Score * 0.6 + m30Score * 0.4)
+      : (m24Score ?? m30Score);
+
+  const marketBiasLabel =
+    marketBiasScore == null
+      ? null
+      : marketBiasScore >= 80
+        ? "Strong Buying"
+        : marketBiasScore >= 65
+          ? "Buying"
+          : marketBiasScore >= 36
+            ? "Neutral"
+            : marketBiasScore >= 21
+              ? "Selling"
+              : "Strong Selling";
+
+  // Never "High" — that would need the buy/sell split this data model doesn't have.
+  const marketBiasConfidence: "Low" | "Medium" | null =
+    marketBiasScore == null
+      ? null
+      : m24Score != null && m30Score != null && turnoverPct != null
+        ? "Medium"
+        : "Low";
+
+  const marketPositive = marketBiasScore != null && marketBiasScore >= 65;
+  const marketNegative = marketBiasScore != null && marketBiasScore < 36;
+
+  /*
+   * Strengths vs Risks — the same `signals` the AI Insights panel already
+   * shows, split by the tone `insights()` already assigned. A risk only
+   * appears here because `insights()` already decided the data supports it.
+   */
+  const strengths = signals.filter((s) => s.tone === "good");
+  const risks = signals.filter((s) => s.tone === "bad");
+
+  /*
+   * Numbers That Matter — a priority-ordered candidate list, filtered to
+   * whatever this project actually has, capped at 6. Order is the priority;
+   * missing figures simply drop out rather than leaving a blank slot.
+   */
+  const numberCandidates: { label: string; value: string }[] = [
+    latest?.mcap != null && { label: "Market Cap", value: fmtUsd(latest.mcap) },
+    latest?.liquidity_usd != null && {
+      label: "Liquidity",
+      value: fmtUsd(latest.liquidity_usd),
+    },
+    oversubscribed != null && {
+      label: "Raise Demand",
+      value: `${oversubscribed.toFixed(1)}×`,
+    },
+    latestHolders?.holder_count != null && {
+      label: "Holders",
+      value: fmtNum(latestHolders.holder_count),
+    },
+    roi != null && { label: "ROI vs Issue", value: fmtPct(roi) },
+    healthScoreValue != null && {
+      label: "Health",
+      value: `${healthScoreValue}/100`,
+    },
+    latest?.vol24h != null && { label: "24H Volume", value: fmtUsd(latest.vol24h) },
+    treasuryToMcapPct != null && {
+      label: "Treasury / MC",
+      value: `${treasuryToMcapPct.toFixed(0)}%`,
+    },
+  ].filter((x): x is { label: string; value: string } => !!x);
+
+  const numbersThatMatter = numberCandidates.slice(0, 6);
+
+  /*
+   * Valuation Structure — proportional against whichever of these four is
+   * largest for this project, not a fixed scale.
+   */
+  const valuationRows = (
+    [
+      { label: "FDV", value: latest?.fdv ?? null, color: "var(--accent)" },
+      { label: "Market Cap", value: latest?.mcap ?? null, color: "var(--series-2, var(--accent))" },
+      { label: "Treasury", value: treasuryValue ?? null, color: "var(--good)" },
+      {
+        label: "Liquidity",
+        value: latest?.liquidity_usd ?? null,
+        color: "var(--warn)",
+      },
+    ] as { label: string; value: number | null; color: string }[]
+  ).filter(
+    (r): r is { label: string; value: number; color: string } =>
+      r.value != null && r.value > 0,
+  );
+
+  const maxValuation = valuationRows.length
+    ? Math.max(...valuationRows.map((r) => r.value))
+    : 0;
+
+  /*
+   * Raise Story — a step only appears if its own field exists; the whole
+   * section is skipped below when there's no raise data at all.
+   */
+  const hasRaiseData =
+    p.raise_goal_usd != null ||
+    p.raise_committed_usd != null ||
+    p.raise_amount_usd != null ||
+    rp != null ||
+    p.raise_contributors != null;
+
+  const raiseSteps = [
+    p.raise_goal_usd != null && {
+      label: "Target",
+      value: fmtUsd(p.raise_goal_usd),
+    },
+    p.raise_committed_usd != null && {
+      label: "Committed",
+      value: fmtUsd(p.raise_committed_usd),
+      sub: oversubscribed != null ? `${oversubscribed.toFixed(1)}× oversubscribed` : undefined,
+    },
+    p.raise_amount_usd != null && {
+      label: "Accepted / Raised",
+      value: fmtUsd(p.raise_amount_usd),
+    },
+    p.raise_contributors != null && {
+      label: "Contributors",
+      value: fmtNum(p.raise_contributors),
+    },
+    rp != null && {
+      label: "Issue Price",
+      value: `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`,
+    },
+    p.raise_end_ts != null && {
+      label: "Closed",
+      value: fmtDate(p.raise_end_ts),
+    },
+    refunded != null && {
+      label: "Est. Refund",
+      value: `${refunded.toFixed(0)}%`,
+    },
+  ].filter(
+    (x): x is { label: string; value: string; sub?: string } => !!x,
+  );
+
+  /*
+   * Token Distribution — circulating vs. team-locked only (the same two
+   * figures the raise/tokenomics fields already give); anything the total
+   * supply can't attribute to either is left out rather than guessed at.
+   */
+  const hasSupplyData = p.total_supply != null && p.total_supply > 0;
+  const lockedSupplyPct = circulatingPct != null ? Math.max(0, 100 - circulatingPct) : null;
+
+  /*
+   * Scanner Verdict — one qualitative read per dimension, each backed by a
+   * value already computed above, then a single generated sentence built
+   * from whichever reads are actually positive or negative (never from a
+   * template with blanks filled in).
+   */
+  const verdictRows: { label: string; ok: boolean | null; text: string }[] = [
+    {
+      label: "Market",
+      ok: marketBiasScore == null ? null : marketPositive ? true : marketNegative ? false : null,
+      text:
+        marketBiasScore == null
+          ? "No reading"
+          : (marketBiasLabel ?? "Neutral"),
+    },
+    {
+      label: "Liquidity",
+      ok: latest?.liquidity_usd == null ? null : tradable,
+      text: liquidityLabel,
+    },
+    {
+      label: "Holders",
+      ok: holderGrowthPct == null ? null : holderGrowthPct > 0,
+      text:
+        holderGrowthPct == null
+          ? "No trend"
+          : holderGrowthPct > 0
+            ? "Growing"
+            : "Declining",
+    },
+    {
+      label: "Raise",
+      ok: oversubscribed == null ? null : oversubscribed >= 2,
+      text:
+        oversubscribed == null
+          ? "No raise data"
+          : oversubscribed >= 2
+            ? "Strong demand"
+            : "Modest demand",
+    },
+    {
+      label: "Price",
+      ok: roi == null ? null : roi >= 0,
+      text: roi == null ? "No issue price" : roi >= 0 ? "Above issue" : "Below issue",
+    },
+    {
+      label: "Risk",
+      ok:
+        d.risk?.mint_authority == null && d.risk?.freeze_authority == null
+          ? null
+          : !d.risk.mint_authority && !d.risk.freeze_authority,
+      text:
+        d.risk == null
+          ? "Not checked"
+          : !d.risk.mint_authority && !d.risk.freeze_authority
+            ? "Authorities revoked"
+            : "Authority risk",
+    },
+  ];
+
+  const verdictPositives = verdictRows
+    .filter((r) => r.ok === true)
+    .map((r) => `${r.label.toLowerCase()} (${r.text.toLowerCase()})`);
+  const verdictNegatives = verdictRows
+    .filter((r) => r.ok === false)
+    .map((r) => `${r.label.toLowerCase()} (${r.text.toLowerCase()})`);
+
+  const verdictConclusion =
+    verdictPositives.length && verdictNegatives.length
+      ? `${verdictPositives.length > 1 ? "Several signals" : "One signal"} are positive — ${verdictPositives.join(", ")} — but ${verdictNegatives.join(" and ")} weigh against it.`
+      : verdictPositives.length
+        ? `The strongest signals right now are ${verdictPositives.join(", ")}.`
+        : verdictNegatives.length
+          ? `The main concerns right now are ${verdictNegatives.join(" and ")}.`
+          : "There isn't enough measured data yet for a clear read on this project.";
 
   /*
    * PRICE CHART
@@ -460,451 +985,467 @@ export default async function ProjectPage({
   );
 
   /*
-   * SUMMARY
+   * SUMMARY — a decision cockpit, not another set of metric cards.
    *
-   * Summary = readable project / investment snapshot.
+   * Project Snapshot → Market Pulse + Market Snapshot → What's Happening +
+   * Strengths/Risks → Numbers That Matter + Valuation Structure → Raise
+   * Story + Token Distribution → Recent Activity + Scanner Verdict.
    *
-   * The structure follows the research brief:
-   * About → Market Performance → Raise Details & Commitments
-   * → Token Economics → Project Health → Key Insights
-   * → Recent Activity → Official Links & Resources.
-   *
-   * All displayed values are derived from the existing project data.
+   * Everything reads from `d` and the blocks already computed above — see
+   * the Market Pulse comment for the one deliberate gap (no buy/sell or
+   * trade-count data exists in this model) and how it's handled instead of
+   * faked. Nothing here restates another tab's full panel — Holders,
+   * Treasury, Development, Governance, Timeline, News, Research and the
+   * risk flag list all stay exactly where they were.
    */
 
   const summary = (
-    <div className="space-y-10">
+    <div className="space-y-6">
       {/* =====================================================
-          ABOUT THE PROJECT
-          Prose overview beside a quick-glance stat rail — the deep-dive
-          numbers stay in their own sections below rather than repeating
-          here, so this stays a summary rather than a second copy of them.
+          PROJECT SNAPSHOT
       ====================================================== */}
 
       <section>
-        <div className="grid gap-5 lg:grid-cols-5">
-          <div className="lg:col-span-3">
-            <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-              About {p.name}
-            </h2>
-            <p className="mt-1.5 text-[12px] leading-5 text-muted">
-              Project overview, current status and classification.
-            </p>
-            <p className="mt-3 text-[13px] leading-6 text-ink2">
-              {summaryDescription}
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4 lg:col-span-2">
-            <StatRowCard
-              title="Snapshot"
-              rows={[
-                { label: "Status", value: p.status || "—" },
-                { label: "Category", value: p.category || "—" },
-                { label: "Token", value: p.symbol ?? p.name },
-                {
-                  label: "Health score",
-                  value:
-                    healthScoreValue != null ? `${healthScoreValue}/100` : "—",
-                  sub: healthLabel,
-                  tone: healthTone,
-                },
-              ]}
-            />
-
-            <StatRowCard
-              title="Key metrics"
-              rows={[
-                { label: "Price", value: fmtUsd(latest?.price_usd) },
-                { label: "Market cap", value: fmtUsd(latest?.mcap) },
-                { label: "FDV", value: fmtUsd(latest?.fdv) },
-                {
-                  label: "Holders",
-                  value:
-                    latestHolders?.holder_count != null
-                      ? fmtNum(latestHolders.holder_count)
-                      : "—",
-                },
-              ]}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* =====================================================
-          MARKET PERFORMANCE
-      ====================================================== */}
-
-      <section>
-        <div className="max-w-3xl">
-          <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-            Market Performance
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <h2 className="text-[18px] font-semibold tracking-tight text-ink">
+            {p.name}
           </h2>
-          <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            Current price, valuation, treasury strength, liquidity, trading
-            activity and holder growth.
-          </p>
+
+          {p.symbol && (
+            <span className="text-[13px] font-medium text-muted">
+              ${p.symbol}
+            </span>
+          )}
+
+          <StatusBadge status={p.status} />
+
+          {p.category && (
+            <span className="text-[11px] text-ink2">{p.category}</span>
+          )}
+
+          <span title={healthLabel} className={`text-[11px] ${healthTone}`}>
+            Health{" "}
+            <span className="num font-semibold">
+              {healthScoreValue != null ? `${healthScoreValue}/100` : "—"}
+            </span>
+          </span>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="rounded-xl border border-line bg-surface2/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Current Price
-            </div>
-            <div className="mt-1.5 text-[22px] font-semibold num text-ink">
-              {fmtUsd(latest?.price_usd)}
-            </div>
-            <div className="mt-1 text-[11px]">
-              <Delta v={latest?.change_24h} />
-            </div>
-          </div>
-          <div className="rounded-xl border border-line bg-surface2/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Market Cap
-            </div>
-            <div className="mt-1.5 text-[22px] font-semibold num text-ink">
-              {fmtUsd(latest?.mcap)}
-            </div>
-            <div className="mt-1 text-[11px] text-muted">
-              Current market valuation
-            </div>
-          </div>
-          <div className="rounded-xl border border-line bg-surface2/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              FDV
-            </div>
-            <div className="mt-1.5 text-[22px] font-semibold num text-ink">
-              {fmtUsd(latest?.fdv)}
-            </div>
-            <div className="mt-1 text-[11px] text-muted">
-              Fully diluted valuation
-            </div>
-          </div>
-          <div className="rounded-xl border border-line bg-surface2/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              24H Volume
-            </div>
-            <div className="mt-1.5 text-[22px] font-semibold num text-ink">
-              {fmtUsd(latest?.vol24h)}
-            </div>
-            <div className="mt-1 text-[11px] text-muted">
-              Current trading volume
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <MetricCell
-            label="ROI vs Issue Price"
-            value={roi != null ? fmtPct(roi) : NA}
-            sub={
-              rp
-                ? `issue ${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`
-                : "No issue price"
-            }
-          />
-          <MetricCell
-            label="Treasury Balance"
-            value={
-              treasuryValue != null && treasuryValue < 1
-                ? "~$0"
-                : fmtUsd(treasuryValue)
-            }
-            sub={
-              treasuryBackingPct != null
-                ? `${treasuryBackingPct.toFixed(0)}% of market cap`
-                : "On-chain treasury"
-            }
-          />
-          <MetricCell
-            label="Liquidity"
-            value={fmtUsd(latest?.liquidity_usd)}
-            sub={
-              liquidityPct != null
-                ? `${liquidityPct.toFixed(0)}% of market cap`
-                : liquidityLabel
-            }
-          />
-          <MetricCell
-            label="Total Holders"
-            value={
-              latestHolders?.holder_count != null
-                ? fmtNum(latestHolders.holder_count)
-                : NA
-            }
-            sub={
-              holderGrowthPct != null
-                ? `${fmtPct(holderGrowthPct)} over ${holderGrowthDays ?? "—"} days`
-                : "Current holders"
-            }
-          />
-        </div>
+        <p className="mt-2.5 max-w-3xl text-[13px] leading-6 text-ink2">
+          {summaryDescription}
+        </p>
       </section>
 
       {/* =====================================================
-          RAISE DETAILS & COMMITMENTS
+          MARKET PULSE + MARKET SNAPSHOT
       ====================================================== */}
 
-      {(targetRaise != null ||
-        committedRaise != null ||
-        acceptedRaise != null ||
-        rp != null ||
-        p.raise_contributors != null) && (
-        <section>
-          <div className="max-w-3xl">
-            <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-              Raise Details &amp; Commitments
-            </h2>
-            <p className="mt-1.5 text-[12px] leading-5 text-muted">
-              Funding target, accepted raise, commitment demand and participant
-              activity.
+      <div className="grid gap-6 lg:grid-cols-2">
+        <TextSection
+          first
+          title="Market Pulse"
+          subtitle="Selling vs. buying pressure, read from price momentum."
+        >
+          <MarketPulseGauge
+            score={marketBiasScore}
+            label={marketBiasLabel}
+            confidence={marketBiasConfidence}
+          />
+
+          {marketBiasScore == null ? (
+            <p className="mt-4 text-center text-[12px] text-muted">
+              Insufficient market activity data — there isn&rsquo;t enough
+              price history yet to read momentum from.
             </p>
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricCell
-              label="Target Raise"
-              value={targetRaise != null ? fmtUsd(targetRaise) : NA}
-              sub={
-                p.raise_end_ts
-                  ? `closed ${fmtDate(p.raise_end_ts)}`
-                  : "Raise target"
-              }
-            />
-            <MetricCell
-              label="Total Committed"
-              value={committedRaise != null ? fmtUsd(committedRaise) : NA}
-              sub={
-                oversubscriptionSummary != null
-                  ? `${oversubscriptionSummary.toFixed(1)}× oversubscribed`
-                  : "Total demand"
-              }
-            />
-            <MetricCell
-              label="Issue Price"
-              value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : NA}
-              sub={rp?.derived ? "Derived from raise data" : "Launch price"}
-            />
-            <MetricCell
-              label="Contributors"
-              value={
-                p.raise_contributors != null ? fmtNum(p.raise_contributors) : NA
-              }
-              sub="Raise participants"
-            />
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
-            <MetricCell
-              label="Accepted Raise"
-              value={acceptedRaise != null ? fmtUsd(acceptedRaise) : NA}
-              sub={
-                p.raise_end_ts
-                  ? `closed ${fmtDate(p.raise_end_ts)}`
-                  : "Accepted capital"
-              }
-            />
-            <MetricCell
-              label="Oversubscription"
-              value={
-                oversubscriptionSummary != null
-                  ? `${oversubscriptionSummary.toFixed(1)}×`
-                  : NA
-              }
-              sub="Committed vs accepted"
-            />
-            <MetricCell
-              label="Refunds"
-              value={refundPct != null ? `${refundPct.toFixed(0)}%` : NA}
-              sub="Estimated commitments refunded"
-            />
-          </div>
-
-          {p.raise_note && (
-            <div className="mt-4 rounded-xl border border-line bg-surface2/30 p-4">
-              <div className="text-[11px] font-semibold text-ink">
-                Raise Context
+          ) : (
+            <div className="mt-5 space-y-2 border-t border-grid pt-4">
+              <div className="flex items-center justify-between text-[12px]">
+                <span className="text-muted">24H Momentum</span>
+                <span className="num font-medium text-ink">
+                  {momentum24h != null ? <Delta v={momentum24h} /> : NA}
+                </span>
               </div>
-              <p className="mt-1.5 text-[12px] leading-5 text-ink2">
-                {p.raise_note}
+              <div className="flex items-center justify-between text-[12px]">
+                <span className="text-muted">30D Momentum</span>
+                <span className="num font-medium text-ink">
+                  {momentum30d != null ? <Delta v={momentum30d} /> : NA}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[12px]">
+                <span className="text-muted">Turnover (Vol ÷ Liquidity)</span>
+                <span className="num font-medium text-ink">
+                  {turnoverPct != null ? `${fmtNum(turnoverPct)}%` : NA}
+                </span>
+              </div>
+              <p className="pt-1 text-[11px] leading-relaxed text-faint">
+                Based on price momentum only — this data source doesn&rsquo;t
+                include buy/sell volume or trade counts.
               </p>
             </div>
           )}
-        </section>
-      )}
+        </TextSection>
 
-      {/* =====================================================
-          TOKEN ECONOMICS
-      ====================================================== */}
-
-      {(p.total_supply != null ||
-        p.circulating_supply != null ||
-        p.team_package != null ||
-        launchValuation != null) && (
-        <section>
-          <div className="max-w-3xl">
-            <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-              Token Economics
-            </h2>
-            <p className="mt-1.5 text-[12px] leading-5 text-muted">
-              Token supply, circulating allocation, team lockup and launch
-              valuation.
-            </p>
-          </div>
-
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <MetricCell
-              label="Total Supply"
-              value={p.total_supply != null ? fmtNum(p.total_supply) : NA}
+        <TextSection
+          first
+          title="Market Snapshot"
+          subtitle="Live price, valuation and depth."
+          right={
+            d.quoteSource ? (
+              <span className="text-[11px] text-muted">
+                via{" "}
+                {d.quoteSource === "dexscreener" ? "DexScreener" : "Jupiter"}
+              </span>
+            ) : undefined
+          }
+        >
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
+            <Stat
+              label="Price"
+              value={fmtUsd(latest?.price_usd, { compact: false })}
             />
-            <MetricCell
-              label="Circulating Supply"
+            <Stat label="24H Change" value={<Delta v={latest?.change_24h} />} />
+            <Stat label="Market Cap" value={fmtUsd(latest?.mcap)} />
+            <Stat label="FDV" value={fmtUsd(latest?.fdv)} />
+            <Stat
+              label="Liquidity"
+              value={fmtUsd(latest?.liquidity_usd)}
+              sub={liquidityLabel}
+              tone={liquidityTone}
+            />
+            <Stat label="24H Volume" value={fmtUsd(latest?.vol24h)} />
+            <Stat
+              label="Holders"
               value={
-                p.circulating_supply != null ? fmtNum(p.circulating_supply) : NA
+                latestHolders?.holder_count != null
+                  ? fmtNum(latestHolders.holder_count)
+                  : NA
               }
               sub={
-                p.circulating_supply != null && p.total_supply
-                  ? `${((p.circulating_supply / p.total_supply) * 100).toFixed(1)}% circulating`
+                holderGrowthPct != null
+                  ? `${fmtPct(holderGrowthPct)} growth`
                   : undefined
               }
-            />
-            <MetricCell
-              label="Team Locked"
-              value={lockedPct != null ? `${lockedPct.toFixed(1)}%` : NA}
-              sub={
-                p.team_package != null
-                  ? `${fmtNum(p.team_package)} tokens`
-                  : undefined
-              }
-            />
-            <MetricCell
-              label="Launch Valuation"
-              value={launchValuation != null ? fmtUsd(launchValuation) : NA}
-              sub="Raise valuation"
             />
           </div>
-        </section>
-      )}
+        </TextSection>
+      </div>
 
       {/* =====================================================
-          PROJECT HEALTH
+          WHAT'S HAPPENING? + STRENGTHS vs RISKS
       ====================================================== */}
 
-      <section>
-        <div className="max-w-3xl">
-          <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-            Project Health
-          </h2>
-          <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            Combined assessment based on the project's available market,
-            treasury, holder, development and risk data.
-          </p>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <MetricCell
-            label="Health Score"
-            value={healthScoreValue != null ? `${healthScoreValue}/100` : NA}
-            sub={healthLabel}
-          />
-          <MetricCell
-            label="Development"
-            value={devScore.overall != null ? `${devScore.overall}/100` : NA}
-            sub={p.github ? "GitHub activity" : "No GitHub linked"}
-          />
-          <MetricCell
-            label="Holders"
-            value={
-              latestHolders?.holder_count != null
-                ? fmtNum(latestHolders.holder_count)
-                : NA
-            }
-            sub={
-              holderGrowthPct != null
-                ? `${fmtPct(holderGrowthPct)} growth`
-                : "Current holder count"
-            }
-          />
-          <MetricCell
-            label="Liquidity"
-            value={
-              latest?.liquidity_usd != null ? fmtUsd(latest.liquidity_usd) : NA
-            }
-            sub={liquidityLabel}
-          />
-        </div>
-
-        <div className="mt-4 rounded-xl border border-line bg-surface2/30 p-4">
-          <div className="text-[12px] font-semibold text-ink">Assessment</div>
-          <p className="mt-1.5 max-w-3xl text-[12px] leading-5 text-ink2">
-            {healthScoreValue == null
-              ? "There is not enough current data to produce a reliable health assessment."
-              : healthScoreValue >= 80
-                ? `The project currently shows strong overall health with a score of ${healthScoreValue}/100 across the available signals.`
-                : healthScoreValue >= 60
-                  ? `The project currently shows moderate overall health with a score of ${healthScoreValue}/100. Risk, treasury, holder and development data should be reviewed for additional context.`
-                  : "The current data indicates areas that require additional attention. The project's risk, treasury, holder and development signals should be reviewed carefully."}
-          </p>
-        </div>
-      </section>
-
-      {/* =====================================================
-          KEY INSIGHTS
-      ====================================================== */}
-
-      <section>
-        <div className="max-w-3xl">
-          <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-            Key Insights
-          </h2>
-          <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            Important signals derived from the project's price, raise, treasury,
-            holder and market activity.
-          </p>
-        </div>
-
-        <div className="mt-5">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <TextSection
+          title="What's Happening?"
+          subtitle="The most notable dynamically generated signals for this project."
+        >
           {topSignals.length ? (
-            <SectionCard
-              title="Latest Signals"
-              subtitle={`${signals.length} signal${signals.length === 1 ? "" : "s"} detected from the available project data.`}
-            >
-              <InsightList items={topSignals} />
-            </SectionCard>
-          ) : (
-            <div className="rounded-xl border border-line bg-surface2/30 px-4 py-6 text-[12px] text-muted">
-              No notable signals are currently available.
+            <div className="space-y-3.5">
+              {topSignals.map((s, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <IconBadge
+                    name={iconForKind(s.kind)}
+                    color={
+                      s.tone === "good"
+                        ? "var(--good)"
+                        : s.tone === "bad"
+                          ? "var(--bad)"
+                          : "var(--ink-muted)"
+                    }
+                    size={28}
+                  />
+                  <div className="min-w-0 pt-0.5">
+                    <div className="text-[12.5px] font-semibold text-ink">
+                      {signalTitle(s.kind, s.tone)}
+                    </div>
+                    <div className="mt-0.5 text-[12px] leading-5 text-ink2">
+                      {s.text}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
+          ) : (
+            <p className="text-[12px] text-muted">
+              No notable signals are currently available.
+            </p>
+          )}
+        </TextSection>
+
+        <TextSection
+          title="Strengths vs Risks"
+          subtitle="Only shown when the underlying data actually supports it."
+        >
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <div className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-good">
+                <span className="h-1.5 w-1.5 rounded-full bg-good" />
+                Strengths
+              </div>
+              {strengths.length ? (
+                <ul className="space-y-2.5">
+                  {strengths.map((s, i) => (
+                    <li key={i} className="flex items-start gap-2 text-[12px] leading-5">
+                      <span className="mt-0.5 shrink-0 text-good">
+                        <Icon name={iconForKind(s.kind)} size={13} />
+                      </span>
+                      <span className="text-ink2">
+                        <span className="font-medium text-ink">
+                          {signalTitle(s.kind, s.tone)}.
+                        </span>{" "}
+                        {s.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[12px] text-muted">
+                  No standout strengths detected yet.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-bad">
+                <span className="h-1.5 w-1.5 rounded-full bg-bad" />
+                Risks
+              </div>
+              {risks.length ? (
+                <ul className="space-y-2.5">
+                  {risks.map((s, i) => (
+                    <li key={i} className="flex items-start gap-2 text-[12px] leading-5">
+                      <span className="mt-0.5 shrink-0 text-bad">
+                        <Icon name={iconForKind(s.kind)} size={13} />
+                      </span>
+                      <span className="text-ink2">
+                        <span className="font-medium text-ink">
+                          {signalTitle(s.kind, s.tone)}.
+                        </span>{" "}
+                        {s.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[12px] text-muted">
+                  No notable risk signals detected.
+                </p>
+              )}
+            </div>
+          </div>
+        </TextSection>
+      </div>
+
+      {/* =====================================================
+          NUMBERS THAT MATTER + VALUATION STRUCTURE
+      ====================================================== */}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <TextSection
+          title="Numbers That Matter"
+          subtitle="The handful of figures that actually move the read on this project."
+        >
+          {numbersThatMatter.length ? (
+            <div className="flex flex-wrap gap-x-8 gap-y-5">
+              {numbersThatMatter.map((n) => (
+                <div key={n.label}>
+                  <div className="num text-[24px] font-bold leading-none tracking-tight text-ink">
+                    {n.value}
+                  </div>
+                  <div className="mt-1.5 text-[10.5px] uppercase tracking-[0.07em] text-muted">
+                    {n.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-muted">
+              Not enough data yet to highlight key numbers.
+            </p>
+          )}
+        </TextSection>
+
+        <TextSection
+          title="Valuation Structure"
+          subtitle="How liquidity, treasury and market cap stack up against FDV."
+        >
+          {valuationRows.length ? (
+            <>
+              <div className="space-y-3">
+                {valuationRows
+                  .slice()
+                  .sort((a, b) => b.value - a.value)
+                  .map((r) => (
+                    <ValueBar
+                      key={r.label}
+                      label={r.label}
+                      value={r.value}
+                      max={maxValuation}
+                      color={r.color}
+                    />
+                  ))}
+              </div>
+              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 border-t border-grid pt-3 text-[11px] text-muted">
+                <span>
+                  Liquidity / MC{" "}
+                  <span className="num text-ink2">
+                    {liquidityToMcapPct != null
+                      ? `${fmtNum(liquidityToMcapPct)}%`
+                      : "—"}
+                  </span>
+                </span>
+                <span>
+                  Treasury / MC{" "}
+                  <span className="num text-ink2">
+                    {treasuryToMcapPct != null
+                      ? `${treasuryToMcapPct.toFixed(0)}%`
+                      : "—"}
+                  </span>
+                </span>
+                <span>
+                  FDV / MC{" "}
+                  <span className="num text-ink2">
+                    {fdvToMcapMultiple != null
+                      ? `${fmtNum(fdvToMcapMultiple)}×`
+                      : "—"}
+                  </span>
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="text-[12px] text-muted">
+              No valuation figures available yet.
+            </p>
+          )}
+        </TextSection>
+      </div>
+
+      {/* =====================================================
+          RAISE STORY + TOKEN DISTRIBUTION
+      ====================================================== */}
+
+      {(hasRaiseData || hasSupplyData) && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {hasRaiseData ? (
+            <TextSection
+              title="Raise Story"
+              subtitle="How the raise unfolded, step by step."
+            >
+              <div className="relative pl-5">
+                <div className="absolute bottom-1 left-[3px] top-1 w-px bg-grid" />
+                {raiseSteps.map((s) => (
+                  <div key={s.label} className="relative pb-4 last:pb-0">
+                    <span className="absolute -left-5 top-1 h-[7px] w-[7px] rounded-full border-2 border-page bg-accent" />
+                    <div className="text-[10px] uppercase tracking-[0.08em] text-muted">
+                      {s.label}
+                    </div>
+                    <div className="num text-[17px] font-bold leading-tight text-ink">
+                      {s.value}
+                    </div>
+                    {s.sub && (
+                      <div className="text-[11px] text-muted">{s.sub}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </TextSection>
+          ) : (
+            <div />
+          )}
+
+          {hasSupplyData ? (
+            <TextSection
+              title="Token Distribution"
+              subtitle="Circulating float vs. what the team still has locked."
+            >
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-grid">
+                {circulatingPct != null && (
+                  <div
+                    className="h-full bg-accent"
+                    style={{ width: `${circulatingPct}%` }}
+                  />
+                )}
+                {lockedSupplyPct != null && lockedSupplyPct > 0 && (
+                  <div
+                    className="h-full bg-warn"
+                    style={{ width: `${lockedSupplyPct}%` }}
+                  />
+                )}
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted">
+                    <span className="h-2 w-2 rounded-full bg-accent" />
+                    Circulating
+                  </div>
+                  <div className="num mt-1 text-[18px] font-bold text-ink">
+                    {circulatingPct != null ? `${circulatingPct.toFixed(1)}%` : NA}
+                  </div>
+                  <div className="text-[11px] text-muted">
+                    {p.circulating_supply != null
+                      ? fmtNum(p.circulating_supply)
+                      : "—"}{" "}
+                    tokens
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted">
+                    <span className="h-2 w-2 rounded-full bg-warn" />
+                    Team Locked
+                  </div>
+                  <div className="num mt-1 text-[18px] font-bold text-ink">
+                    {lockedSupplyPct != null
+                      ? `${lockedSupplyPct.toFixed(1)}%`
+                      : NA}
+                  </div>
+                  <div className="text-[11px] text-muted">
+                    {p.team_package != null ? fmtNum(p.team_package) : "—"}{" "}
+                    tokens
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1 border-t border-grid pt-3 text-[11px] text-muted">
+                <span>
+                  Total Supply{" "}
+                  <span className="num text-ink2">
+                    {p.total_supply != null ? fmtNum(p.total_supply) : "—"}
+                  </span>
+                </span>
+                <span>
+                  Launch Valuation{" "}
+                  <span className="num text-ink2">
+                    {p.raise_fdv_usd != null ? fmtUsd(p.raise_fdv_usd) : "—"}
+                  </span>
+                </span>
+              </div>
+            </TextSection>
+          ) : (
+            <div />
           )}
         </div>
-      </section>
+      )}
 
       {/* =====================================================
-          RECENT ACTIVITY
+          RECENT ACTIVITY + SCANNER VERDICT
       ====================================================== */}
 
-      <section>
-        <div className="max-w-3xl">
-          <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-            Recent Activity
-          </h2>
-          <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            Latest notable project events, including launches, listings,
-            governance, development releases and market activity.
-          </p>
-        </div>
-
-        <div className="mt-5 rounded-xl border border-line bg-surface2/30">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <TextSection
+          title="Recent Activity"
+          subtitle="The latest notable events — the Timeline tab has the full history."
+        >
           {recentEvents.length ? (
             <div className="divide-y divide-grid">
               {recentEvents.map((event) => (
                 <div
                   key={`${event.ts}-${event.type}-${event.title}`}
-                  className="flex items-start gap-3 px-4 py-3.5"
+                  className="flex items-start gap-3 py-3 first:pt-0"
                 >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-surface2 text-[10px] font-semibold text-ink2">
+                  <span className="mt-0.5 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-muted">
                     {EVENT_LABEL[event.type] ?? "•"}
-                  </div>
+                  </span>
                   <div className="min-w-0 flex-1">
                     <div className="text-[12px] font-medium text-ink">
                       {event.title}
@@ -922,55 +1463,64 @@ export default async function ProjectPage({
               ))}
             </div>
           ) : (
-            <div className="px-4 py-6 text-[12px] text-muted">
-              No recent project activity is available.
-            </div>
+            <p className="text-[12px] text-muted">
+              No recent activity available.
+            </p>
           )}
-        </div>
-      </section>
+        </TextSection>
 
-      {/* =====================================================
-          OFFICIAL LINKS & RESOURCES
-      ====================================================== */}
-
-      <section>
-        <div className="max-w-3xl">
-          <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-            Official Links &amp; Resources
-          </h2>
-          <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            Official project websites, social channels and public references.
-          </p>
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          {links
-            .filter(([, url]) => url)
-            .map(([label, url]) => (
-              <a
-                key={label}
-                href={url!}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-lg border border-line bg-surface2/40 px-3 py-2 text-[11px] font-medium text-ink2 transition hover:bg-surface2 hover:text-ink"
-              >
-                {label} ↗
-              </a>
-            ))}
-
-          {p.mint && (
-            <a
-              href={`https://solscan.io/token/${p.mint}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg border border-line bg-surface2/40 px-3 py-2 text-[11px] font-medium text-ink2 transition hover:bg-surface2 hover:text-ink"
-              title={p.mint}
+        <TextSection
+          title="Scanner Verdict"
+          subtitle="One read, built from every dimension above."
+        >
+          <div className="flex flex-col items-center border-b border-grid pb-5 text-center">
+            <span
+              className={`num text-[40px] font-bold leading-none tracking-tight ${healthTone}`}
             >
-              Solscan ↗
-            </a>
-          )}
-        </div>
-      </section>
+              {healthScoreValue ?? "—"}
+            </span>
+            <span className="num mt-0.5 text-[11px] text-faint">/ 100</span>
+            <span className="mt-1.5 text-[13px] font-semibold uppercase tracking-wide text-ink2">
+              {healthLabel}
+            </span>
+          </div>
+
+          <div className="mt-4 space-y-2.5">
+            {verdictRows.map((r) => (
+              <div
+                key={r.label}
+                className="flex items-center justify-between text-[12.5px]"
+              >
+                <span className="text-muted">{r.label}</span>
+                <span
+                  className={`flex items-center gap-1.5 font-medium ${
+                    r.ok === true
+                      ? "text-good"
+                      : r.ok === false
+                        ? "text-bad"
+                        : "text-muted"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      r.ok === true
+                        ? "bg-good"
+                        : r.ok === false
+                          ? "bg-bad"
+                          : "bg-line2"
+                    }`}
+                  />
+                  {r.text}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <p className="mt-4 border-t border-grid pt-4 text-[12.5px] leading-relaxed text-ink2">
+            {verdictConclusion}
+          </p>
+        </TextSection>
+      </div>
     </div>
   );
 
