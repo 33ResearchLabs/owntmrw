@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "./wallet";
+import { useSignIn } from "./SignInProvider";
 import { fmtUsd, fmtNum, shortAddr } from "@/lib/format";
 import { Transaction } from "@solana/web3.js";
 
@@ -9,13 +10,19 @@ import { Transaction } from "@solana/web3.js";
  * Trading terminal.
  *
  * BUY:
- *   USDT -> investment transaction -> Phantom
+ *   USDT -> investment transaction -> Phantom -> /api/swap/confirm credits a
+ *   simulated position.
  *
- * The API currently creates the Devnet investment transaction.
- * The actual DEX swap can be plugged into /api/swap later.
+ *   There's no vault inventory or mint authority for any tracked project
+ *   token, so the real leg is only the USDT transfer into the vault; the
+ *   token side is a ledger position recorded server-side once that transfer
+ *   is confirmed on-chain (see /api/swap/confirm and `ledger_trades` in
+ *   db.ts).
  *
  * SELL:
- *   Not enabled yet.
+ *   Debits the same simulated position via /api/swap/sell. No USDT is sent
+ *   back — that would need the vault to co-sign, which needs a private key
+ *   this app doesn't have.
  */
 export function TradeTerminal({
   symbol,
@@ -31,6 +38,7 @@ export function TradeTerminal({
   vol24h: number | null;
 }) {
   const w = useWallet();
+  const signIn = useSignIn();
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
@@ -40,19 +48,33 @@ export function TradeTerminal({
   const [executing, setExecuting] = useState(false);
 
   const [txSignature, setTxSignature] = useState<string | null>(null);
+  const [sellClosed, setSellClosed] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
 
   /*
-   * Read this token's balance whenever the
-   * wallet or project changes.
+   * A connected wallet is not a signed-in one (Phantom reconnects silently
+   * for a site it already trusts), and a session names one wallet — if the
+   * user switches accounts in Phantom afterwards, `address` moves and
+   * `session` does not. Trading requires both: the same convention
+   * ConnectButton uses for the header.
+   */
+  const stale =
+    w.session != null && w.address != null && w.address !== w.session;
+
+  const ready = w.session != null && !stale;
+
+  /*
+   * Read this token's simulated position whenever the
+   * wallet or project changes. This is what a sell debits —
+   * see the file header for why it isn't the real on-chain balance.
    */
   useEffect(() => {
     let alive = true;
 
-    if (w.address && mint) {
+    if (ready && mint) {
       void w
-        .tokenBalance(mint)
+        .ledgerBalance(mint)
         .then((balance) => {
           if (alive) {
             setHeld(balance);
@@ -70,7 +92,7 @@ export function TradeTerminal({
     return () => {
       alive = false;
     };
-  }, [w.address, mint, w]);
+  }, [ready, mint, w]);
 
   const amt = Number(amount) || 0;
 
@@ -110,6 +132,11 @@ export function TradeTerminal({
   const buyAmountValid = side === "buy" && amt > 0 && amt <= usdtBalance;
 
   /*
+   * Validate the sell amount against the simulated position.
+   */
+  const sellAmountValid = side === "sell" && amt > 0 && amt <= (held ?? 0);
+
+  /*
    * Decode the base64 transaction returned
    * from the server.
    */
@@ -134,9 +161,10 @@ export function TradeTerminal({
   async function executeBuy() {
     setError(null);
     setTxSignature(null);
+    setSellClosed(false);
 
-    if (!w.address) {
-      setError("Connect your wallet first.");
+    if (!ready) {
+      setError("Sign in first.");
       return;
     }
 
@@ -279,6 +307,40 @@ export function TradeTerminal({
       setAmount("");
 
       /*
+       * Credit the simulated position now that the USDT transfer is
+       * confirmed on-chain. This is best-effort: the USDT has already
+       * moved, so a failure here shouldn't read as a failed trade — it
+       * means the position didn't get recorded and the user should see
+       * their real transaction rather than a scary error.
+       */
+      try {
+        const confirmRes = await fetch("/api/swap/confirm", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+          body: JSON.stringify({
+            signature,
+            tokenMint: mint,
+            amountUsdt: amt,
+            priceUsd: price,
+          }),
+        });
+
+        if (confirmRes.ok) {
+          setHeld(await w.ledgerBalance(mint!));
+        } else {
+          console.error(
+            "[TRADE] Position not recorded:",
+            await confirmRes.text(),
+          );
+        }
+      } catch (confirmError) {
+        console.error("[TRADE] Position not recorded:", confirmError);
+      }
+
+      /*
        * Refresh wallet/session data if your
        * provider exposes refreshBalances.
        */
@@ -316,10 +378,76 @@ export function TradeTerminal({
   }
 
   /*
-   * SELL is intentionally not wired yet.
+   * Close (part of) the simulated position. No USDT moves — see the file
+   * header for why.
    */
-  function executeSell() {
-    setError("Selling is not enabled yet.");
+  async function executeSell() {
+    setError(null);
+    setSellClosed(false);
+
+    if (!ready) {
+      setError("Sign in first.");
+      return;
+    }
+
+    if (!mint) {
+      setError("This token does not have a mint address.");
+      return;
+    }
+
+    if (amt <= 0) {
+      setError("Enter an amount to sell.");
+      return;
+    }
+
+    if (amt > (held ?? 0)) {
+      setError(
+        `You only hold a simulated position of ${(held ?? 0).toFixed(4)} ${symbol} here.`,
+      );
+      return;
+    }
+
+    setExecuting(true);
+
+    try {
+      const res = await fetch("/api/swap/sell", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          tokenMint: mint,
+          tokenAmount: amt,
+          priceUsd: price,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Unable to close the position.");
+      }
+
+      setAmount("");
+      setSellClosed(true);
+      setHeld(await w.ledgerBalance(mint));
+
+      window.dispatchEvent(
+        new CustomEvent("wallet-transaction", {
+          detail: {
+            signature: null,
+            tokenMint: mint,
+          },
+        }),
+      );
+    } catch (err) {
+      console.error("[TRADE] Sell failed:", err);
+
+      setError(err instanceof Error ? err.message : "Unable to close the position.");
+    } finally {
+      setExecuting(false);
+    }
   }
 
   return (
@@ -336,6 +464,7 @@ export function TradeTerminal({
                 setSide(s);
                 setError(null);
                 setTxSignature(null);
+                setSellClosed(false);
               }}
               className={`flex-1 rounded-lg py-2 text-[13px] font-bold capitalize transition-colors ${
                 on
@@ -369,6 +498,7 @@ export function TradeTerminal({
 
               setError(null);
               setTxSignature(null);
+              setSellClosed(false);
             }}
             placeholder="0.00"
             inputMode="decimal"
@@ -394,11 +524,21 @@ export function TradeTerminal({
           ))}
         </div>
 
-        {side === "buy" && w.address && (
+        {side === "buy" && ready && (
           <div className="mt-2 flex justify-between text-[10.5px] text-faint">
             <span>Available</span>
 
             <span className="num">{usdtBalance.toFixed(4)} USDT</span>
+          </div>
+        )}
+
+        {side === "sell" && ready && (
+          <div className="mt-2 flex justify-between text-[10.5px] text-faint">
+            <span>Simulated position</span>
+
+            <span className="num">
+              {held != null ? `${fmtNum(held)} ${symbol}` : "…"}
+            </span>
           </div>
         )}
       </div>
@@ -481,7 +621,9 @@ export function TradeTerminal({
         )}
 
         <Row label="Route">
-          <span className="text-muted">Devnet investment</span>
+          <span className="text-muted">
+            {side === "buy" ? "Devnet investment" : "Simulated position (no funds move)"}
+          </span>
         </Row>
       </div>
 
@@ -494,13 +636,13 @@ export function TradeTerminal({
       )}
 
       {/* Wallet */}
-      {w.address ? (
+      {ready ? (
         <>
           <div className="flex items-center justify-between rounded-xl border border-line bg-page/40 px-3.5 py-2.5 text-[12.5px]">
             <span className="flex items-center gap-2 text-muted">
               <span className="h-1.5 w-1.5 rounded-full bg-good" />
 
-              {shortAddr(w.address)}
+              {shortAddr(w.session!)}
             </span>
 
             <span className="num text-ink2">
@@ -539,23 +681,37 @@ export function TradeTerminal({
             </div>
           )}
 
+          {sellClosed && (
+            <div className="rounded-lg border border-good/30 bg-good/5 px-3 py-2.5 text-[11.5px] font-semibold text-good">
+              Simulated position closed.
+            </div>
+          )}
+
           {/* Execute */}
           <button
             onClick={() => {
               if (side === "buy") {
                 void executeBuy();
               } else {
-                executeSell();
+                void executeSell();
               }
             }}
-            disabled={executing || !mint || (side === "buy" && !buyAmountValid)}
+            disabled={
+              executing ||
+              !mint ||
+              (side === "buy" ? !buyAmountValid : !sellAmountValid)
+            }
             title={
               side === "buy" && amt > usdtBalance
                 ? "Insufficient USDT balance"
-                : undefined
+                : side === "sell" && amt > (held ?? 0)
+                  ? "Exceeds your simulated position"
+                  : undefined
             }
             className={`w-full rounded-xl py-2.5 text-[13px] font-bold text-white transition-all ${
-              executing || !mint || (side === "buy" && !buyAmountValid)
+              executing ||
+              !mint ||
+              (side === "buy" ? !buyAmountValid : !sellAmountValid)
                 ? "cursor-not-allowed bg-accent/40 opacity-60"
                 : side === "buy"
                   ? "bg-accent hover:bg-accenthi"
@@ -563,7 +719,9 @@ export function TradeTerminal({
             }`}
           >
             {executing
-              ? "Confirm in Phantom…"
+              ? side === "buy"
+                ? "Confirm in Phantom…"
+                : "Closing…"
               : side === "buy"
                 ? `Buy ${symbol}`
                 : `Sell ${symbol}`}
@@ -571,22 +729,27 @@ export function TradeTerminal({
         </>
       ) : (
         <button
-          onClick={() => void w.connect()}
-          disabled={w.connecting}
+          onClick={() => signIn.open()}
+          disabled={w.signingIn}
           className="w-full rounded-xl bg-accent py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-accenthi disabled:opacity-60"
         >
-          {w.connecting
-            ? "Connecting…"
-            : w.available
-              ? "Connect wallet to trade"
-              : "Get Phantom to trade"}
+          {w.signingIn
+            ? "Check your wallet…"
+            : stale
+              ? "Wallet changed — reconnect to trade"
+              : w.available
+                ? "Sign in to trade"
+                : "Get Phantom to trade"}
         </button>
       )}
 
       {/* Devnet notice */}
       <p className="text-[11px] leading-relaxed text-faint">
-        Transactions currently use Solana Devnet. Your USDT and token balances
-        are read directly from your connected wallet.
+        Buying sends real USDT on Solana Devnet into the app&rsquo;s vault; the
+        {` ${symbol} `}
+        side is a simulated position tracked here, since there&rsquo;s no
+        on-chain inventory of it to actually deliver. Selling closes that
+        position and does not send USDT back.
       </p>
 
       {/* External execution */}

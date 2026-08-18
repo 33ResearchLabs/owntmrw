@@ -342,6 +342,67 @@ export function MetricCell({
   );
 }
 
+/**
+ * A compact "label … value" row, several of which stack inside a
+ * `StatRowCard`. Separate from `MetricCell` (a display-scale tile) — this is
+ * for a dense list read top to bottom, like a quick-facts rail beside a
+ * prose summary, not a grid scanned left to right.
+ */
+export interface StatRow {
+  label: string;
+  value: React.ReactNode;
+  /** Small second line under the value — a growth rate, a qualifier. */
+  sub?: React.ReactNode;
+  tone?: "good" | "bad" | string;
+}
+
+/**
+ * A small card of stacked `StatRow`s under one title — the compact
+ * counterpart to `MetricGrid`'s tiles, for sitting beside a prose block
+ * rather than spanning the page under one.
+ */
+export function StatRowCard({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: StatRow[];
+}) {
+  return (
+    <div className="card px-4 py-3.5">
+      <h3 className="text-[12.5px] font-semibold text-ink">{title}</h3>
+      <div className="mt-1 divide-y divide-grid">
+        {rows.map((r) => (
+          <div
+            key={r.label}
+            className="flex items-baseline justify-between gap-3 py-2"
+          >
+            <span className="text-[12px] text-muted">{r.label}</span>
+            <span className="min-w-0 text-right">
+              <span
+                className={`num text-[12.5px] font-semibold ${
+                  r.tone === "good"
+                    ? "text-good"
+                    : r.tone === "bad"
+                      ? "text-bad"
+                      : (r.tone ?? "text-ink")
+                }`}
+              >
+                {r.value}
+              </span>
+              {r.sub != null && (
+                <span className="ml-1.5 text-[10.5px] text-faint">
+                  {r.sub}
+                </span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Boxed note beneath a `MetricGrid` — caveats, provenance, methodology. */
 export function CardNote({ children }: { children: React.ReactNode }) {
   return (

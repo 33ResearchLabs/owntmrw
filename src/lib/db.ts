@@ -244,9 +244,42 @@ function migrate(d: Database.Database) {
     expires_ts INTEGER NOT NULL
   );
 
+  /*
+   * Simulated trading. The vault has no inventory of any tracked project
+   * token and no mint authority over them, so a "buy" cannot deliver a real
+   * token — only the real USDT leg (collected by /api/swap) is on-chain.
+   * This is the ledger for the other half: a paper position, kept only so
+   * Portfolio has something to show for a completed trade. tx_signature is
+   * set on buy rows (the USDT transfer that funded the position) and left
+   * NULL on sell rows, which never move real funds.
+   */
+  CREATE TABLE IF NOT EXISTS ledger_trades (
+    id INTEGER PRIMARY KEY,
+    address TEXT NOT NULL,
+    mint TEXT NOT NULL,
+    side TEXT NOT NULL,          -- buy | sell
+    token_amount REAL NOT NULL,
+    price_usd REAL,
+    usd_amount REAL NOT NULL,
+    tx_signature TEXT UNIQUE,
+    ts INTEGER NOT NULL
+  );
+
+  -- Current simulated holding per wallet/mint. Derived entirely from
+  -- ledger_trades; kept as its own table so a read doesn't have to fold the
+  -- whole history every time.
+  CREATE TABLE IF NOT EXISTS ledger_positions (
+    address TEXT NOT NULL,
+    mint TEXT NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
+    updated_ts INTEGER NOT NULL,
+    PRIMARY KEY (address, mint)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_snap_proj ON price_snapshots(project_id, ts DESC);
   CREATE INDEX IF NOT EXISTS idx_events_proj ON events(project_id, ts DESC);
   CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_ts);
+  CREATE INDEX IF NOT EXISTS idx_ledger_trades_addr ON ledger_trades(address, ts DESC);
   `);
 
   // additive column migrations for databases created by an earlier schema
@@ -647,4 +680,88 @@ export function governanceForProject(projectId: number): Governance | null {
       .prepare("SELECT * FROM governance WHERE project_id = ?")
       .get(projectId) as Governance | undefined) ?? null
   );
+}
+
+// ---------- simulated trading ledger ----------
+
+export interface LedgerTrade {
+  address: string;
+  mint: string;
+  side: "buy" | "sell";
+  tokenAmount: number;
+  priceUsd: number | null;
+  usdAmount: number;
+  txSignature: string | null;
+}
+
+/**
+ * Apply a trade to the ledger: append the trade row and fold it into the
+ * running position in one transaction. Returns false without writing
+ * anything if `txSignature` has already been recorded — `/api/swap/confirm`
+ * can be retried (e.g. the client re-sends after a flaky response) without
+ * double-crediting the same on-chain transfer.
+ */
+export function recordLedgerTrade(t: LedgerTrade): boolean {
+  const d = db();
+  const ts = Math.floor(Date.now() / 1000);
+  const delta = t.side === "buy" ? t.tokenAmount : -t.tokenAmount;
+
+  const apply = d.transaction(() => {
+    const inserted = d
+      .prepare(
+        `INSERT OR IGNORE INTO ledger_trades
+           (address, mint, side, token_amount, price_usd, usd_amount, tx_signature, ts)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        t.address,
+        t.mint,
+        t.side,
+        t.tokenAmount,
+        t.priceUsd,
+        t.usdAmount,
+        t.txSignature,
+        ts,
+      );
+
+    // Only possible when txSignature collides with an already-recorded buy.
+    if (t.txSignature != null && inserted.changes === 0) return false;
+
+    const current = d
+      .prepare(
+        "SELECT amount FROM ledger_positions WHERE address = ? AND mint = ?",
+      )
+      .get(t.address, t.mint) as { amount: number } | undefined;
+
+    const next = Math.max(0, (current?.amount ?? 0) + delta);
+
+    d.prepare(
+      `INSERT INTO ledger_positions (address, mint, amount, updated_ts) VALUES (?, ?, ?, ?)
+       ON CONFLICT(address, mint) DO UPDATE SET amount = excluded.amount, updated_ts = excluded.updated_ts`,
+    ).run(t.address, t.mint, next, ts);
+
+    return true;
+  });
+
+  return apply();
+}
+
+/** Every simulated position a wallet holds, mint -> amount. Zero rows omitted. */
+export function ledgerPositions(address: string): Map<string, number> {
+  const rows = db()
+    .prepare(
+      "SELECT mint, amount FROM ledger_positions WHERE address = ? AND amount > 0",
+    )
+    .all(address) as { mint: string; amount: number }[];
+  return new Map(rows.map((r) => [r.mint, r.amount]));
+}
+
+/** The simulated position for one wallet/mint pair. 0 when none exists. */
+export function ledgerPosition(address: string, mint: string): number {
+  const row = db()
+    .prepare(
+      "SELECT amount FROM ledger_positions WHERE address = ? AND mint = ?",
+    )
+    .get(address, mint) as { amount: number } | undefined;
+  return row?.amount ?? 0;
 }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "./wallet";
+import { useSignIn } from "./SignInProvider";
 import { Logo } from "./ui";
 import { Sparkline } from "./viz";
 import { CopyButton } from "./CopyButton";
@@ -50,6 +51,8 @@ export interface PortfolioSignal {
 interface Holding extends PortfolioToken {
   amount: number;
   value: number | null;
+  /** Portion of `amount` that's a simulated position rather than a real on-chain balance. */
+  simulated: number;
 }
 
 type ScanState = "idle" | "loading" | "done" | "failed";
@@ -69,7 +72,19 @@ export function Portfolio({
   signals?: PortfolioSignal[];
 }) {
   const w = useWallet();
-  const { address, allTokenBalances } = w;
+  const signIn = useSignIn();
+  const { address, allTokenBalances, allLedgerBalances } = w;
+
+  /*
+   * A connected wallet is not a signed-in one, and a session names one
+   * wallet — if the user switches accounts in Phantom afterwards, `address`
+   * moves and `session` does not. Same convention ConnectButton uses for
+   * the header; see its comment for why.
+   */
+  const stale =
+    w.session != null && address != null && address !== w.session;
+
+  const ready = w.session != null && !stale;
 
   const [scan, setScan] = useState<{
     owner: string;
@@ -86,7 +101,7 @@ export function Portfolio({
    * belongs to the browser session. Nothing is stored by the portfolio.
    */
   useEffect(() => {
-    if (!address) {
+    if (!ready || !address) {
       setScan(null);
       return;
     }
@@ -95,7 +110,10 @@ export function Portfolio({
 
     async function refreshBalances() {
       try {
-        const balances = await allTokenBalances();
+        const [balances, ledger] = await Promise.all([
+          allTokenBalances(),
+          allLedgerBalances(),
+        ]);
 
         if (cancelled) return;
 
@@ -108,7 +126,8 @@ export function Portfolio({
         }
 
         /*
-         * Match every tracked project against the actual wallet token mint.
+         * Match every tracked project against the actual wallet token mint,
+         * plus whatever simulated position the ledger has for it.
          *
          * Example:
          *
@@ -120,11 +139,14 @@ export function Portfolio({
          */
         const found = tokens
           .map((t) => {
-            const amount = (balances && balances.get(t.mint)) ?? 0;
+            const onchain = (balances && balances.get(t.mint)) ?? 0;
+            const simulated = ledger.get(t.mint) ?? 0;
+            const amount = onchain + simulated;
 
             return {
               ...t,
               amount,
+              simulated,
               value: t.price_usd != null ? amount * t.price_usd : null,
             };
           })
@@ -179,9 +201,9 @@ export function Portfolio({
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [address, allTokenBalances, tokens]);
+  }, [ready, address, allTokenBalances, allLedgerBalances, tokens]);
 
-  const state: ScanState = !address
+  const state: ScanState = !ready || !address
     ? "idle"
     : scan?.owner !== address
       ? "loading"
@@ -239,17 +261,52 @@ export function Portfolio({
   }, [holdings, range]);
 
   /*
-   * No wallet.
+   * Not signed in, signed in on a wallet Phantom is no longer on, or signed
+   * in but this browser's wallet hasn't reconnected — none of these can
+   * read balances. A connected wallet is not a signed-in one (Phantom
+   * reconnects silently for a site it already trusts), so this checks
+   * `session`, not `address` — same convention ConnectButton uses.
    */
+  if (!ready) {
+    return (
+      <div className="card px-6 py-10 text-center">
+        <h2 className="text-[15px] font-semibold">
+          {stale ? "Wallet changed" : "No wallet connected"}
+        </h2>
+
+        <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-muted">
+          {stale
+            ? "Your wallet switched accounts since you signed in. Sign in again with the new one to see its holdings."
+            : <>Sign in with a Solana wallet to see what you hold across the{" "}
+              {tokens.length} tokens tracked here. Balances are read live from the
+              chain and never stored.</>}
+        </p>
+
+        <button
+          onClick={() => signIn.open()}
+          disabled={w.signingIn}
+          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-bold text-white transition-[filter] duration-150 hover:brightness-[1.08] active:brightness-95 disabled:opacity-60"
+        >
+          {w.signingIn
+            ? "Check your wallet…"
+            : stale
+              ? "Reconnect"
+              : w.available
+                ? "Sign in"
+                : "Get Phantom"}
+        </button>
+      </div>
+    );
+  }
+
   if (!address) {
     return (
       <div className="card px-6 py-10 text-center">
-        <h2 className="text-[15px] font-semibold">No wallet connected</h2>
+        <h2 className="text-[15px] font-semibold">Wallet not connected here</h2>
 
         <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-muted">
-          Connect a Solana wallet to see what you hold across the{" "}
-          {tokens.length} tokens tracked here. Balances are read live from the
-          chain and never stored.
+          You&rsquo;re signed in, but this browser&rsquo;s wallet hasn&rsquo;t
+          connected. Reconnect it to read balances.
         </p>
 
         <button
@@ -257,11 +314,7 @@ export function Portfolio({
           disabled={w.connecting}
           className="mt-5 inline-flex items-center gap-2 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-bold text-white transition-[filter] duration-150 hover:brightness-[1.08] active:brightness-95 disabled:opacity-60"
         >
-          {w.connecting
-            ? "Connecting…"
-            : w.available
-              ? "Connect wallet"
-              : "Get Phantom"}
+          {w.connecting ? "Connecting…" : "Connect wallet"}
         </button>
       </div>
     );
@@ -585,7 +638,14 @@ export function Portfolio({
                     </td>
 
                     <td className="num text-right">
-                      {hidden ? "••••" : fmtNum(h.amount)}
+                      {hidden ? (
+                        "••••"
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5">
+                          {h.simulated > 0 && <SimFlag />}
+                          {fmtNum(h.amount)}
+                        </span>
+                      )}
                     </td>
 
                     <td className="num text-right text-ink2">
@@ -996,6 +1056,18 @@ function ThinFlag() {
       className="rounded border border-warn/35 px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider text-warn"
     >
       thin
+    </span>
+  );
+}
+
+/** Marks a balance that includes (or is entirely) a simulated position bought through this app, not a real on-chain holding. */
+function SimFlag() {
+  return (
+    <span
+      title="Includes a simulated position bought here — not a real on-chain balance"
+      className="rounded border border-accent/35 px-1.5 py-0.5 text-[9.5px] uppercase tracking-wider text-accent"
+    >
+      sim
     </span>
   );
 }

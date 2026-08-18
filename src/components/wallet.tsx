@@ -440,6 +440,16 @@ export interface WalletState {
   allTokenBalances: () => Promise<Map<string, number> | null>;
 
   /**
+   * Get the simulated (ledger) position for one mint.
+   */
+  ledgerBalance: (mint: string) => Promise<number>;
+
+  /**
+   * Get every simulated position, mint -> amount.
+   */
+  allLedgerBalances: () => Promise<Map<string, number>>;
+
+  /**
    * Sign a Solana transaction with the connected wallet.
    */
   signTransaction: (transaction: unknown) => Promise<unknown>;
@@ -923,6 +933,52 @@ export function WalletProvider({
 
   /**
    * ==========================================================
+   * LEDGER (SIMULATED) BALANCES
+   * ==========================================================
+   *
+   * No vault inventory or mint authority exists for any tracked project
+   * token (see `ledger_trades` in db.ts), so a completed buy is recorded as
+   * a position in the app's own ledger rather than a real SPL transfer.
+   * These read that ledger back, the same shape as `allTokenBalances`.
+   */
+
+  const allLedgerBalances = useCallback(async () => {
+    if (!address) {
+      return new Map<string, number>();
+    }
+
+    try {
+      const res = await fetch("/api/positions", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+
+      if (!res.ok) {
+        return new Map<string, number>();
+      }
+
+      const data = (await res.json()) as Record<string, number>;
+
+      return new Map(Object.entries(data));
+    } catch (error) {
+      console.error("[WALLET] Ledger position request failed:", error);
+
+      return new Map<string, number>();
+    }
+  }, [address]);
+
+  const ledgerBalance = useCallback(
+    async (mint: string) => {
+      const all = await allLedgerBalances();
+
+      return all.get(mint) ?? 0;
+    },
+    [allLedgerBalances],
+  );
+
+  /**
+   * ==========================================================
    * SIGN TRANSACTION
    * ==========================================================
    *
@@ -1073,6 +1129,10 @@ export function WalletProvider({
 
       allTokenBalances,
 
+      ledgerBalance,
+
+      allLedgerBalances,
+
       signTransaction,
 
       signAndSendTransaction,
@@ -1096,6 +1156,8 @@ export function WalletProvider({
       logout,
       tokenBalance,
       allTokenBalances,
+      ledgerBalance,
+      allLedgerBalances,
       signTransaction,
       signAndSendTransaction,
     ],

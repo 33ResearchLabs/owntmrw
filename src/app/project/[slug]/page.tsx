@@ -37,6 +37,7 @@ import {
   MetricGrid,
   MetricCell,
   CardNote,
+  StatRowCard,
   NA,
 } from "@/components/panels";
 import { TradeTerminal } from "@/components/TradeTerminal";
@@ -234,9 +235,6 @@ export default async function ProjectPage({
         ? "text-success"
         : "text-warn";
 
-  const performanceTone =
-    roi == null ? "text-muted" : roi >= 0 ? "text-success" : "text-warn";
-
   const summaryDescription =
     p.description ||
     "No project description is currently available for this project.";
@@ -246,20 +244,56 @@ export default async function ProjectPage({
   const recentEvents = [...events].sort((a, b) => b.ts - a.ts).slice(0, 4);
 
   /*
-   * Period helper.
+   * Summary-derived metrics
    *
-   * This keeps the Summary compatible with the existing
-   * periodReturns() object without changing the query layer.
+   * Keep the Summary data-driven so the same layout works for every project.
    */
-  const getPeriod = (key: string): number | null => {
-    const value = (periods as Record<string, number | null | undefined>)[key];
+  const targetRaise = p.raise_goal_usd ?? p.raise_amount_usd ?? null;
+  const acceptedRaise = p.raise_amount_usd ?? null;
+  const committedRaise = p.raise_committed_usd ?? null;
 
-    return value ?? null;
-  };
+  const refundPct =
+    committedRaise != null && acceptedRaise != null && committedRaise > 0
+      ? Math.max(0, (1 - acceptedRaise / committedRaise) * 100)
+      : null;
 
-  const period24h = getPeriod("24h");
-  const period7d = getPeriod("7d");
-  const period30d = getPeriod("30d");
+  const oversubscriptionSummary =
+    committedRaise != null && acceptedRaise != null && acceptedRaise > 0
+      ? committedRaise / acceptedRaise
+      : null;
+
+  const treasuryBackingPct =
+    treasuryValue != null && latest?.mcap != null && latest.mcap > 0
+      ? (treasuryValue / latest.mcap) * 100
+      : null;
+
+  const liquidityPct =
+    latest?.liquidity_usd != null && latest?.mcap != null && latest.mcap > 0
+      ? (latest.liquidity_usd / latest.mcap) * 100
+      : null;
+
+  const firstHolderSnapshot =
+    holderHistory.length > 1 ? holderHistory[0] : null;
+
+  const holderGrowthPct =
+    firstHolderSnapshot?.holder_count != null &&
+    latestHolders?.holder_count != null &&
+    firstHolderSnapshot.holder_count > 0
+      ? ((latestHolders.holder_count - firstHolderSnapshot.holder_count) /
+          firstHolderSnapshot.holder_count) *
+        100
+      : null;
+
+  const holderGrowthDays =
+    firstHolderSnapshot?.ts != null && latestHolders?.ts != null
+      ? Math.max(
+          1,
+          Math.round((latestHolders.ts - firstHolderSnapshot.ts) / 86400),
+        )
+      : null;
+
+  const launchValuation = p.raise_fdv_usd ?? null;
+
   /*
    * PRICE CHART
    */
@@ -428,74 +462,71 @@ export default async function ProjectPage({
   /*
    * SUMMARY
    *
-   * This section is intentionally different from Overview.
+   * Summary = readable project / investment snapshot.
    *
-   * Overview = detailed analytical panels.
-   * Summary = readable project/investment snapshot.
+   * The structure follows the research brief:
+   * About → Market Performance → Raise Details & Commitments
+   * → Token Economics → Project Health → Key Insights
+   * → Recent Activity → Official Links & Resources.
    *
-   * The structure uses clear section headings and explanatory
-   * subheadings so the page feels more like a research brief
-   * rather than another dashboard.
+   * All displayed values are derived from the existing project data.
    */
 
   const summary = (
     <div className="space-y-10">
       {/* =====================================================
           ABOUT THE PROJECT
+          Prose overview beside a quick-glance stat rail — the deep-dive
+          numbers stay in their own sections below rather than repeating
+          here, so this stays a summary rather than a second copy of them.
       ====================================================== */}
 
       <section>
-        <div className="max-w-3xl">
-          <h2 className="text-[22px] font-semibold tracking-tight text-ink">
-            About {p.name}
-          </h2>
-
-          <p className="mt-2 text-[13px] leading-6 text-ink2">
-            {summaryDescription}
-          </p>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="rounded-lg border border-line bg-surface2/40 p-3">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Status
-            </div>
-
-            <div className="mt-1 text-[13px] font-medium text-ink">
-              {p.status || "—"}
-            </div>
+        <div className="grid gap-5 lg:grid-cols-5">
+          <div className="lg:col-span-3">
+            <h2 className="text-[19px] font-semibold tracking-tight text-ink">
+              About {p.name}
+            </h2>
+            <p className="mt-1.5 text-[12px] leading-5 text-muted">
+              Project overview, current status and classification.
+            </p>
+            <p className="mt-3 text-[13px] leading-6 text-ink2">
+              {summaryDescription}
+            </p>
           </div>
 
-          <div className="rounded-lg border border-line bg-surface2/40 p-3">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Category
-            </div>
+          <div className="flex flex-col gap-4 lg:col-span-2">
+            <StatRowCard
+              title="Snapshot"
+              rows={[
+                { label: "Status", value: p.status || "—" },
+                { label: "Category", value: p.category || "—" },
+                { label: "Token", value: p.symbol ?? p.name },
+                {
+                  label: "Health score",
+                  value:
+                    healthScoreValue != null ? `${healthScoreValue}/100` : "—",
+                  sub: healthLabel,
+                  tone: healthTone,
+                },
+              ]}
+            />
 
-            <div className="mt-1 text-[13px] font-medium text-ink">
-              {p.category || "—"}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-line bg-surface2/40 p-3">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Token
-            </div>
-
-            <div className="mt-1 text-[13px] font-medium text-ink">
-              {p.symbol ?? p.name}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-line bg-surface2/40 p-3">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Holders
-            </div>
-
-            <div className="mt-1 text-[13px] font-medium num text-ink">
-              {latestHolders?.holder_count != null
-                ? fmtNum(latestHolders.holder_count)
-                : "—"}
-            </div>
+            <StatRowCard
+              title="Key metrics"
+              rows={[
+                { label: "Price", value: fmtUsd(latest?.price_usd) },
+                { label: "Market cap", value: fmtUsd(latest?.mcap) },
+                { label: "FDV", value: fmtUsd(latest?.fdv) },
+                {
+                  label: "Holders",
+                  value:
+                    latestHolders?.holder_count != null
+                      ? fmtNum(latestHolders.holder_count)
+                      : "—",
+                },
+              ]}
+            />
           </div>
         </div>
       </section>
@@ -509,66 +540,53 @@ export default async function ProjectPage({
           <h2 className="text-[19px] font-semibold tracking-tight text-ink">
             Market Performance
           </h2>
-
           <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            How {p.symbol ?? p.name} is performing in the market today,
-            including its current valuation, liquidity, trading activity and
-            performance against the project's raise and historical high.
+            Current price, valuation, treasury strength, liquidity, trading
+            activity and holder growth.
           </p>
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-xl border border-line bg-surface2/40 p-4">
             <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Price
+              Current Price
             </div>
-
             <div className="mt-1.5 text-[22px] font-semibold num text-ink">
               {fmtUsd(latest?.price_usd)}
             </div>
-
             <div className="mt-1 text-[11px]">
               <Delta v={latest?.change_24h} />
             </div>
           </div>
-
           <div className="rounded-xl border border-line bg-surface2/40 p-4">
             <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
               Market Cap
             </div>
-
             <div className="mt-1.5 text-[22px] font-semibold num text-ink">
               {fmtUsd(latest?.mcap)}
             </div>
-
             <div className="mt-1 text-[11px] text-muted">
-              FDV {fmtUsd(latest?.fdv)}
+              Current market valuation
             </div>
           </div>
-
           <div className="rounded-xl border border-line bg-surface2/40 p-4">
             <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Liquidity
+              FDV
             </div>
-
-            <div
-              className={`mt-1.5 text-[22px] font-semibold num ${liquidityTone}`}
-            >
-              {fmtUsd(latest?.liquidity_usd)}
+            <div className="mt-1.5 text-[22px] font-semibold num text-ink">
+              {fmtUsd(latest?.fdv)}
             </div>
-
-            <div className="mt-1 text-[11px] text-muted">{liquidityLabel}</div>
+            <div className="mt-1 text-[11px] text-muted">
+              Fully diluted valuation
+            </div>
           </div>
-
           <div className="rounded-xl border border-line bg-surface2/40 p-4">
             <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
               24H Volume
             </div>
-
             <div className="mt-1.5 text-[22px] font-semibold num text-ink">
               {fmtUsd(latest?.vol24h)}
             </div>
-
             <div className="mt-1 text-[11px] text-muted">
               Current trading volume
             </div>
@@ -577,211 +595,194 @@ export default async function ProjectPage({
 
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
           <MetricCell
-            label="24H Return"
-            value={period24h != null ? fmtPct(period24h) : NA}
+            label="ROI vs Issue Price"
+            value={roi != null ? fmtPct(roi) : NA}
+            sub={
+              rp
+                ? `issue ${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`
+                : "No issue price"
+            }
           />
-
           <MetricCell
-            label="7D Return"
-            value={period7d != null ? fmtPct(period7d) : NA}
-          />
-
-          <MetricCell
-            label="30D Return"
-            value={period30d != null ? fmtPct(period30d) : NA}
-          />
-
-          <MetricCell
-            label="From ATH"
-            value={fromAth != null ? fmtPct(fromAth) : NA}
-          />
-        </div>
-      </section>
-
-      {/* =====================================================
-          INVESTMENT SNAPSHOT
-      ====================================================== */}
-
-      <section>
-        <div className="max-w-3xl">
-          <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-            Investment Snapshot
-          </h2>
-
-          <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            A compact view of the project's current health, valuation, treasury
-            strength, liquidity and performance.
-          </p>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="rounded-xl border border-line bg-surface2/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Health Score
-            </div>
-
-            <div
-              className={`mt-1.5 text-[25px] font-semibold num ${healthTone}`}
-            >
-              {healthScoreValue != null ? `${healthScoreValue}/100` : "—"}
-            </div>
-
-            <div className="mt-1 text-[11px] text-muted">{healthLabel}</div>
-          </div>
-
-          <div className="rounded-xl border border-line bg-surface2/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              ROI vs Raise
-            </div>
-
-            <div
-              className={`mt-1.5 text-[25px] font-semibold num ${performanceTone}`}
-            >
-              {roi != null ? <Delta v={roi} /> : "—"}
-            </div>
-
-            <div className="mt-1 text-[11px] text-muted">
-              {rp
-                ? `from ${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}`
-                : "No raise baseline"}
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-line bg-surface2/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Treasury
-            </div>
-
-            <div className="mt-1.5 text-[25px] font-semibold num text-ink">
-              {treasuryValue != null && treasuryValue < 1
+            label="Treasury Balance"
+            value={
+              treasuryValue != null && treasuryValue < 1
                 ? "~$0"
-                : fmtUsd(treasuryValue)}
-            </div>
-
-            <div className="mt-1 text-[11px] text-muted">USDC AUM on-chain</div>
-          </div>
-
-          <div className="rounded-xl border border-line bg-surface2/40 p-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Development
-            </div>
-
-            <div className="mt-1.5 text-[25px] font-semibold num text-ink">
-              {devScore.overall != null ? `${devScore.overall}/100` : "—"}
-            </div>
-
-            <div className="mt-1 text-[11px] text-muted">
-              {p.github ? "GitHub activity" : "No GitHub linked"}
-            </div>
-          </div>
+                : fmtUsd(treasuryValue)
+            }
+            sub={
+              treasuryBackingPct != null
+                ? `${treasuryBackingPct.toFixed(0)}% of market cap`
+                : "On-chain treasury"
+            }
+          />
+          <MetricCell
+            label="Liquidity"
+            value={fmtUsd(latest?.liquidity_usd)}
+            sub={
+              liquidityPct != null
+                ? `${liquidityPct.toFixed(0)}% of market cap`
+                : liquidityLabel
+            }
+          />
+          <MetricCell
+            label="Total Holders"
+            value={
+              latestHolders?.holder_count != null
+                ? fmtNum(latestHolders.holder_count)
+                : NA
+            }
+            sub={
+              holderGrowthPct != null
+                ? `${fmtPct(holderGrowthPct)} over ${holderGrowthDays ?? "—"} days`
+                : "Current holders"
+            }
+          />
         </div>
       </section>
 
       {/* =====================================================
-          RAISE & TOKEN ECONOMICS
+          RAISE DETAILS & COMMITMENTS
       ====================================================== */}
 
-      {(p.raise_amount_usd != null ||
+      {(targetRaise != null ||
+        committedRaise != null ||
+        acceptedRaise != null ||
         rp != null ||
-        p.raise_fdv_usd != null ||
-        p.circulating_supply != null) && (
+        p.raise_contributors != null) && (
         <section>
           <div className="max-w-3xl">
             <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-              Raise & Token Economics
+              Raise Details &amp; Commitments
             </h2>
-
             <p className="mt-1.5 text-[12px] leading-5 text-muted">
-              How the project was funded, the valuation established at the
-              raise, and how much of the token supply is currently circulating.
+              Funding target, accepted raise, commitment demand and participant
+              activity.
             </p>
           </div>
 
-          <div className="mt-5">
-            <MetricGrid>
-              <MetricCell
-                label="Raised"
-                value={
-                  p.raise_amount_usd != null ? fmtUsd(p.raise_amount_usd) : NA
-                }
-                sub={
-                  p.raise_amount_usd == null
-                    ? "no raise on record"
-                    : p.raise_amount_usd === 0
-                      ? "fully refunded"
-                      : p.raise_end_ts
-                        ? `closed ${fmtDate(p.raise_end_ts)}`
-                        : undefined
-                }
-              />
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <MetricCell
+              label="Target Raise"
+              value={targetRaise != null ? fmtUsd(targetRaise) : NA}
+              sub={
+                p.raise_end_ts
+                  ? `closed ${fmtDate(p.raise_end_ts)}`
+                  : "Raise target"
+              }
+            />
+            <MetricCell
+              label="Total Committed"
+              value={committedRaise != null ? fmtUsd(committedRaise) : NA}
+              sub={
+                oversubscriptionSummary != null
+                  ? `${oversubscriptionSummary.toFixed(1)}× oversubscribed`
+                  : "Total demand"
+              }
+            />
+            <MetricCell
+              label="Issue Price"
+              value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : NA}
+              sub={rp?.derived ? "Derived from raise data" : "Launch price"}
+            />
+            <MetricCell
+              label="Contributors"
+              value={
+                p.raise_contributors != null ? fmtNum(p.raise_contributors) : NA
+              }
+              sub="Raise participants"
+            />
+          </div>
 
-              <MetricCell
-                label="Committed"
-                value={
-                  p.raise_committed_usd != null
-                    ? fmtUsd(p.raise_committed_usd)
-                    : NA
-                }
-                sub={
-                  oversubscribed != null
-                    ? `${oversubscribed.toFixed(1)}× oversubscribed`
-                    : undefined
-                }
-              />
-
-              <MetricCell
-                label="Raise Price"
-                value={rp ? `${rp.derived ? "~" : ""}${fmtPrice(rp.usd)}` : NA}
-              />
-
-              <MetricCell
-                label="Raise FDV"
-                value={p.raise_fdv_usd != null ? fmtUsd(p.raise_fdv_usd) : NA}
-              />
-
-              <MetricCell
-                label="Contributors"
-                value={
-                  p.raise_contributors != null
-                    ? fmtNum(p.raise_contributors)
-                    : NA
-                }
-              />
-
-              <MetricCell
-                label="Circulating Supply"
-                value={
-                  p.circulating_supply != null
-                    ? fmtNum(p.circulating_supply)
-                    : NA
-                }
-                sub={
-                  p.circulating_supply != null && p.total_supply
-                    ? `of ${fmtNum(p.total_supply)} total`
-                    : undefined
-                }
-              />
-
-              <MetricCell
-                label="Team Locked"
-                value={lockedPct != null ? `${lockedPct.toFixed(1)}%` : NA}
-                sub={
-                  p.team_package != null ? fmtNum(p.team_package) : undefined
-                }
-              />
-
-              <MetricCell
-                label="Total Supply"
-                value={p.total_supply != null ? fmtNum(p.total_supply) : NA}
-              />
-            </MetricGrid>
+          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
+            <MetricCell
+              label="Accepted Raise"
+              value={acceptedRaise != null ? fmtUsd(acceptedRaise) : NA}
+              sub={
+                p.raise_end_ts
+                  ? `closed ${fmtDate(p.raise_end_ts)}`
+                  : "Accepted capital"
+              }
+            />
+            <MetricCell
+              label="Oversubscription"
+              value={
+                oversubscriptionSummary != null
+                  ? `${oversubscriptionSummary.toFixed(1)}×`
+                  : NA
+              }
+              sub="Committed vs accepted"
+            />
+            <MetricCell
+              label="Refunds"
+              value={refundPct != null ? `${refundPct.toFixed(0)}%` : NA}
+              sub="Estimated commitments refunded"
+            />
           </div>
 
           {p.raise_note && (
-            <p className="mt-3 text-[11px] leading-5 text-muted">
-              {p.raise_note}
-            </p>
+            <div className="mt-4 rounded-xl border border-line bg-surface2/30 p-4">
+              <div className="text-[11px] font-semibold text-ink">
+                Raise Context
+              </div>
+              <p className="mt-1.5 text-[12px] leading-5 text-ink2">
+                {p.raise_note}
+              </p>
+            </div>
           )}
+        </section>
+      )}
+
+      {/* =====================================================
+          TOKEN ECONOMICS
+      ====================================================== */}
+
+      {(p.total_supply != null ||
+        p.circulating_supply != null ||
+        p.team_package != null ||
+        launchValuation != null) && (
+        <section>
+          <div className="max-w-3xl">
+            <h2 className="text-[19px] font-semibold tracking-tight text-ink">
+              Token Economics
+            </h2>
+            <p className="mt-1.5 text-[12px] leading-5 text-muted">
+              Token supply, circulating allocation, team lockup and launch
+              valuation.
+            </p>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <MetricCell
+              label="Total Supply"
+              value={p.total_supply != null ? fmtNum(p.total_supply) : NA}
+            />
+            <MetricCell
+              label="Circulating Supply"
+              value={
+                p.circulating_supply != null ? fmtNum(p.circulating_supply) : NA
+              }
+              sub={
+                p.circulating_supply != null && p.total_supply
+                  ? `${((p.circulating_supply / p.total_supply) * 100).toFixed(1)}% circulating`
+                  : undefined
+              }
+            />
+            <MetricCell
+              label="Team Locked"
+              value={lockedPct != null ? `${lockedPct.toFixed(1)}%` : NA}
+              sub={
+                p.team_package != null
+                  ? `${fmtNum(p.team_package)} tokens`
+                  : undefined
+              }
+            />
+            <MetricCell
+              label="Launch Valuation"
+              value={launchValuation != null ? fmtUsd(launchValuation) : NA}
+              sub="Raise valuation"
+            />
+          </div>
         </section>
       )}
 
@@ -794,80 +795,55 @@ export default async function ProjectPage({
           <h2 className="text-[19px] font-semibold tracking-tight text-ink">
             Project Health
           </h2>
-
           <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            A combined view of project health using the available market,
+            Combined assessment based on the project's available market,
             treasury, holder, development and risk data.
           </p>
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="rounded-lg border border-line bg-surface2/40 p-3.5">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Health
-            </div>
-
-            <div className={`mt-1 text-[20px] font-semibold num ${healthTone}`}>
-              {healthScoreValue != null ? healthScoreValue : "—"}
-            </div>
-
-            <div className="mt-0.5 text-[11px] text-muted">Overall / 100</div>
-          </div>
-
-          <div className="rounded-lg border border-line bg-surface2/40 p-3.5">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Development
-            </div>
-
-            <div className="mt-1 text-[20px] font-semibold num text-ink">
-              {devScore.overall != null ? devScore.overall : "—"}
-            </div>
-
-            <div className="mt-0.5 text-[11px] text-muted">Developer score</div>
-          </div>
-
-          <div className="rounded-lg border border-line bg-surface2/40 p-3.5">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Holders
-            </div>
-
-            <div className="mt-1 text-[20px] font-semibold num text-ink">
-              {latestHolders?.holder_count != null
+          <MetricCell
+            label="Health Score"
+            value={healthScoreValue != null ? `${healthScoreValue}/100` : NA}
+            sub={healthLabel}
+          />
+          <MetricCell
+            label="Development"
+            value={devScore.overall != null ? `${devScore.overall}/100` : NA}
+            sub={p.github ? "GitHub activity" : "No GitHub linked"}
+          />
+          <MetricCell
+            label="Holders"
+            value={
+              latestHolders?.holder_count != null
                 ? fmtNum(latestHolders.holder_count)
-                : "—"}
-            </div>
-
-            <div className="mt-0.5 text-[11px] text-muted">Current holders</div>
-          </div>
-
-          <div className="rounded-lg border border-line bg-surface2/40 p-3.5">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted">
-              Liquidity
-            </div>
-
-            <div
-              className={`mt-1 text-[20px] font-semibold num ${liquidityTone}`}
-            >
-              {liquidityLabel}
-            </div>
-
-            <div className="mt-0.5 text-[11px] text-muted">
-              {fmtUsd(latest?.liquidity_usd)}
-            </div>
-          </div>
+                : NA
+            }
+            sub={
+              holderGrowthPct != null
+                ? `${fmtPct(holderGrowthPct)} growth`
+                : "Current holder count"
+            }
+          />
+          <MetricCell
+            label="Liquidity"
+            value={
+              latest?.liquidity_usd != null ? fmtUsd(latest.liquidity_usd) : NA
+            }
+            sub={liquidityLabel}
+          />
         </div>
 
         <div className="mt-4 rounded-xl border border-line bg-surface2/30 p-4">
           <div className="text-[12px] font-semibold text-ink">Assessment</div>
-
           <p className="mt-1.5 max-w-3xl text-[12px] leading-5 text-ink2">
             {healthScoreValue == null
               ? "There is not enough current data to produce a reliable health assessment."
               : healthScoreValue >= 80
-                ? "The project currently shows strong overall health across the available market, treasury, development and activity signals."
+                ? `The project currently shows strong overall health with a score of ${healthScoreValue}/100 across the available signals.`
                 : healthScoreValue >= 60
-                  ? "The project currently shows moderate overall health. The detailed Risk, Holders, Treasury and Development sections should be reviewed for additional context."
-                  : "The current data indicates areas that require additional attention. Review the Risk, Holders, Treasury and Development sections before making a decision."}
+                  ? `The project currently shows moderate overall health with a score of ${healthScoreValue}/100. Risk, treasury, holder and development data should be reviewed for additional context.`
+                  : "The current data indicates areas that require additional attention. The project's risk, treasury, holder and development signals should be reviewed carefully."}
           </p>
         </div>
       </section>
@@ -881,10 +857,9 @@ export default async function ProjectPage({
           <h2 className="text-[19px] font-semibold tracking-tight text-ink">
             Key Insights
           </h2>
-
           <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            Important signals detected from the project's price, holder,
-            treasury and market activity.
+            Important signals derived from the project's price, raise, treasury,
+            holder and market activity.
           </p>
         </div>
 
@@ -892,9 +867,7 @@ export default async function ProjectPage({
           {topSignals.length ? (
             <SectionCard
               title="Latest Signals"
-              subtitle={`${signals.length} signal${
-                signals.length === 1 ? "" : "s"
-              } detected from the available project data.`}
+              subtitle={`${signals.length} signal${signals.length === 1 ? "" : "s"} detected from the available project data.`}
             >
               <InsightList items={topSignals} />
             </SectionCard>
@@ -915,9 +888,8 @@ export default async function ProjectPage({
           <h2 className="text-[19px] font-semibold tracking-tight text-ink">
             Recent Activity
           </h2>
-
           <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            The latest notable project events, including launches, listings,
+            Latest notable project events, including launches, listings,
             governance, development releases and market activity.
           </p>
         </div>
@@ -933,19 +905,16 @@ export default async function ProjectPage({
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line bg-surface2 text-[10px] font-semibold text-ink2">
                     {EVENT_LABEL[event.type] ?? "•"}
                   </div>
-
                   <div className="min-w-0 flex-1">
                     <div className="text-[12px] font-medium text-ink">
                       {event.title}
                     </div>
-
                     {event.detail && (
                       <div className="mt-0.5 line-clamp-2 text-[11px] leading-5 text-muted">
                         {event.detail}
                       </div>
                     )}
                   </div>
-
                   <div className="shrink-0 text-[10px] text-muted">
                     {fmtDate(event.ts)}
                   </div>
@@ -961,17 +930,16 @@ export default async function ProjectPage({
       </section>
 
       {/* =====================================================
-          LINKS
+          OFFICIAL LINKS & RESOURCES
       ====================================================== */}
 
       <section>
         <div className="max-w-3xl">
           <h2 className="text-[19px] font-semibold tracking-tight text-ink">
-            Links
+            Official Links &amp; Resources
           </h2>
-
           <p className="mt-1.5 text-[12px] leading-5 text-muted">
-            Official project resources and public references.
+            Official project websites, social channels and public references.
           </p>
         </div>
 
@@ -1001,38 +969,6 @@ export default async function ProjectPage({
               Solscan ↗
             </a>
           )}
-        </div>
-      </section>
-
-      {/* =====================================================
-          OVERALL ASSESSMENT
-      ====================================================== */}
-
-      <section className="rounded-xl border border-line bg-surface2/30 p-5">
-        <div className="max-w-3xl">
-          <div className="text-[10px] uppercase tracking-[0.14em] text-muted">
-            Overall Assessment
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-end gap-3">
-            <div className={`text-[34px] font-semibold num ${healthTone}`}>
-              {healthScoreValue != null ? healthScoreValue : "—"}
-            </div>
-
-            <div className="pb-1 text-[13px] text-muted">
-              / 100 health score
-            </div>
-          </div>
-
-          <p className="mt-3 text-[12px] leading-5 text-ink2">
-            {healthScoreValue == null
-              ? "An overall assessment cannot currently be produced because sufficient data is not available."
-              : healthScoreValue >= 80
-                ? `The available data currently indicates a strong project profile with a health score of ${healthScoreValue}/100. Review the detailed analytical tabs for the evidence behind this score.`
-                : healthScoreValue >= 60
-                  ? `The available data currently indicates a moderate project profile with a health score of ${healthScoreValue}/100. Additional review of risk, holders, treasury and development activity is recommended.`
-                  : `The available data currently indicates a higher-risk project profile with a health score of ${healthScoreValue}/100. The detailed analytical sections should be reviewed carefully.`}
-          </p>
         </div>
       </section>
     </div>
