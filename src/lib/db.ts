@@ -765,3 +765,85 @@ export function ledgerPosition(address: string, mint: string): number {
     .get(address, mint) as { amount: number } | undefined;
   return row?.amount ?? 0;
 }
+
+export interface LedgerTradeRow {
+  mint: string;
+  side: "buy" | "sell";
+  tokenAmount: number;
+  priceUsd: number | null;
+  usdAmount: number;
+  txSignature: string | null;
+  ts: number;
+}
+
+/** A wallet's simulated trade history, newest first, capped at `limit`. */
+export function ledgerTradeHistory(
+  address: string,
+  limit = 50,
+): LedgerTradeRow[] {
+  const rows = db()
+    .prepare(
+      `SELECT mint, side, token_amount AS tokenAmount, price_usd AS priceUsd,
+              usd_amount AS usdAmount, tx_signature AS txSignature, ts
+       FROM ledger_trades WHERE address = ? ORDER BY ts DESC, id DESC LIMIT ?`,
+    )
+    .all(address, limit) as LedgerTradeRow[];
+  return rows;
+}
+
+export interface LedgerCostBasis {
+  tokens: number;
+  costBasisUsd: number;
+  avgPriceUsd: number | null;
+}
+
+/**
+ * Average-cost basis per mint, replayed from the full trade history (not
+ * just the capped page `ledgerTradeHistory` returns — a P&L figure built
+ * from a truncated history would be wrong for an active trader). A sell
+ * reduces the cost basis in proportion to how much of the position it
+ * closes, the standard average-cost method: it doesn't try to track which
+ * specific buy a sell "came from".
+ */
+export function ledgerCostBasis(address: string): Map<string, LedgerCostBasis> {
+  const rows = db()
+    .prepare(
+      `SELECT mint, side, token_amount AS tokenAmount, usd_amount AS usdAmount, ts
+       FROM ledger_trades WHERE address = ? ORDER BY ts ASC, id ASC`,
+    )
+    .all(address) as {
+    mint: string;
+    side: "buy" | "sell";
+    tokenAmount: number;
+    usdAmount: number;
+    ts: number;
+  }[];
+
+  const byMint = new Map<string, { tokens: number; costBasisUsd: number }>();
+
+  for (const r of rows) {
+    const cur = byMint.get(r.mint) ?? { tokens: 0, costBasisUsd: 0 };
+
+    if (r.side === "buy") {
+      cur.tokens += r.tokenAmount;
+      cur.costBasisUsd += r.usdAmount;
+    } else if (cur.tokens > 0) {
+      const sold = Math.min(r.tokenAmount, cur.tokens);
+      cur.costBasisUsd *= (cur.tokens - sold) / cur.tokens;
+      cur.tokens -= sold;
+    }
+
+    byMint.set(r.mint, cur);
+  }
+
+  const out = new Map<string, LedgerCostBasis>();
+  for (const [mint, v] of byMint) {
+    if (v.tokens <= 0) continue;
+    out.set(mint, {
+      tokens: v.tokens,
+      costBasisUsd: v.costBasisUsd,
+      avgPriceUsd: v.tokens > 0 ? v.costBasisUsd / v.tokens : null,
+    });
+  }
+  return out;
+}

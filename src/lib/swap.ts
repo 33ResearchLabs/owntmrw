@@ -78,8 +78,21 @@ export async function buildInvestmentTransaction(
    * mint. We don't transfer this token here — it identifies
    * the project being invested in and is recorded by the
    * application layer.
+   *
+   * Most tracked project mints only exist on Mainnet — this app trades on
+   * Devnet, and only a handful of tokens happen to have a Devnet-deployed
+   * mint at the same address. `getMint` throws `TokenAccountNotFoundError`
+   * with an empty message for the rest, which read as a blank, confusing
+   * failure — this turns it into an honest one instead of a fix, since
+   * there's no mint on Devnet here to actually trade.
    */
-  await getMint(connection, tokenMint, "confirmed");
+  try {
+    await getMint(connection, tokenMint, "confirmed");
+  } catch {
+    throw new Error(
+      "This token's mint isn't deployed on Solana Devnet, so it can't be traded here yet.",
+    );
+  }
 
   const mintInfo = await getMint(connection, usdtMint, "confirmed");
 

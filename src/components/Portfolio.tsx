@@ -53,6 +53,27 @@ interface Holding extends PortfolioToken {
   value: number | null;
   /** Portion of `amount` that's a simulated position rather than a real on-chain balance. */
   simulated: number;
+  /** What the simulated portion actually cost, and P&L against its current value. Null when there's no trade history for this mint (e.g. a purely on-chain balance) — cost basis can't be known for tokens acquired outside this app. */
+  costBasisUsd: number | null;
+  avgPriceUsd: number | null;
+  pnlUsd: number | null;
+  pnlPct: number | null;
+}
+
+interface LedgerTrade {
+  mint: string;
+  side: "buy" | "sell";
+  tokenAmount: number;
+  priceUsd: number | null;
+  usdAmount: number;
+  txSignature: string | null;
+  ts: number;
+}
+
+interface CostBasisEntry {
+  tokens: number;
+  costBasisUsd: number;
+  avgPriceUsd: number | null;
 }
 
 type ScanState = "idle" | "loading" | "done" | "failed";
@@ -91,6 +112,8 @@ export function Portfolio({
     holdings: Holding[] | null;
   } | null>(null);
 
+  const [trades, setTrades] = useState<LedgerTrade[]>([]);
+
   const [range, setRange] = useState<Range>(30);
   const [hidden, setHidden] = useState(false);
 
@@ -103,6 +126,7 @@ export function Portfolio({
   useEffect(() => {
     if (!ready || !address) {
       setScan(null);
+      setTrades([]);
       return;
     }
 
@@ -110,9 +134,22 @@ export function Portfolio({
 
     async function refreshBalances() {
       try {
-        const [balances, ledger] = await Promise.all([
+        const [balances, ledger, history] = await Promise.all([
           allTokenBalances(),
           allLedgerBalances(),
+          fetch("/api/positions/history", {
+            cache: "no-store",
+            credentials: "same-origin",
+          })
+            .then((res) =>
+              res.ok
+                ? (res.json() as Promise<{
+                    trades: LedgerTrade[];
+                    costBasis: Record<string, CostBasisEntry>;
+                  }>)
+                : null,
+            )
+            .catch(() => null),
         ]);
 
         if (cancelled) return;
@@ -125,6 +162,10 @@ export function Portfolio({
           return;
         }
 
+        const costBasis = history?.costBasis ?? {};
+
+        if (!cancelled) setTrades(history?.trades ?? []);
+
         /*
          * Match every tracked project against the actual wallet token mint,
          * plus whatever simulated position the ledger has for it.
@@ -136,18 +177,34 @@ export function Portfolio({
          * 0.83 META
          *
          * No META-specific hardcoding is required.
+         *
+         * P&L only ever covers the simulated slice — cost basis for a real
+         * on-chain balance acquired outside this app is genuinely unknown,
+         * so it's left null rather than guessed from the current price.
          */
         const found = tokens
           .map((t) => {
             const onchain = (balances && balances.get(t.mint)) ?? 0;
             const simulated = ledger.get(t.mint) ?? 0;
             const amount = onchain + simulated;
+            const cb = simulated > 0 ? (costBasis[t.mint] ?? null) : null;
+            const pnlUsd =
+              cb != null && t.price_usd != null
+                ? cb.tokens * t.price_usd - cb.costBasisUsd
+                : null;
 
             return {
               ...t,
               amount,
               simulated,
               value: t.price_usd != null ? amount * t.price_usd : null,
+              costBasisUsd: cb?.costBasisUsd ?? null,
+              avgPriceUsd: cb?.avgPriceUsd ?? null,
+              pnlUsd,
+              pnlPct:
+                pnlUsd != null && cb != null && cb.costBasisUsd > 0
+                  ? (pnlUsd / cb.costBasisUsd) * 100
+                  : null,
             };
           })
           .filter((h) => h.amount > 0)
@@ -217,6 +274,11 @@ export function Portfolio({
   );
 
   const held = useMemo(() => new Set(holdings.map((h) => h.slug)), [holdings]);
+
+  const tokenByMint = useMemo(
+    () => new Map(tokens.map((t) => [t.mint, t])),
+    [tokens],
+  );
 
   const feed = useMemo(
     () => events.filter((e) => e.slugs.some((s) => held.has(s))).slice(0, 6),
@@ -324,6 +386,21 @@ export function Portfolio({
    * Total tracked token positions.
    */
   const positions = holdings.reduce((s, h) => s + (h.value ?? 0), 0);
+
+  /*
+   * What was actually put in, and the resulting unrealised P&L — both
+   * summed only over holdings with a known cost basis (the simulated
+   * portion of a position; see the P&L column note below for why a purely
+   * on-chain balance can't contribute here).
+   */
+  const totalInvested = holdings.reduce(
+    (s, h) => s + (h.costBasisUsd ?? 0),
+    0,
+  );
+
+  const totalPnlUsd = holdings.reduce((s, h) => s + (h.pnlUsd ?? 0), 0);
+
+  const hasCostBasis = holdings.some((h) => h.costBasisUsd != null);
 
   const priced = holdings.filter((h) => h.value != null).length;
 
@@ -436,7 +513,26 @@ export function Portfolio({
                 }
               />
 
-              <Split label="USDT" value={money(w.usdtBalance)} />
+              <Split
+                label="USDT"
+                value={money(w.usdtBalance)}
+                sub="available to invest"
+              />
+
+              {hasCostBasis && (
+                <Split
+                  label="Invested"
+                  value={money(totalInvested)}
+                  sub={
+                    hidden ? undefined : (
+                      <span className={totalPnlUsd >= 0 ? "text-good" : "text-bad"}>
+                        {totalPnlUsd >= 0 ? "+" : "−"}
+                        {fmtUsd(Math.abs(totalPnlUsd))} P&amp;L
+                      </span>
+                    )
+                  }
+                />
+              )}
             </div>
 
             {unpriced > 0 && (
@@ -613,6 +709,12 @@ export function Portfolio({
                   <th className="!text-right">30d</th>
                   <th className="!text-right">Trend</th>
                   <th className="!text-right">Value</th>
+                  <th
+                    className="!text-right"
+                    title="Unrealised gain/loss on the simulated portion of this holding only — cost basis for real on-chain balances acquired outside this app can't be known"
+                  >
+                    P&amp;L
+                  </th>
                   <th className="!text-right">Share</th>
                 </tr>
               </thead>
@@ -695,6 +797,34 @@ export function Portfolio({
                       {money(h.value)}
                     </td>
 
+                    <td className="text-right">
+                      {h.pnlUsd == null ? (
+                        <span className="text-muted">—</span>
+                      ) : hidden ? (
+                        <span className="num text-muted">••••</span>
+                      ) : (
+                        <div className="leading-tight">
+                          <div
+                            className={`num ${h.pnlUsd >= 0 ? "text-good" : "text-bad"}`}
+                          >
+                            {h.pnlUsd >= 0 ? "+" : "−"}
+                            {fmtUsd(Math.abs(h.pnlUsd))}
+                            {h.pnlPct != null && (
+                              <span className="ml-1 text-[11px]">
+                                ({h.pnlUsd >= 0 ? "+" : "−"}
+                                {Math.abs(h.pnlPct).toFixed(1)}%)
+                              </span>
+                            )}
+                          </div>
+                          {h.avgPriceUsd != null && (
+                            <div className="num mt-0.5 text-[10px] text-faint">
+                              bought at {fmtPrice(h.avgPriceUsd)}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
+
                     <td className="num text-right text-muted">
                       {h.value != null && positions > 0
                         ? `${((h.value / positions) * 100).toFixed(1)}%`
@@ -720,6 +850,103 @@ export function Portfolio({
           )}
         </div>
       </section>
+
+      {/* ------------------------------------------------------------ */}
+      {/* 3b — TRADE HISTORY                                           */}
+      {/* ------------------------------------------------------------ */}
+
+      {state === "done" && (
+        <section className="card overflow-hidden">
+          <CardHead
+            title="Trade history"
+            sub="Every buy and sell placed through this app's trade terminal."
+          />
+
+          {trades.length === 0 ? (
+            <Placeholder>
+              Buy or sell a tracked token from its project page and it shows up
+              here — what you paid, when, and at what price.
+            </Placeholder>
+          ) : (
+            <div className="divide-y divide-grid">
+              {trades.map((t, i) => {
+                const token = tokenByMint.get(t.mint);
+                const buy = t.side === "buy";
+
+                return (
+                  <div
+                    key={`${t.mint}-${t.ts}-${i}`}
+                    className="flex items-center gap-3 px-5 py-3"
+                  >
+                    <span
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                        buy ? "bg-good/15 text-good" : "bg-bad/15 text-bad"
+                      }`}
+                    >
+                      {t.side}
+                    </span>
+
+                    {token ? (
+                      <Link
+                        href={`/project/${token.slug}`}
+                        className="flex min-w-0 flex-1 items-center gap-2 hover:text-brand"
+                      >
+                        <Logo src={token.image_url} name={token.name} size={20} />
+                        <span className="truncate text-[12.5px] font-medium">
+                          {token.symbol ?? token.name}
+                        </span>
+                      </Link>
+                    ) : (
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-muted">
+                        {shortAddr(t.mint)}
+                      </span>
+                    )}
+
+                    <span className="num shrink-0 text-right text-[12.5px]">
+                      {fmtNum(t.tokenAmount)}{" "}
+                      <span className="text-muted">
+                        {token?.symbol ?? "tokens"}
+                      </span>
+                    </span>
+
+                    <span className="num hidden w-[80px] shrink-0 text-right text-[12px] text-ink2 sm:block">
+                      {t.priceUsd != null ? fmtPrice(t.priceUsd) : "—"}
+                    </span>
+
+                    <span className="num w-[76px] shrink-0 text-right text-[12.5px] font-semibold">
+                      {fmtUsd(t.usdAmount)}
+                    </span>
+
+                    <span className="hidden w-[80px] shrink-0 text-right text-[11px] text-faint md:block">
+                      {timeAgo(t.ts)}
+                    </span>
+
+                    {t.txSignature ? (
+                      <a
+                        href={`https://explorer.solana.com/tx/${t.txSignature}?cluster=devnet`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-[11px] text-brand hover:underline"
+                        title="View the on-chain USDT transfer"
+                      >
+                        ↗
+                      </a>
+                    ) : (
+                      <span className="w-[14px] shrink-0" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="border-t border-grid px-5 py-3 text-[11px] leading-relaxed text-muted">
+            Buys move real USDT on Devnet into the app&rsquo;s vault; the token
+            side is a simulated position tracked here rather than a real
+            transfer, and sells close that position without moving funds back.
+          </div>
+        </section>
+      )}
 
       {/* ------------------------------------------------------------ */}
       {/* 4 — PERFORMANCE SINCE RAISE                                  */}
@@ -797,9 +1024,11 @@ export function Portfolio({
           )}
 
           <div className="border-t border-grid px-5 py-3 text-[11px] leading-relaxed text-muted">
-            This is the token&rsquo;s history, not yours. Cost basis, realised
-            PnL and hold duration are not shown: they need the price paid at
-            every acquisition.
+            This is the token&rsquo;s history, not yours — your own unrealised
+            P&amp;L is in the Holdings table above, for the simulated portion
+            of each position. Realised P&amp;L and hold duration still
+            aren&rsquo;t shown: they&rsquo;d need every acquisition and every
+            exit, not just what&rsquo;s currently open.
           </div>
         </section>
       )}
@@ -1164,7 +1393,7 @@ function Split({
 }: {
   label: string;
   value: string;
-  sub?: string;
+  sub?: React.ReactNode;
 }) {
   return (
     <div>
@@ -1172,7 +1401,7 @@ function Split({
 
       <div className="num mt-0.5 text-[13.5px] font-semibold">{value}</div>
 
-      {sub && <div className="text-[10px] text-faint">{sub}</div>}
+      {sub != null && <div className="num text-[10px] text-faint">{sub}</div>}
     </div>
   );
 }
