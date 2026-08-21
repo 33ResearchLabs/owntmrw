@@ -124,13 +124,195 @@ export function TradeTerminal({
 
   const outCcy = side === "buy" ? symbol : "USDT";
 
-  const usdtBalance = w.usdtBalance ?? 0;
+  const [maxUsdtBalance, setMaxUsdtBalance] = useState(0);
 
+  console.log("[TRADE] USDT BALANCE:", maxUsdtBalance);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMaxUsdtBalance() {
+      try {
+        if (!w.address) {
+          if (!cancelled) {
+            setMaxUsdtBalance(0);
+          }
+          return;
+        }
+
+        /*
+         * IMPORTANT:
+         *
+         * The wallet provider returns a Map at runtime:
+         *
+         * Map<string, number>
+         *
+         * But the current TypeScript definition of
+         * allTokenBalances is not correctly typed.
+         *
+         * Therefore we intentionally treat the returned
+         * value as unknown and normalize it safely here.
+         */
+        const rawBalances: unknown = await w.allTokenBalances();
+
+        console.log("[TRADE] WALLET:", w.address);
+        console.log("[TRADE] TOKEN BALANCES:", rawBalances);
+
+        let entries: Array<{
+          mint: string;
+          balance: number;
+        }> = [];
+
+        /*
+         * ============================================================
+         * MAP
+         * ============================================================
+         */
+
+        if (rawBalances instanceof Map) {
+          entries = Array.from(rawBalances.entries())
+            .map(([mint, value]: [unknown, unknown]) => ({
+              mint: String(mint),
+              balance: Number(value),
+            }))
+            .filter(
+              ({ mint, balance }) =>
+                mint.length > 0 && Number.isFinite(balance) && balance > 0,
+            );
+        } else if (Array.isArray(rawBalances)) {
+          /*
+           * ============================================================
+           * ARRAY
+           * ============================================================
+           *
+           * Supports:
+           *
+           * [
+           *   { mint: "...", balance: 100 },
+           *   ...
+           * ]
+           */
+          entries = rawBalances
+            .map((item: unknown) => {
+              if (!item || typeof item !== "object") {
+                return null;
+              }
+
+              const record = item as Record<string, unknown>;
+
+              const mint = String(record.mint ?? "");
+
+              const balance = Number(
+                record.balance ?? record.uiAmount ?? record.amount ?? 0,
+              );
+
+              return {
+                mint,
+                balance,
+              };
+            })
+            .filter(
+              (
+                item,
+              ): item is {
+                mint: string;
+                balance: number;
+              } =>
+                item !== null &&
+                item.mint.length > 0 &&
+                Number.isFinite(item.balance) &&
+                item.balance > 0,
+            );
+        } else if (rawBalances !== null && typeof rawBalances === "object") {
+          /*
+           * ============================================================
+           * OBJECT
+           * ============================================================
+           *
+           * Supports:
+           *
+           * {
+           *   "mint1": 100,
+           *   "mint2": 500
+           * }
+           */
+          entries = Object.entries(rawBalances as Record<string, unknown>)
+            .map(([mint, value]) => ({
+              mint,
+              balance: Number(value),
+            }))
+            .filter(
+              ({ mint, balance }) =>
+                mint.length > 0 && Number.isFinite(balance) && balance > 0,
+            );
+        }
+
+        console.log("[TRADE] TOKEN ENTRIES:", entries);
+
+        /*
+         * No tokens
+         */
+
+        if (entries.length === 0) {
+          console.log("[TRADE] No token balances found.");
+
+          if (!cancelled) {
+            setMaxUsdtBalance(0);
+          }
+
+          return;
+        }
+
+        /*
+         * ============================================================
+         * MAX TOKEN
+         * ============================================================
+         *
+         * For your current Devnet setup, the largest token balance
+         * is being treated as the available USDT balance.
+         *
+         * Example:
+         *
+         * 30.95
+         * 1,000,000
+         * 1,797,778  <-- selected
+         * 4
+         *
+         * Result:
+         *
+         * maxUsdtBalance = 1,797,778
+         */
+
+        const maxToken = entries.reduce((largest, current) =>
+          current.balance > largest.balance ? current : largest,
+        );
+
+        console.log("[TRADE] MAX TOKEN:", maxToken);
+
+        if (!cancelled) {
+          setMaxUsdtBalance(maxToken.balance);
+        }
+      } catch (error) {
+        console.error("[TRADE] Failed to load token balances:", error);
+
+        if (!cancelled) {
+          setMaxUsdtBalance(0);
+        }
+      }
+    }
+
+    void loadMaxUsdtBalance();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [w.address]);
   /*
    * Validate the buy amount.
    */
-  const buyAmountValid = side === "buy" && amt > 0 && amt <= usdtBalance;
-
+  console.log(maxUsdtBalance);
+  const buyAmountValid = side === "buy" && amt > 0 && amt <= maxUsdtBalance;
+  console.log(buyAmountValid);
   /*
    * Validate the sell amount against the simulated position.
    */
@@ -168,6 +350,11 @@ export function TradeTerminal({
       return;
     }
 
+    if (!w.address) {
+      setError("Connected wallet address is missing.");
+      return;
+    }
+
     if (!mint) {
       setError("This token does not have a mint address.");
       return;
@@ -178,9 +365,10 @@ export function TradeTerminal({
       return;
     }
 
-    if (amt > usdtBalance) {
+    if (amt > maxUsdtBalance) {
+      console.log(maxUsdtBalance);
       setError(
-        `Insufficient USDT balance. You have ${usdtBalance.toFixed(4)} USDT.`,
+        `Insufficient USDT balance. Max available is ${maxUsdtBalance.toFixed(4)} USDT.`,
       );
       return;
     }
@@ -444,7 +632,9 @@ export function TradeTerminal({
     } catch (err) {
       console.error("[TRADE] Sell failed:", err);
 
-      setError(err instanceof Error ? err.message : "Unable to close the position.");
+      setError(
+        err instanceof Error ? err.message : "Unable to close the position.",
+      );
     } finally {
       setExecuting(false);
     }
@@ -516,7 +706,7 @@ export function TradeTerminal({
             <button
               key={v}
               onClick={() => setAmount(v)}
-              disabled={side === "buy" && Number(v) > usdtBalance}
+              disabled={side === "buy" && Number(v) > maxUsdtBalance}
               className="flex-1 rounded-lg border border-line py-1 text-[11.5px] text-muted transition-colors hover:border-line2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
             >
               {side === "buy" ? `$${v}` : v}
@@ -528,7 +718,7 @@ export function TradeTerminal({
           <div className="mt-2 flex justify-between text-[10.5px] text-faint">
             <span>Available</span>
 
-            <span className="num">{usdtBalance.toFixed(4)} USDT</span>
+            <span className="num">{maxUsdtBalance.toFixed(4)} USDT</span>
           </div>
         )}
 
@@ -622,7 +812,9 @@ export function TradeTerminal({
 
         <Row label="Route">
           <span className="text-muted">
-            {side === "buy" ? "Devnet investment" : "Simulated position (no funds move)"}
+            {side === "buy"
+              ? "Devnet investment"
+              : "Simulated position (no funds move)"}
           </span>
         </Row>
       </div>
@@ -647,9 +839,7 @@ export function TradeTerminal({
 
             <span className="num text-ink2">
               {side === "buy"
-                ? w.usdtBalance != null
-                  ? `${w.usdtBalance.toFixed(4)} USDT`
-                  : "…"
+                ? `${maxUsdtBalance.toFixed(4)} USDT`
                 : held != null
                   ? `${fmtNum(held)} ${symbol}`
                   : "…"}
@@ -702,7 +892,7 @@ export function TradeTerminal({
               (side === "buy" ? !buyAmountValid : !sellAmountValid)
             }
             title={
-              side === "buy" && amt > usdtBalance
+              side === "buy" && amt > maxUsdtBalance
                 ? "Insufficient USDT balance"
                 : side === "sell" && amt > (held ?? 0)
                   ? "Exceeds your simulated position"

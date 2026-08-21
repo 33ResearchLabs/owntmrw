@@ -15,7 +15,11 @@ export function assertDevnet() {
   }
 }
 
-export function publicKey(value: string): PublicKey {
+export function publicKey(value: string | undefined | null): PublicKey {
+  if (!value || typeof value !== "string") {
+    throw new Error("Solana public key is missing.");
+  }
+
   try {
     return new PublicKey(value);
   } catch {

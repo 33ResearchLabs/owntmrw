@@ -1,5 +1,6 @@
 "use client";
 
+import { Wallet } from "@coral-xyz/anchor";
 import {
   createContext,
   useCallback,
@@ -205,21 +206,14 @@ const LAST_WALLET_KEY = "underly.lastWallet";
  */
 
 interface OwnerBalances {
-  /**
-   * SOL balance.
-   */
   sol: number | null;
 
-  /**
-   * Devnet USDT balance.
-   */
   usdt: number | null;
 
-  /**
-   * All non-zero SPL balances.
-   *
-   * mint -> amount
-   */
+  usdtMint: string | null;
+
+  usdtTokenAccount: string | null;
+
   tokens: Record<string, number> | null;
 }
 
@@ -235,6 +229,8 @@ const FAILED: OwnerBalances = {
   sol: null,
   usdt: null,
   tokens: null,
+  usdtMint: null,
+  usdtTokenAccount: null,
 };
 
 /**
@@ -286,6 +282,7 @@ async function fetchBalances(
 
   const promise = (async () => {
     try {
+      console.log(owner);
       const url = `${BALANCES_URL}?address=${encodeURIComponent(owner)}`;
 
       console.log("[WALLET] Fetching balances:", url);
@@ -919,16 +916,35 @@ export function WalletProvider({
       return null;
     }
 
+    const data = await fetchBalances(address, true);
+    console.log(data);
     /**
-     * Force a fresh read for portfolio.
+     * Keep the React wallet state synchronized with
+     * the same fresh API response.
      */
-    const { tokens } = await fetchBalances(address, true);
+    setSol(data.sol);
+    if (data.tokens && Object.keys(data.tokens).length > 0) {
+      const tokenEntries = Object.entries(data.tokens);
 
-    if (!tokens) {
+      const maxToken = tokenEntries.reduce((max, current) => {
+        return current[1] > max[1] ? current : max;
+      }, tokenEntries[0]);
+
+      console.log("[WALLET] MAX TOKEN:", {
+        mint: maxToken[0],
+        balance: maxToken[1],
+      });
+
+      setUsdt(maxToken[1]);
+    } else {
+      setUsdt(0);
+    }
+
+    if (!data.tokens) {
       return null;
     }
 
-    return new Map(Object.entries(tokens));
+    return new Map(Object.entries(data.tokens));
   }, [address]);
 
   /**
@@ -1094,7 +1110,6 @@ export function WalletProvider({
    * CONTEXT VALUE
    * ==========================================================
    */
-
   const value = useMemo<WalletState>(
     () => ({
       address,

@@ -102,8 +102,7 @@ export function Portfolio({
    * moves and `session` does not. Same convention ConnectButton uses for
    * the header; see its comment for why.
    */
-  const stale =
-    w.session != null && address != null && address !== w.session;
+  const stale = w.session != null && address != null && address !== w.session;
 
   const ready = w.session != null && !stale;
 
@@ -260,13 +259,14 @@ export function Portfolio({
     };
   }, [ready, address, allTokenBalances, allLedgerBalances, tokens]);
 
-  const state: ScanState = !ready || !address
-    ? "idle"
-    : scan?.owner !== address
-      ? "loading"
-      : scan.holdings === null
-        ? "failed"
-        : "done";
+  const state: ScanState =
+    !ready || !address
+      ? "idle"
+      : scan?.owner !== address
+        ? "loading"
+        : scan.holdings === null
+          ? "failed"
+          : "done";
 
   const holdings = useMemo(
     () => (state === "done" ? scan!.holdings! : []),
@@ -337,11 +337,15 @@ export function Portfolio({
         </h2>
 
         <p className="mx-auto mt-1.5 max-w-md text-[12.5px] leading-relaxed text-muted">
-          {stale
-            ? "Your wallet switched accounts since you signed in. Sign in again with the new one to see its holdings."
-            : <>Sign in with a Solana wallet to see what you hold across the{" "}
-              {tokens.length} tokens tracked here. Balances are read live from the
-              chain and never stored.</>}
+          {stale ? (
+            "Your wallet switched accounts since you signed in. Sign in again with the new one to see its holdings."
+          ) : (
+            <>
+              Sign in with a Solana wallet to see what you hold across the{" "}
+              {tokens.length} tokens tracked here. Balances are read live from
+              the chain and never stored.
+            </>
+          )}
         </p>
 
         <button
@@ -393,10 +397,7 @@ export function Portfolio({
    * portion of a position; see the P&L column note below for why a purely
    * on-chain balance can't contribute here).
    */
-  const totalInvested = holdings.reduce(
-    (s, h) => s + (h.costBasisUsd ?? 0),
-    0,
-  );
+  const totalInvested = holdings.reduce((s, h) => s + (h.costBasisUsd ?? 0), 0);
 
   const totalPnlUsd = holdings.reduce((s, h) => s + (h.pnlUsd ?? 0), 0);
 
@@ -514,18 +515,19 @@ export function Portfolio({
               />
 
               <Split
-                label="USDT"
+                label="Max USDT"
                 value={money(w.usdtBalance)}
                 sub="available to invest"
               />
-
               {hasCostBasis && (
                 <Split
                   label="Invested"
                   value={money(totalInvested)}
                   sub={
                     hidden ? undefined : (
-                      <span className={totalPnlUsd >= 0 ? "text-good" : "text-bad"}>
+                      <span
+                        className={totalPnlUsd >= 0 ? "text-good" : "text-bad"}
+                      >
                         {totalPnlUsd >= 0 ? "+" : "−"}
                         {fmtUsd(Math.abs(totalPnlUsd))} P&amp;L
                       </span>
@@ -891,7 +893,11 @@ export function Portfolio({
                         href={`/project/${token.slug}`}
                         className="flex min-w-0 flex-1 items-center gap-2 hover:text-brand"
                       >
-                        <Logo src={token.image_url} name={token.name} size={20} />
+                        <Logo
+                          src={token.image_url}
+                          name={token.name}
+                          size={20}
+                        />
                         <span className="truncate text-[12.5px] font-medium">
                           {token.symbol ?? token.name}
                         </span>
@@ -1025,10 +1031,10 @@ export function Portfolio({
 
           <div className="border-t border-grid px-5 py-3 text-[11px] leading-relaxed text-muted">
             This is the token&rsquo;s history, not yours — your own unrealised
-            P&amp;L is in the Holdings table above, for the simulated portion
-            of each position. Realised P&amp;L and hold duration still
-            aren&rsquo;t shown: they&rsquo;d need every acquisition and every
-            exit, not just what&rsquo;s currently open.
+            P&amp;L is in the Holdings table above, for the simulated portion of
+            each position. Realised P&amp;L and hold duration still aren&rsquo;t
+            shown: they&rsquo;d need every acquisition and every exit, not just
+            what&rsquo;s currently open.
           </div>
         </section>
       )}

@@ -6,36 +6,41 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
+    /**
+     * The authenticated wallet is the source wallet.
+     * We do NOT trust owner from the browser.
+     */
     const session = await requireSession("/portfolio");
 
     const body = await req.json();
 
-    const { owner, tokenMint, amountUsdt, slippageBps } = body ?? {};
+    const { tokenMint, amountUsdt, slippageBps } = body ?? {};
+
+    /**
+     * --------------------------------------------------------
+     * WALLET
+     * --------------------------------------------------------
+     *
+     * The connected/authenticated wallet is always the owner.
+     */
+    const owner = session;
 
     if (!owner) {
       return NextResponse.json(
         {
-          error: "Wallet address is required.",
+          error: "Authenticated wallet is missing.",
         },
-        { status: 400 },
+        { status: 401 },
       );
     }
 
-    /*
-     * Never trust the wallet address sent by
-     * the browser. It must match the authenticated
-     * session.
+    /**
+     * --------------------------------------------------------
+     * TOKEN MINT
+     * --------------------------------------------------------
      */
-    if (owner !== session) {
-      return NextResponse.json(
-        {
-          error: "Wallet does not match the signed-in session.",
-        },
-        { status: 403 },
-      );
-    }
 
-    if (typeof tokenMint !== "string" || !tokenMint) {
+    if (typeof tokenMint !== "string" || !tokenMint.trim()) {
       return NextResponse.json(
         {
           error: "Token mint is required.",
@@ -43,6 +48,12 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+
+    /**
+     * --------------------------------------------------------
+     * AMOUNT
+     * --------------------------------------------------------
+     */
 
     if (
       typeof amountUsdt !== "number" ||
@@ -57,6 +68,12 @@ export async function POST(req: Request) {
       );
     }
 
+    /**
+     * --------------------------------------------------------
+     * SLIPPAGE
+     * --------------------------------------------------------
+     */
+
     if (
       slippageBps != null &&
       (!Number.isInteger(slippageBps) || slippageBps < 0 || slippageBps > 5000)
@@ -69,9 +86,20 @@ export async function POST(req: Request) {
       );
     }
 
+    /**
+     * --------------------------------------------------------
+     * BUILD TRANSACTION
+     * --------------------------------------------------------
+     *
+     * owner = authenticated connected wallet
+     *
+     * vault = resolved server-side inside swap.ts
+     *
+     * The browser never supplies the vault.
+     */
     const result = await buildInvestmentTransaction({
       owner,
-      tokenMint,
+      tokenMint: tokenMint.trim(),
       amountUsdt,
       slippageBps: slippageBps ?? 50,
     });

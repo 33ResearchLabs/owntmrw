@@ -41,7 +41,135 @@ export function InvestModal({
 
   const numericAmount = Number(amount);
 
-  const usdtBalance = w.usdtBalance ?? 0;
+  const [usdtBalance, setMaxUsdtBalance] = useState(0);
+
+  console.log("[TRADE] USDT BALANCE:", usdtBalance);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMaxUsdtBalance() {
+      try {
+        if (!w.address) {
+          if (!cancelled) {
+            setMaxUsdtBalance(0);
+          }
+          return;
+        }
+
+        const balances = await w.allTokenBalances();
+
+        console.log("[TRADE] WALLET:", w.address);
+        console.log("[TRADE] TOKEN BALANCES:", balances);
+        console.log("[TRADE] IS MAP:", balances instanceof Map);
+
+        if (!balances) {
+          if (!cancelled) {
+            setMaxUsdtBalance(0);
+          }
+          return;
+        }
+
+        let entries: Array<{
+          mint: string;
+          balance: number;
+        }> = [];
+
+        /**
+         * allTokenBalances() returns:
+         *
+         * Map<string, number>
+         *
+         * Example:
+         *
+         * Map(5) {
+         *   "FT8..." => 2.241759,
+         *   "FMz7..." => 1000000,
+         *   "J3ev..." => 30.95,
+         *   "JCqd..." => 1797778,
+         *   "Hozv..." => 4
+         * }
+         */
+        if (balances instanceof Map) {
+          entries = Array.from(balances.entries())
+            .map(([mint, value]) => ({
+              mint,
+              balance: Number(value),
+            }))
+            .filter(
+              ({ mint, balance }) =>
+                Boolean(mint) && Number.isFinite(balance) && balance > 0,
+            );
+        } else if (Array.isArray(balances)) {
+          /**
+           * Fallback in case the wallet provider
+           * returns an array in the future.
+           */
+          entries = (balances as Array<any>)
+            .map((item: any) => ({
+              mint: String(item.mint ?? ""),
+              balance: Number(
+                item.balance ?? item.uiAmount ?? item.amount ?? 0,
+              ),
+            }))
+            .filter(
+              ({ mint, balance }) =>
+                Boolean(mint) && Number.isFinite(balance) && balance > 0,
+            );
+        } else if (typeof balances === "object") {
+          /**
+           * Fallback for normal object format.
+           */
+          entries = Object.entries(balances)
+            .map(([mint, value]) => ({
+              mint,
+              balance: Number(value),
+            }))
+            .filter(
+              ({ mint, balance }) =>
+                Boolean(mint) && Number.isFinite(balance) && balance > 0,
+            );
+        }
+
+        console.log("[TRADE] TOKEN ENTRIES:", entries);
+
+        if (entries.length === 0) {
+          console.log("[TRADE] No token balances found.");
+
+          if (!cancelled) {
+            setMaxUsdtBalance(0);
+          }
+
+          return;
+        }
+
+        /**
+         * Find the largest token balance.
+         */
+        const maxToken = entries.reduce((largest, current) =>
+          current.balance > largest.balance ? current : largest,
+        );
+
+        console.log("[TRADE] MAX TOKEN:", maxToken);
+
+        if (!cancelled) {
+          setMaxUsdtBalance(maxToken.balance);
+        }
+      } catch (error) {
+        console.error("[TRADE] Failed to load token balances:", error);
+
+        if (!cancelled) {
+          setMaxUsdtBalance(0);
+        }
+      }
+    }
+
+    loadMaxUsdtBalance();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [w.address, w.allTokenBalances]);
 
   const validAmount =
     Number.isFinite(numericAmount) &&
@@ -66,8 +194,9 @@ export function InvestModal({
       setError("Connect your wallet first.");
       return;
     }
-
+    console.log(usdtBalance);
     if (!validAmount) {
+      console.log(usdtBalance);
       setError(
         numericAmount > usdtBalance
           ? "Insufficient USDT balance."

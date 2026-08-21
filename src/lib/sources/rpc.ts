@@ -1,3 +1,4 @@
+import { useWallet } from "@/components/wallet";
 import { postJSON, sleep } from "./http";
 
 /**
