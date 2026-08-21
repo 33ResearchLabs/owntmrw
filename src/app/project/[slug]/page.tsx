@@ -93,7 +93,9 @@ function Stat({
       <div className="text-[10.5px] uppercase tracking-[0.07em] text-muted">
         {label}
       </div>
-      <div className={`num mt-1 text-[15px] font-semibold text-ink ${tone ?? ""}`}>
+      <div
+        className={`num mt-1 text-[15px] font-semibold text-ink ${tone ?? ""}`}
+      >
         {value}
       </div>
       {sub != null && (
@@ -140,7 +142,10 @@ function TextSection({
  */
 function bandScore(v: number, floor: number, ceil: number): number {
   if (ceil === floor) return 50;
-  return Math.max(0, Math.min(100, Math.round(((v - floor) / (ceil - floor)) * 100)));
+  return Math.max(
+    0,
+    Math.min(100, Math.round(((v - floor) / (ceil - floor)) * 100)),
+  );
 }
 
 /** `Insight.kind` → the closest icon this app's icon set already has. */
@@ -285,7 +290,11 @@ function MarketPulseGauge({
         {!dim && (
           <g
             className="gauge-needle"
-            style={{ "--needle-rotation": `${rotationDeg}deg` } as React.CSSProperties}
+            style={
+              {
+                "--needle-rotation": `${rotationDeg}deg`,
+              } as React.CSSProperties
+            }
           >
             <line
               x1={GAUGE_CX}
@@ -300,13 +309,33 @@ function MarketPulseGauge({
           </g>
         )}
 
-        <text x="14" y="150" fontSize="10" letterSpacing="0.5" fill="var(--ink-faint)">
+        <text
+          x="14"
+          y="150"
+          fontSize="10"
+          letterSpacing="0.5"
+          fill="var(--ink-faint)"
+        >
           SELLING
         </text>
-        <text x={GAUGE_CX} y="150" textAnchor="middle" fontSize="10" letterSpacing="0.5" fill="var(--ink-faint)">
+        <text
+          x={GAUGE_CX}
+          y="150"
+          textAnchor="middle"
+          fontSize="10"
+          letterSpacing="0.5"
+          fill="var(--ink-faint)"
+        >
           NEUTRAL
         </text>
-        <text x="246" y="150" textAnchor="end" fontSize="10" letterSpacing="0.5" fill="var(--ink-faint)">
+        <text
+          x="246"
+          y="150"
+          textAnchor="end"
+          fontSize="10"
+          letterSpacing="0.5"
+          fill="var(--ink-faint)"
+        >
           BUYING
         </text>
       </svg>
@@ -315,7 +344,10 @@ function MarketPulseGauge({
           needle can point anywhere from due-left to due-right, so anything
           placed inside the hollow gets crossed at some score. */}
       <div className="-mt-3 flex flex-col items-center">
-        <span className="num text-[34px] font-bold leading-none tracking-tight" style={{ color }}>
+        <span
+          className="num text-[34px] font-bold leading-none tracking-tight"
+          style={{ color }}
+        >
           {score ?? "—"}
         </span>
         <span className="num mt-1 text-[11px] text-faint">/ 100</span>
@@ -657,7 +689,10 @@ export default async function ProjectPage({
       label: "Health",
       value: `${healthScoreValue}/100`,
     },
-    latest?.vol24h != null && { label: "24H Volume", value: fmtUsd(latest.vol24h) },
+    latest?.vol24h != null && {
+      label: "24H Volume",
+      value: fmtUsd(latest.vol24h),
+    },
     treasuryToMcapPct != null && {
       label: "Treasury / MC",
       value: `${treasuryToMcapPct.toFixed(0)}%`,
@@ -673,7 +708,11 @@ export default async function ProjectPage({
   const valuationRows = (
     [
       { label: "FDV", value: latest?.fdv ?? null, color: "var(--accent)" },
-      { label: "Market Cap", value: latest?.mcap ?? null, color: "var(--series-2, var(--accent))" },
+      {
+        label: "Market Cap",
+        value: latest?.mcap ?? null,
+        color: "var(--series-2, var(--accent))",
+      },
       { label: "Treasury", value: treasuryValue ?? null, color: "var(--good)" },
       {
         label: "Liquidity",
@@ -709,7 +748,10 @@ export default async function ProjectPage({
     p.raise_committed_usd != null && {
       label: "Committed",
       value: fmtUsd(p.raise_committed_usd),
-      sub: oversubscribed != null ? `${oversubscribed.toFixed(1)}× oversubscribed` : undefined,
+      sub:
+        oversubscribed != null
+          ? `${oversubscribed.toFixed(1)}× oversubscribed`
+          : undefined,
     },
     p.raise_amount_usd != null && {
       label: "Accepted / Raised",
@@ -731,9 +773,7 @@ export default async function ProjectPage({
       label: "Est. Refund",
       value: `${refunded.toFixed(0)}%`,
     },
-  ].filter(
-    (x): x is { label: string; value: string; sub?: string } => !!x,
-  );
+  ].filter((x): x is { label: string; value: string; sub?: string } => !!x);
 
   /*
    * Token Distribution — circulating vs. team-locked only (the same two
@@ -741,7 +781,8 @@ export default async function ProjectPage({
    * supply can't attribute to either is left out rather than guessed at.
    */
   const hasSupplyData = p.total_supply != null && p.total_supply > 0;
-  const lockedSupplyPct = circulatingPct != null ? Math.max(0, 100 - circulatingPct) : null;
+  const lockedSupplyPct =
+    circulatingPct != null ? Math.max(0, 100 - circulatingPct) : null;
 
   /*
    * Scanner Verdict — one qualitative read per dimension, each backed by a
@@ -752,11 +793,16 @@ export default async function ProjectPage({
   const verdictRows: { label: string; ok: boolean | null; text: string }[] = [
     {
       label: "Market",
-      ok: marketBiasScore == null ? null : marketPositive ? true : marketNegative ? false : null,
-      text:
+      ok:
         marketBiasScore == null
-          ? "No reading"
-          : (marketBiasLabel ?? "Neutral"),
+          ? null
+          : marketPositive
+            ? true
+            : marketNegative
+              ? false
+              : null,
+      text:
+        marketBiasScore == null ? "No reading" : (marketBiasLabel ?? "Neutral"),
     },
     {
       label: "Liquidity",
@@ -786,7 +832,12 @@ export default async function ProjectPage({
     {
       label: "Price",
       ok: roi == null ? null : roi >= 0,
-      text: roi == null ? "No issue price" : roi >= 0 ? "Above issue" : "Below issue",
+      text:
+        roi == null
+          ? "No issue price"
+          : roi >= 0
+            ? "Above issue"
+            : "Below issue",
     },
     {
       label: "Risk",
@@ -848,11 +899,164 @@ export default async function ProjectPage({
 
   const overview = (
     <div className="space-y-5">
+      {/* =====================================================
+          HEALTH SCORE
+      ====================================================== */}
+
       <HealthScorePanel hs={hs} updatedAt={hsUpdatedAt} />
+
+      {/* =====================================================
+          COMPARE RAISE
+      ====================================================== */}
 
       <CompareRaisePanel d={d} />
 
+      {/* =====================================================
+          VALUATION STRUCTURE
+      ====================================================== */}
+      <div className="grid grid-cols-2 gap-4">
+        <DashboardCard
+          title="Valuation Structure"
+          subtitle="How liquidity, treasury and market cap stack up against FDV."
+        >
+          {valuationRows.length ? (
+            <>
+              <div className="space-y-3 px-6">
+                {valuationRows
+                  .slice()
+                  .sort((a, b) => b.value - a.value)
+                  .map((r) => (
+                    <ValueBar
+                      key={r.label}
+                      label={r.label}
+                      value={r.value}
+                      max={maxValuation}
+                      color={r.color}
+                    />
+                  ))}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-x-6 gap-y-1.5 pb-10 px-10 border-t border-grid pt-3 text-[11px] text-muted">
+                <span>
+                  Liquidity / MC{" "}
+                  <span className="num text-ink2">
+                    {liquidityToMcapPct != null
+                      ? `${fmtNum(liquidityToMcapPct)}%`
+                      : "—"}
+                  </span>
+                </span>
+
+                <span>
+                  Treasury / MC{" "}
+                  <span className="num text-ink2">
+                    {treasuryToMcapPct != null
+                      ? `${treasuryToMcapPct.toFixed(0)}%`
+                      : "—"}
+                  </span>
+                </span>
+
+                <span>
+                  FDV / MC{" "}
+                  <span className="num text-ink2">
+                    {fdvToMcapMultiple != null
+                      ? `${fmtNum(fdvToMcapMultiple)}×`
+                      : "—"}
+                  </span>
+                </span>
+              </div>
+            </>
+          ) : (
+            <p className="text-[12px] text-muted">
+              No valuation figures available yet.
+            </p>
+          )}
+        </DashboardCard>
+
+        {hasSupplyData ? (
+          <div className="card px-6">
+            <TextSection
+              title="Token Distribution"
+              subtitle="Circulating float vs. what the team still has locked."
+            >
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-grid">
+                {circulatingPct != null && (
+                  <div
+                    className="h-full bg-accent"
+                    style={{ width: `${circulatingPct}%` }}
+                  />
+                )}
+                {lockedSupplyPct != null && lockedSupplyPct > 0 && (
+                  <div
+                    className="h-full bg-warn"
+                    style={{ width: `${lockedSupplyPct}%` }}
+                  />
+                )}
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted">
+                    <span className="h-2 w-2 rounded-full bg-accent" />
+                    Circulating
+                  </div>
+                  <div className="num mt-1 text-[18px] font-bold text-ink">
+                    {circulatingPct != null
+                      ? `${circulatingPct.toFixed(1)}%`
+                      : NA}
+                  </div>
+                  <div className="text-[11px] text-muted">
+                    {p.circulating_supply != null
+                      ? fmtNum(p.circulating_supply)
+                      : "—"}{" "}
+                    tokens
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted">
+                    <span className="h-2 w-2 rounded-full bg-warn" />
+                    Team Locked
+                  </div>
+                  <div className="num mt-1 text-[18px] font-bold text-ink">
+                    {lockedSupplyPct != null
+                      ? `${lockedSupplyPct.toFixed(1)}%`
+                      : NA}
+                  </div>
+                  <div className="text-[11px] text-muted">
+                    {p.team_package != null ? fmtNum(p.team_package) : "—"}{" "}
+                    tokens
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pb-6 flex flex-wrap gap-x-6 gap-y-1 border-t border-grid pt-3 text-[11px] text-muted">
+                <span>
+                  Total Supply{" "}
+                  <span className="num text-ink2">
+                    {p.total_supply != null ? fmtNum(p.total_supply) : "—"}
+                  </span>
+                </span>
+                <span>
+                  Launch Valuation{" "}
+                  <span className="num text-ink2">
+                    {p.raise_fdv_usd != null ? fmtUsd(p.raise_fdv_usd) : "—"}
+                  </span>
+                </span>
+              </div>
+            </TextSection>
+          </div>
+        ) : (
+          <div />
+        )}
+      </div>
+      {/* =====================================================
+          RISK
+      ====================================================== */}
+
       <RiskPanel risk={d.risk} flags={parseRisks(d.risk)} />
+
+      {/* =====================================================
+          AI INSIGHTS
+      ====================================================== */}
 
       <SectionCard
         title="AI Insights"
@@ -867,7 +1071,15 @@ export default async function ProjectPage({
         <InsightList items={signals} />
       </SectionCard>
 
+      {/* =====================================================
+          LISTINGS
+      ====================================================== */}
+
       <ListingsPanel listings={d.listings} />
+
+      {/* =====================================================
+          RAISE & SUPPLY
+      ====================================================== */}
 
       {(p.raise_amount_usd != null ||
         rp != null ||
@@ -1054,8 +1266,8 @@ export default async function ProjectPage({
 
           {marketBiasScore == null ? (
             <p className="mt-4 text-center text-[12px] text-muted">
-              Insufficient market activity data — there isn&rsquo;t enough
-              price history yet to read momentum from.
+              Insufficient market activity data — there isn&rsquo;t enough price
+              history yet to read momentum from.
             </p>
           ) : (
             <div className="mt-5 space-y-2 border-t border-grid pt-4">
@@ -1185,7 +1397,10 @@ export default async function ProjectPage({
               {strengths.length ? (
                 <ul className="space-y-2.5">
                   {strengths.map((s, i) => (
-                    <li key={i} className="flex items-start gap-2 text-[12px] leading-5">
+                    <li
+                      key={i}
+                      className="flex items-start gap-2 text-[12px] leading-5"
+                    >
                       <span className="mt-0.5 shrink-0 text-good">
                         <Icon name={iconForKind(s.kind)} size={13} />
                       </span>
@@ -1213,7 +1428,10 @@ export default async function ProjectPage({
               {risks.length ? (
                 <ul className="space-y-2.5">
                   {risks.map((s, i) => (
-                    <li key={i} className="flex items-start gap-2 text-[12px] leading-5">
+                    <li
+                      key={i}
+                      className="flex items-start gap-2 text-[12px] leading-5"
+                    >
                       <span className="mt-0.5 shrink-0 text-bad">
                         <Icon name={iconForKind(s.kind)} size={13} />
                       </span>
@@ -1380,7 +1598,9 @@ export default async function ProjectPage({
                     Circulating
                   </div>
                   <div className="num mt-1 text-[18px] font-bold text-ink">
-                    {circulatingPct != null ? `${circulatingPct.toFixed(1)}%` : NA}
+                    {circulatingPct != null
+                      ? `${circulatingPct.toFixed(1)}%`
+                      : NA}
                   </div>
                   <div className="text-[11px] text-muted">
                     {p.circulating_supply != null

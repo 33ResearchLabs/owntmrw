@@ -10,55 +10,12 @@ import {
   useState,
 } from "react";
 
-/**
- * ============================================================
- * SOLANA DEVNET WALLET PROVIDER
- * ============================================================
- *
- * Supported wallets:
- * - Phantom
- * - Solflare
- * - Backpack
- *
- * Network:
- * - Solana Devnet
- *
- * Balances:
- * - SOL
- * - USDT
- * - All SPL tokens
- *
- * The actual balance RPC call is performed server-side by:
- *
- * /api/wallet/balances
- *
- * Transaction signing happens in the browser wallet.
- */
-
-/**
- * ============================================================
- * NETWORK
- * ============================================================
- */
-
 const SOLANA_NETWORK = "devnet";
 
 const SOLANA_RPC_URL =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
 
-/**
- * ============================================================
- * BALANCE API
- * ============================================================
- */
-
 const BALANCES_URL = "/api/wallet/balances";
-
-/**
- * ============================================================
- * INJECTED WALLET PROVIDER
- * ============================================================
- */
 
 interface InjectedProvider {
   isPhantom?: boolean;
