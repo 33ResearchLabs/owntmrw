@@ -43,3 +43,6 @@ yarn-error.log*
 next-env.d.ts
 data/*
 !data/metaintel.db
+
+# TradingView Advanced Charts: licensed, not redistributable (see src/lib/tradingview.ts)
+/public/charting_library/

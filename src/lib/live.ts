@@ -28,6 +28,13 @@ export interface LiveQuote {
    * null here is "the venue reported none", never "this venue cannot say".
    */
   source: "dexscreener" | "jupiter";
+  /**
+   * The DexScreener pair this quote was read from — the deepest pool for the
+   * mint. It keys the hosted DexScreener chart, so the embed shows the same
+   * market the live price comes from. Null when Jupiter answered: those tokens
+   * are not on DexScreener at all.
+   */
+  pair_address: string | null;
 }
 
 /**
@@ -76,6 +83,7 @@ async function refresh(): Promise<Map<string, LiveQuote>> {
       change_1h: pair.priceChange?.h1 ?? null,
       change_24h: pair.priceChange?.h24 ?? null,
       source: "dexscreener",
+      pair_address: pair.pairAddress,
     });
   }
 
@@ -96,6 +104,7 @@ async function refresh(): Promise<Map<string, LiveQuote>> {
         change_1h: tok.stats1h?.priceChange ?? null,
         change_24h: tok.stats24h?.priceChange ?? null,
         source: "jupiter",
+        pair_address: null,
       });
     }
   }

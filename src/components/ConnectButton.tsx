@@ -65,8 +65,12 @@ export function ConnectButton() {
     return (
       <div className="relative">
         <button
-          onClick={() => signIn.open()}
-          disabled={w.signingIn}
+          // While a wallet-app request is paused for a tap, the chip *is*
+          // the tap: it releases the held request instead of opening the
+          // dialog, and says so — a toast alone gets missed while the chip
+          // still reads "Check your wallet…".
+          onClick={() => (w.continueNeeded ? w.continueNeeded.resume() : signIn.open())}
+          disabled={w.signingIn && !w.continueNeeded}
           className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-brandink transition-[filter,box-shadow] duration-150 hover:brightness-[1.08] active:brightness-95 disabled:opacity-60 sm:px-4"
           style={{
             background:
@@ -77,7 +81,9 @@ export function ConnectButton() {
         >
           <WalletGlyph />
 
-          {w.signingIn
+          {w.continueNeeded
+            ? "Tap to continue"
+            : w.signingIn
             ? "Check your wallet…"
             : stale
               ? "Wallet changed — reconnect"

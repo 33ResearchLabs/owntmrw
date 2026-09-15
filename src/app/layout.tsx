@@ -19,7 +19,15 @@ const inter = Inter({
   display: "swap",
 });
 
+/**
+ * Where the site is served from. Absolute URLs in metadata (Open Graph images,
+ * canonical links) resolve against it. The Railway domain is the current
+ * deploy; set SITE_URL once there is a custom domain.
+ */
+const SITE_URL = process.env.SITE_URL || "https://owntmrw-production.up.railway.app";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "Underly — Own Tomorrow | MetaDAO Intelligence Terminal",
   description:
     "Institutional-grade intelligence for every project launched on MetaDAO and Futard: raises, markets, holders, treasuries, governance, development and community — in one place.",

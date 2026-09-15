@@ -85,6 +85,7 @@ export function WalletModal({
         <div className="border-t border-grid px-6 pb-6 pt-5">
           <SignInContent
             compact
+            next={next}
             onDone={() => {
               onClose();
               // Opened from a gated link: finish the journey it started.
@@ -98,7 +99,12 @@ export function WalletModal({
               // `next` is set the navigation does that job already: every page
               // is `force-dynamic`, so it refetches with the new cookie, and
               // refreshing as well would just be a second request for it.
-              if (next) router.push(next);
+              //
+              // The gated case is a full navigation rather than `router.push`:
+              // the link was prefetched while signed out, so the router cache
+              // holds the proxy's redirect to `/login` for it, and a soft push
+              // would follow that instead of the new cookie.
+              if (next) window.location.assign(next);
               else router.refresh();
             }}
           />

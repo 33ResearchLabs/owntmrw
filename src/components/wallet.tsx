@@ -1,6 +1,5 @@
 "use client";
 
-import { Wallet } from "@coral-xyz/anchor";
 import {
   createContext,
   useCallback,
@@ -9,6 +8,20 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
+import {
+  DEEPLINK_BASE,
+  DeeplinkProvider,
+  consumeRedirect,
+  isDeeplinkProvider,
+  isTouchDevice,
+  onContinueNeeded,
+  signatureBytes,
+  takeResult,
+  type ContinueWhat,
+  type DeeplinkResult,
+} from "@/lib/walletDeeplink";
+import { wdebug } from "@/lib/walletDebug";
 
 const SOLANA_NETWORK = "devnet";
 
@@ -142,10 +155,40 @@ export const WALLETS: WalletMeta[] = [
  * ============================================================
  * PROVIDER LOOKUP
  * ============================================================
+ *
+ * Three places this page can be running, one provider API:
+ *
+ *   Desktop                      → `window.phantom` etc., injected by the extension
+ *   The wallet's in-app browser  → the same injected object — the app injects it too
+ *   Any other phone/tablet browser → `DeeplinkProvider`, the universal-link client
+ *
+ * Everything downstream calls the returned object's `connect` / `signMessage`
+ * / `signAndSendTransaction` and never needs to know which of the three it
+ * got. The deeplink one is built lazily and once per wallet; it holds no
+ * state of its own, so building it is free.
  */
 
+const deeplinkProviders = new Map<string, DeeplinkProvider>();
+
+function deeplinkFor(id: string): DeeplinkProvider | null {
+  if (!isTouchDevice() || !DEEPLINK_BASE[id]) return null;
+  let p = deeplinkProviders.get(id);
+  if (!p) {
+    p = new DeeplinkProvider(id);
+    deeplinkProviders.set(id, p);
+  }
+  return p;
+}
+
 function providerFor(id: string): InjectedProvider | null {
-  return WALLETS.find((wallet) => wallet.id === id)?.detect() ?? null;
+  const injected = WALLETS.find((wallet) => wallet.id === id)?.detect();
+  if (injected) return injected;
+  return deeplinkFor(id);
+}
+
+/** True when this wallet is reached through its app rather than an extension. */
+function viaApp(id: string): boolean {
+  return !WALLETS.find((wallet) => wallet.id === id)?.detect() && deeplinkFor(id) != null;
 }
 
 /**
@@ -328,9 +371,37 @@ export interface WalletState {
   available: boolean;
 
   /**
-   * Installed wallet IDs.
+   * Usable wallet IDs — installed as an extension, or reachable through
+   * the wallet's app on a phone or tablet.
    */
   installedWallets: string[];
+
+  /**
+   * The subset of `installedWallets` reached through the app rather than
+   * an extension. The sign-in list labels these "Opens the Phantom app".
+   */
+  appWallets: string[];
+
+  /**
+   * A wallet-app request is paused waiting for a tap — see the tap gate in
+   * `walletDeeplink.ts`. The UI shows this and calls `resume` on the tap.
+   */
+  continueNeeded: { what: ContinueWhat; resume: () => void } | null;
+
+  /**
+   * Something the last wallet-app round-trip wants the reader to know:
+   * a decline, a stalled open, a failed sign-in. Cleared by `dismissNotice`.
+   */
+  notice: string | null;
+
+  dismissNotice: () => void;
+
+  /**
+   * Claim the answer of a wallet-app round-trip that finished on this page
+   * load. A flow that hands `resume` to `signAndSendTransaction` gets the
+   * same `tag`/`data` back here, with the signature, once the page returns.
+   */
+  takeDeeplinkResult: (tag: string) => { signature: string; data: unknown } | null;
 
   /**
    * Currently active wallet.
@@ -374,9 +445,11 @@ export interface WalletState {
   disconnect: () => Promise<void>;
 
   /**
-   * Sign in using wallet signature.
+   * Sign in using wallet signature. `next` is where to land once a session
+   * exists — only used on the phone path, where the page reloads between
+   * steps and the caller that knew the destination is gone by the end.
    */
-  login: (walletId?: string) => Promise<string | null>;
+  login: (walletId?: string, opts?: { next?: string | null }) => Promise<string | null>;
 
   /**
    * Logout.
@@ -410,8 +483,17 @@ export interface WalletState {
 
   /**
    * Sign and send a Solana transaction.
+   *
+   * `resume` is only meaningful on the phone path, where approving means
+   * leaving for the wallet app and coming back on a fresh page load: it is
+   * what `takeDeeplinkResult(tag)` hands back then, so the caller can
+   * finish what it started (record the trade, show the receipt). Callers
+   * on an extension get the signature from the returned promise as before.
    */
-  signAndSendTransaction: (transaction: unknown) => Promise<string>;
+  signAndSendTransaction: (
+    transaction: unknown,
+    resume?: { tag: string; data?: unknown },
+  ) => Promise<string>;
 
   /**
    * Current network.
@@ -486,6 +568,49 @@ export function WalletProvider({
   const [usdtBalance, setUsdt] = useState<number | null>(null);
 
   /**
+   * Wallets reached through their app (phone/tablet path).
+   */
+  const [appWallets, setAppWallets] = useState<string[]>([]);
+
+  /**
+   * A paused wallet-app request waiting for a tap.
+   */
+  const [continueNeeded, setContinueNeeded] = useState<WalletState["continueNeeded"]>(null);
+
+  /**
+   * Message from the last wallet-app round-trip.
+   */
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const router = useRouter();
+
+  /**
+   * ==========================================================
+   * TAP GATE
+   * ==========================================================
+   *
+   * The deeplink client asks here before opening the wallet app from
+   * outside a tap. The promise it gets resolves when the reader taps the
+   * prompt — `ContinueToast` and the header button both call `resume`.
+   */
+
+  useEffect(() => {
+    onContinueNeeded(
+      (what) =>
+        new Promise<void>((resolve) => {
+          setContinueNeeded({
+            what,
+            resume: () => {
+              setContinueNeeded(null);
+              resolve();
+            },
+          });
+        }),
+    );
+    return () => onContinueNeeded(null);
+  }, []);
+
+  /**
    * ==========================================================
    * GET ACTIVE PROVIDER
    * ==========================================================
@@ -515,6 +640,116 @@ export function WalletProvider({
 
   /**
    * ==========================================================
+   * LOGIN PIECES
+   * ==========================================================
+   *
+   * Split out of `login` because the phone path runs them across page
+   * loads: `challenge` before leaving for the app to sign, `verify` after
+   * coming back with the signature. The extension path runs both in one
+   * call, exactly as before.
+   */
+
+  const challenge = useCallback(
+    async (addr: string): Promise<{ nonce: string; message: string } | null> => {
+      const res = await fetch("/api/auth/nonce", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address: addr, network: SOLANA_NETWORK }),
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as { nonce: string; message: string };
+    },
+    [],
+  );
+
+  /** Returns an error string, or null once the session exists. */
+  const verify = useCallback(
+    async (addr: string, nonce: string, signature: Uint8Array): Promise<string | null> => {
+      const res = await fetch("/api/auth/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          address: addr,
+          nonce,
+          signature: toBase64(signature),
+          network: SOLANA_NETWORK,
+        }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        return data.error ?? "Signature rejected.";
+      }
+      setSession(addr);
+      await refreshBalances(addr);
+      return null;
+    },
+    [refreshBalances],
+  );
+
+  /**
+   * ==========================================================
+   * RESUME LOGIN (phone / tablet)
+   * ==========================================================
+   *
+   * The page came back from the wallet app carrying one of the two answers
+   * a sign-in asks for. After `connect` it goes straight on to ask for the
+   * signature — through the tap gate, since no tap is live now. After
+   * `signMessage` it verifies and lands the reader where they were headed.
+   */
+
+  const resumeLogin = useCallback(
+    async (r: DeeplinkResult) => {
+      const data = (r.data ?? {}) as { next?: string | null; address?: string; nonce?: string };
+      const p = deeplinkFor(r.wallet);
+      if (!p) return;
+
+      setSigningIn(true);
+      try {
+        if (r.method === "connect") {
+          const addr = String(r.payload.public_key ?? "");
+          if (!addr) throw new Error("Wallet returned no address.");
+
+          setActiveWallet(r.wallet);
+          setAddress(addr);
+          void refreshBalances(addr);
+
+          const c = await challenge(addr);
+          if (!c) throw new Error("Could not start sign-in. Try again.");
+
+          wdebug("resume login: connected", addr, "— asking for signature");
+          await p.signMessage(new TextEncoder().encode(c.message), "utf8", {
+            tag: "login",
+            data: { next: data.next ?? null, address: addr, nonce: c.nonce },
+          });
+          return;
+        }
+
+        if (r.method === "signMessage" && data.address && data.nonce) {
+          wdebug("resume login: verifying signature for", data.address);
+          const err = await verify(data.address, data.nonce, signatureBytes(r.payload));
+          if (err) throw new Error(err);
+
+          /**
+           * Same rule as `WalletModal.onDone`: a gated link finishes its
+           * journey (as a full navigation, so no stale prefetched redirect
+           * can send it back to `/login`); otherwise the page refetches
+           * with the new cookie.
+           */
+          if (data.next) window.location.assign(data.next);
+          else router.refresh();
+        }
+      } catch (error) {
+        wdebug("resume login failed", error);
+        setNotice(error instanceof Error ? error.message : "Sign-in failed.");
+      } finally {
+        setSigningIn(false);
+      }
+    },
+    [challenge, verify, refreshBalances, router],
+  );
+
+  /**
+   * ==========================================================
    * DETECT WALLETS
    * ==========================================================
    */
@@ -524,11 +759,22 @@ export function WalletProvider({
       return;
     }
 
-    const installed = WALLETS.filter((wallet) => wallet.detect()).map(
+    /**
+     * First: did this page load *come back* from a wallet app? Must run
+     * before anything else reads the store, since a connect response is
+     * what puts the session there.
+     */
+    const back = consumeRedirect();
+    if (back?.error) {
+      setNotice(back.error);
+    }
+
+    const installed = WALLETS.filter((wallet) => providerFor(wallet.id)).map(
       (wallet) => wallet.id,
     );
 
     setInstalledWallets(installed);
+    setAppWallets(installed.filter(viaApp));
 
     if (!installed.length) {
       return;
@@ -549,7 +795,8 @@ export function WalletProvider({
     }
 
     /**
-     * Silent reconnect.
+     * Silent reconnect. On the phone path this reads the session the
+     * deeplink store already holds; it never opens the app.
      */
     p.connect({
       onlyIfTrusted: true,
@@ -569,6 +816,14 @@ export function WalletProvider({
       });
 
     /**
+     * A sign-in that left for the app comes back here, one step further on.
+     */
+    if (back?.result?.tag === "login") {
+      takeResult("login");
+      void resumeLogin(back.result);
+    }
+
+    /**
      * Account changes.
      */
     p.on?.("accountChanged", () => {
@@ -585,7 +840,7 @@ export function WalletProvider({
         balCache = null;
       }
     });
-  }, [refreshBalances]);
+  }, [refreshBalances, resumeLogin]);
 
   /**
    * ==========================================================
@@ -648,10 +903,13 @@ export function WalletProvider({
         setAddress(walletAddress);
 
         await refreshBalances(walletAddress);
-      } catch {
+      } catch (error) {
         /**
-         * User cancelled.
+         * User cancelled — or, on a phone, the app never opened.
          */
+        if (isDeeplinkProvider(p) && error instanceof Error) {
+          setNotice(error.message);
+        }
       } finally {
         setConnecting(false);
       }
@@ -692,7 +950,7 @@ export function WalletProvider({
    */
 
   const login = useCallback(
-    async (walletId?: string): Promise<string | null> => {
+    async (walletId?: string, opts?: { next?: string | null }): Promise<string | null> => {
       const id = walletId ?? activeWallet ?? installedWallets[0];
 
       const p = id ? providerFor(id) : null;
@@ -710,8 +968,36 @@ export function WalletProvider({
       }
 
       setSigningIn(true);
+      setNotice(null);
 
       try {
+        /**
+         * ==================================================
+         * PHONE / TABLET: LEAVE FOR THE APP
+         * ==================================================
+         *
+         * Each of these navigates away and never returns; the
+         * flow continues in `resumeLogin` on the next page load.
+         * The `login` tag and `next` ride along in the store.
+         */
+        if (isDeeplinkProvider(p)) {
+          setActiveWallet(id!);
+          localStorage.setItem(LAST_WALLET_KEY, id!);
+
+          const known = p.publicKey?.toString();
+          if (!known) {
+            await p.connectVia({ tag: "login", data: { next: opts?.next ?? null } });
+          }
+
+          const c = await challenge(known!);
+          if (!c) return "Could not start sign-in. Try again.";
+
+          await p.signMessage(new TextEncoder().encode(c.message), "utf8", {
+            tag: "login",
+            data: { next: opts?.next ?? null, address: known, nonce: c.nonce },
+          });
+        }
+
         /**
          * Get wallet address.
          */
@@ -733,94 +1019,31 @@ export function WalletProvider({
           return "This wallet cannot sign messages.";
         }
 
-        /**
-         * ==================================================
-         * REQUEST NONCE
-         * ==================================================
-         */
-
-        const nonceResponse = await fetch("/api/auth/nonce", {
-          method: "POST",
-
-          headers: {
-            "content-type": "application/json",
-          },
-
-          body: JSON.stringify({
-            address: addr,
-            network: SOLANA_NETWORK,
-          }),
-        });
-
-        if (!nonceResponse.ok) {
-          return "Could not start sign-in. Try again.";
-        }
-
-        const { nonce, message } = (await nonceResponse.json()) as {
-          nonce: string;
-          message: string;
-        };
-
-        /**
-         * ==================================================
-         * SIGN MESSAGE
-         * ==================================================
-         */
+        const c = await challenge(addr);
+        if (!c) return "Could not start sign-in. Try again.";
 
         const { signature } = await p.signMessage(
-          new TextEncoder().encode(message),
+          new TextEncoder().encode(c.message),
           "utf8",
         );
 
-        /**
-         * ==================================================
-         * VERIFY
-         * ==================================================
-         */
-
-        const verifyResponse = await fetch("/api/auth/verify", {
-          method: "POST",
-
-          headers: {
-            "content-type": "application/json",
-          },
-
-          body: JSON.stringify({
-            address: addr,
-            nonce,
-            signature: toBase64(signature),
-            network: SOLANA_NETWORK,
-          }),
-        });
-
-        if (!verifyResponse.ok) {
-          const data = (await verifyResponse.json().catch(() => ({}))) as {
-            error?: string;
-          };
-
-          return data.error ?? "Signature rejected.";
-        }
-
-        /**
-         * Login successful.
-         */
-        setSession(addr);
-
-        /**
-         * Refresh balances after login.
-         */
-        await refreshBalances(addr);
-
-        return null;
+        return await verify(addr, c.nonce, signature);
       } catch (error) {
         console.error("[WALLET] Login failed:", error);
 
+        /**
+         * A stalled app-open carries a message worth showing; an
+         * extension's reject is just a cancel.
+         */
+        if (isDeeplinkProvider(p) && error instanceof Error) {
+          return error.message;
+        }
         return "Sign-in cancelled.";
       } finally {
         setSigningIn(false);
       }
     },
-    [activeWallet, installedWallets, refreshBalances],
+    [activeWallet, installedWallets, refreshBalances, challenge, verify],
   );
 
   /**
@@ -1020,7 +1243,10 @@ export function WalletProvider({
    */
 
   const signAndSendTransaction = useCallback(
-    async (transaction: unknown): Promise<string> => {
+    async (
+      transaction: unknown,
+      resume?: { tag: string; data?: unknown },
+    ): Promise<string> => {
       const p = provider();
 
       if (!p) {
@@ -1034,6 +1260,15 @@ export function WalletProvider({
       }
 
       console.log("[WALLET] Requesting transaction approval...");
+
+      /**
+       * Phone path: this leaves for the app and never resolves. The
+       * caller gets its `resume` back from `takeDeeplinkResult` on the
+       * next page load, signature included.
+       */
+      if (isDeeplinkProvider(p)) {
+        return p.signAndSendTransaction(transaction, undefined, resume);
+      }
 
       const result = await p.signAndSendTransaction(transaction);
 
@@ -1067,6 +1302,30 @@ export function WalletProvider({
    * CONTEXT VALUE
    * ==========================================================
    */
+  /**
+   * ==========================================================
+   * DEEPLINK RESULT HAND-OFF
+   * ==========================================================
+   */
+
+  const takeDeeplinkResult = useCallback(
+    (tag: string): { signature: string; data: unknown } | null => {
+      const r = takeResult(tag);
+      if (!r) return null;
+      const signature = String(r.payload.signature ?? "");
+      if (!signature) return null;
+      wdebug("result claimed by", tag, signature);
+      if (address) {
+        balCache = null;
+        void refreshBalances(address);
+      }
+      return { signature, data: r.data };
+    },
+    [address, refreshBalances],
+  );
+
+  const dismissNotice = useCallback(() => setNotice(null), []);
+
   const value = useMemo<WalletState>(
     () => ({
       address,
@@ -1076,6 +1335,16 @@ export function WalletProvider({
       available: installedWallets.length > 0,
 
       installedWallets,
+
+      appWallets,
+
+      continueNeeded,
+
+      notice,
+
+      dismissNotice,
+
+      takeDeeplinkResult,
 
       activeWallet,
 
@@ -1117,6 +1386,11 @@ export function WalletProvider({
       address,
       connecting,
       installedWallets,
+      appWallets,
+      continueNeeded,
+      notice,
+      dismissNotice,
+      takeDeeplinkResult,
       activeWallet,
       solBalance,
       usdtBalance,

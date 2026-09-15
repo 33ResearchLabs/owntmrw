@@ -14,6 +14,11 @@ interface InvestModalProps {
     imageUrl?: string | null;
   };
   onSuccess?: (signature: string) => void;
+  /**
+   * Phone path: the page has just come back from the wallet app with this
+   * signature, and the modal is being reopened straight into its receipt.
+   */
+  resumedSignature?: string | null;
 }
 
 export function InvestModal({
@@ -21,6 +26,7 @@ export function InvestModal({
   onClose,
   token,
   onSuccess,
+  resumedSignature = null,
 }: InvestModalProps) {
   const w = useWallet();
 
@@ -36,8 +42,10 @@ export function InvestModal({
       setError(null);
       setSuccess(null);
       setLoading(false);
+    } else if (resumedSignature) {
+      setSuccess(resumedSignature);
     }
-  }, [open]);
+  }, [open, resumedSignature]);
 
   const numericAmount = Number(amount);
 
@@ -238,7 +246,14 @@ export function InvestModal({
         throw new Error("Server did not return a transaction.");
       }
 
-      const signature = await w.signAndSendTransaction(data.transaction);
+      /*
+       * On a phone this leaves for the wallet app; `TokenInvestment` reopens
+       * this modal with the signature when the page comes back.
+       */
+      const signature = await w.signAndSendTransaction(data.transaction, {
+        tag: "invest",
+        data: { tokenMint: token.mint, amountUsdt: numericAmount },
+      });
 
       setSuccess(signature);
 

@@ -583,6 +583,8 @@ export interface ProjectDetail {
    * source declined to report it rather than showing a bare dash.
    */
   quoteSource: "dexscreener" | "jupiter" | null;
+  /** DexScreener pair behind the quote, for the hosted chart embed. */
+  quotePair: string | null;
   candles: {
     ts: number;
     o: number;
@@ -936,6 +938,7 @@ export async function projectDetail(
     project,
     latest,
     quoteSource: quote?.source ?? null,
+    quotePair: quote?.pair_address ?? null,
     candles,
     events,
     topHolders,

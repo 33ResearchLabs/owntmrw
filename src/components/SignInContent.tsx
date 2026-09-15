@@ -120,12 +120,15 @@ function Chevron() {
  * lands on a row that does nothing.
  */
 function WalletList({ onPick, busyId }: { onPick: (id: string) => void; busyId: string | null }) {
-  const { installedWallets } = useWallet();
+  const { installedWallets, appWallets } = useWallet();
 
   return (
     <div className="flex flex-col gap-2">
       {WALLETS.map((w) => {
         const installed = installedWallets.includes(w.id);
+        // Phone/tablet: the row hands off to the wallet's app and this page
+        // reloads when it comes back. Say so — "Detected" would be a lie.
+        const app = appWallets.includes(w.id);
         const busy = busyId === w.id;
         return (
           <button
@@ -143,7 +146,11 @@ function WalletList({ onPick, busyId }: { onPick: (id: string) => void; busyId: 
             <span className="min-w-0 flex-1">
               <span className="block text-[13px] font-semibold text-ink">{w.name}</span>
               <span className="block text-[10.5px] text-muted">
-                {busy ? "Check your wallet…" : installed ? "Detected" : "Not installed"}
+                {busy
+                  ? app ? `Opening ${w.name}…` : "Check your wallet…"
+                  : installed
+                    ? app ? `Opens the ${w.name} app` : "Detected"
+                    : "Not installed"}
               </span>
             </span>
             {installed ? <Chevron /> : (
@@ -161,6 +168,7 @@ function WalletList({ onPick, busyId }: { onPick: (id: string) => void; busyId: 
 export function SignInContent({
   onDone,
   compact = false,
+  next = null,
 }: {
   /**
    * Called after a session exists. The page navigates to `next`; the modal
@@ -169,6 +177,12 @@ export function SignInContent({
   onDone: () => void;
   /** Drops the benefit list — the modal opens over the thing being unlocked. */
   compact?: boolean;
+  /**
+   * Where the sign-in is headed. `onDone` already knows on an extension;
+   * on a phone the page reloads between steps and `onDone` is gone by the
+   * end, so the wallet layer carries this through the round-trip itself.
+   */
+  next?: string | null;
 }) {
   const { login } = useWallet();
   const [error, setError] = useState<string | null>(null);
@@ -178,7 +192,7 @@ export function SignInContent({
   const onPick = async (id: string) => {
     setError(null);
     setBusyId(id);
-    const err = await login(id);
+    const err = await login(id, { next });
     if (err) {
       // Only the failure path comes back to the picker, so this is the only
       // path that clears the busy row. It used to sit in a `finally`, which

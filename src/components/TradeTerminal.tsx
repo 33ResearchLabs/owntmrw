@@ -94,6 +94,25 @@ export function TradeTerminal({
     };
   }, [ready, mint, w]);
 
+  /*
+   * Phone path: the page came back from the wallet app with this trade's
+   * signature. Claim it by tag and finish exactly as the extension path
+   * would have. Guarded on the mint so a project page never records a
+   * trade that was started on a different one.
+   */
+  useEffect(() => {
+    const r = w.takeDeeplinkResult("trade");
+    if (!r) return;
+    const d = (r.data ?? {}) as { tokenMint?: string; amountUsdt?: number; priceUsd?: number | null };
+    if (!mint || d.tokenMint !== mint) return;
+    setExecuting(true);
+    void recordBuy(r.signature, d.amountUsdt ?? 0, d.priceUsd ?? null).finally(() =>
+      setExecuting(false),
+    );
+    // Runs once, for the load that carries the result.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const amt = Number(amount) || 0;
 
   /*
@@ -335,6 +354,82 @@ export function TradeTerminal({
   }
 
   /*
+   * Everything that happens once the USDT transfer has a signature: show
+   * the receipt, credit the ledger position, refresh balances, tell the
+   * page. Shared by the extension path (straight after the wallet resolves)
+   * and the phone path (on the page load that comes back from the app),
+   * which is why it takes its inputs rather than reading `amount`/`price`
+   * from state the reload has already lost.
+   */
+  async function recordBuy(
+    signature: string,
+    amountUsdt: number,
+    priceUsd: number | null,
+  ) {
+    setTxSignature(signature);
+    setAmount("");
+
+    /*
+     * Credit the simulated position now that the USDT transfer is
+     * confirmed on-chain. This is best-effort: the USDT has already
+     * moved, so a failure here shouldn't read as a failed trade — it
+     * means the position didn't get recorded and the user should see
+     * their real transaction rather than a scary error.
+     */
+    try {
+      const confirmRes = await fetch("/api/swap/confirm", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+        body: JSON.stringify({
+          signature,
+          tokenMint: mint,
+          amountUsdt: amountUsdt,
+          priceUsd: priceUsd,
+        }),
+      });
+
+      if (confirmRes.ok) {
+        setHeld(await w.ledgerBalance(mint!));
+      } else {
+        console.error(
+          "[TRADE] Position not recorded:",
+          await confirmRes.text(),
+        );
+      }
+    } catch (confirmError) {
+      console.error("[TRADE] Position not recorded:", confirmError);
+    }
+
+    /*
+     * Refresh wallet/session data if your
+     * provider exposes refreshBalances.
+     */
+    const walletWithRefresh = w as typeof w & {
+      refreshBalances?: () => Promise<void>;
+    };
+
+    if (walletWithRefresh.refreshBalances) {
+      await walletWithRefresh.refreshBalances();
+    }
+
+    /*
+     * Refresh the current page so the
+     * portfolio/project data updates.
+     */
+    window.dispatchEvent(
+      new CustomEvent("wallet-transaction", {
+        detail: {
+          signature,
+          tokenMint: mint,
+        },
+      }),
+    );
+  }
+
+  /*
    * Execute BUY.
    *
    * The server builds the Devnet transaction.
@@ -423,7 +518,16 @@ export function TradeTerminal({
        * sign + send the transaction.
        */
       if (walletWithSigning.signAndSendTransaction) {
-        signature = await walletWithSigning.signAndSendTransaction(transaction);
+        /*
+         * On a phone this leaves for the wallet app and never returns;
+         * the mount effect below picks the signature up from
+         * `takeDeeplinkResult("trade")` on the next page load and runs
+         * the same `recordBuy`. On an extension it resolves normally.
+         */
+        signature = await walletWithSigning.signAndSendTransaction(transaction, {
+          tag: "trade",
+          data: { tokenMint: mint, amountUsdt: amt, priceUsd: price },
+        });
       } else if (walletWithSigning.signTransaction) {
         /*
          * Fallback:
@@ -486,72 +590,7 @@ export function TradeTerminal({
         );
       }
 
-      setTxSignature(signature);
-
-      /*
-       * Clear the input after successful
-       * submission.
-       */
-      setAmount("");
-
-      /*
-       * Credit the simulated position now that the USDT transfer is
-       * confirmed on-chain. This is best-effort: the USDT has already
-       * moved, so a failure here shouldn't read as a failed trade — it
-       * means the position didn't get recorded and the user should see
-       * their real transaction rather than a scary error.
-       */
-      try {
-        const confirmRes = await fetch("/api/swap/confirm", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          cache: "no-store",
-          body: JSON.stringify({
-            signature,
-            tokenMint: mint,
-            amountUsdt: amt,
-            priceUsd: price,
-          }),
-        });
-
-        if (confirmRes.ok) {
-          setHeld(await w.ledgerBalance(mint!));
-        } else {
-          console.error(
-            "[TRADE] Position not recorded:",
-            await confirmRes.text(),
-          );
-        }
-      } catch (confirmError) {
-        console.error("[TRADE] Position not recorded:", confirmError);
-      }
-
-      /*
-       * Refresh wallet/session data if your
-       * provider exposes refreshBalances.
-       */
-      const walletWithRefresh = w as typeof w & {
-        refreshBalances?: () => Promise<void>;
-      };
-
-      if (walletWithRefresh.refreshBalances) {
-        await walletWithRefresh.refreshBalances();
-      }
-
-      /*
-       * Refresh the current page so the
-       * portfolio/project data updates.
-       */
-      window.dispatchEvent(
-        new CustomEvent("wallet-transaction", {
-          detail: {
-            signature,
-            tokenMint: mint,
-          },
-        }),
-      );
+      await recordBuy(signature, amt, price);
     } catch (err) {
       console.error("[TRADE] Buy failed:", err);
 

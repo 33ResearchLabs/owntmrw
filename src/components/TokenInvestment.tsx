@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { InvestModal } from "./InvestModal";
+import { useWallet } from "./wallet";
 
 interface TokenInvestmentProps {
   token: {
@@ -14,7 +15,25 @@ interface TokenInvestmentProps {
 }
 
 export function TokenInvestment({ token }: TokenInvestmentProps) {
+  const w = useWallet();
   const [open, setOpen] = useState(false);
+  const [resumed, setResumed] = useState<string | null>(null);
+
+  /*
+   * Phone path: the page came back from the wallet app carrying this
+   * token's investment signature. The modal that asked for it is long
+   * gone, so reopen it straight into the receipt.
+   */
+  useEffect(() => {
+    const r = w.takeDeeplinkResult("invest");
+    if (!r) return;
+    const d = (r.data ?? {}) as { tokenMint?: string };
+    if (d.tokenMint !== token.mint) return;
+    setResumed(r.signature);
+    setOpen(true);
+    // Runs once, for the load that carries the result.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>
@@ -27,8 +46,9 @@ export function TokenInvestment({ token }: TokenInvestmentProps) {
 
       <InvestModal
         open={open}
-        onClose={() => setOpen(false)}
+        onClose={() => { setOpen(false); setResumed(null); }}
         token={token}
+        resumedSignature={resumed}
         onSuccess={() => {
           setOpen(false);
         }}

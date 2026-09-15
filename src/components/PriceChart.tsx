@@ -194,7 +194,7 @@ function FullscreenIcon({ on }: { on: boolean }) {
  * inset tray so the toolbar reads as one row of related switches rather than
  * loose buttons, and the active item is the only lit surface in its tray.
  */
-function SegGroup({
+export function SegGroup({
   children, label, className = "",
 }: {
   children: React.ReactNode; label?: string; className?: string;
@@ -265,24 +265,35 @@ function UtilityButton({
   );
 }
 
-/** Flat toolbar button shared by the interval and series-type groups. */
-function SegButton({
-  active, onClick, children, className = "",
+/**
+ * Flat toolbar button shared by the interval and series-type groups.
+ *
+ * `disabled` carries a `title` explaining why, for the same reason
+ * `UtilityButton` does: a choice that is offered but cannot be taken says so.
+ */
+export function SegButton({
+  active, onClick, children, className = "", disabled = false, title,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
   className?: string;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      disabled={disabled}
+      title={title}
       className={`shrink-0 rounded-md px-2 py-1.5 text-[11px] leading-none transition-colors sm:px-2.5 ${
-        active
-          ? "bg-white/10 font-medium text-ink shadow-sm shadow-black/20"
-          : "text-muted hover:bg-white/5 hover:text-ink2"
+        disabled
+          ? "cursor-not-allowed text-faint opacity-50"
+          : active
+            ? "bg-white/10 font-medium text-ink shadow-sm shadow-black/20"
+            : "text-muted hover:bg-white/5 hover:text-ink2"
       } ${className}`}
     >
       {children}

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mark } from "./ui";
 import { SignInContent } from "./SignInContent";
@@ -12,8 +11,6 @@ import { SignInContent } from "./SignInContent";
  * scratch while a modal opens over the context it interrupted.
  */
 export function LoginPanel({ next }: { next: string }) {
-  const router = useRouter();
-
   return (
     <div className="w-full">
       {/* Masthead sits outside the card so the card reads as the form rather
@@ -30,7 +27,16 @@ export function LoginPanel({ next }: { next: string }) {
 
       <div className="hero px-6 py-6">
         <div className="relative">
-          <SignInContent onDone={() => router.replace(next)} />
+          {/* A full navigation, not `router.replace`. The reader got here by
+              clicking a gated link, and the router prefetched that link
+              while they were still signed out — so its cache holds the
+              proxy's redirect *back to this page*. A soft navigation reuses
+              that entry, lands on `/login` again, and this card keeps its
+              "Signed in" state forever. A real request carries the fresh
+              cookie past the proxy and lands where the click was aimed.
+              `replace` keeps `/login` out of history so Back doesn't return
+              to a page that would only redirect again. */}
+          <SignInContent next={next} onDone={() => window.location.replace(next)} />
         </div>
       </div>
 

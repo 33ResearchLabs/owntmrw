@@ -38,6 +38,19 @@ to build up holder/price/dev history — every run appends snapshots, nothing is
 
 Optional env: `SOLANA_RPC_URL` (defaults to public mainnet), `GITHUB_TOKEN`.
 
+### Charts
+
+The project page offers three chart sources behind one tab strip — the native
+chart, TradingView Advanced Charts on our own candles, and hosted embeds
+(DexScreener by default). Which are offered, the default tab, and each embed's
+options live in `src/lib/chartSources.ts`.
+
+TradingView's library is licensed and not on npm, so it is not committed. To
+enable that tab: apply at <https://www.tradingview.com/advanced-charts/>, clone
+`tradingview/charting_library`, and copy its `charting_library/` folder to
+`public/charting_library/` (git-ignored). No code change is needed; until the
+folder exists the tab shows these steps. See `src/lib/tradingview.ts`.
+
 ## Data correctness
 
 Three rules the platform enforces so nothing shown is fabricated:

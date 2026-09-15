@@ -15,6 +15,8 @@ import { healthScore, insights, developerScore } from "@/lib/analytics";
 import { DevelopmentPanel } from "@/components/Development";
 import { buildMemo } from "@/lib/research";
 import { PriceChart } from "@/components/PriceChart";
+import { ChartSource } from "@/components/ChartSource";
+import { TradingViewChart } from "@/components/TradingViewChart";
 import { Tabs, type TabDef } from "@/components/Tabs";
 import { HealthScorePanel } from "@/components/HealthScore";
 import {
@@ -874,22 +876,37 @@ export default async function ProjectPage({
    * PRICE CHART
    */
 
+  // The native chart, plus TradingView and hosted embeds (see `src/lib/chartSources.ts`).
   const chartBlock = (
     <section className="card p-4 sm:p-5">
-      <PriceChart
-        candles={candles}
-        events={chartEvents}
-        slug={slug}
-        circulatingSupply={p.circulating_supply}
-        name={p.name}
+      <ChartSource
+        ids={{ pair: d.quotePair, pool: p.pool_address, mint: p.mint }}
         symbol={p.symbol ?? p.name}
-        imageUrl={p.image_url}
-        marketCap={latest?.mcap ?? null}
-        volume24h={latest?.vol24h ?? null}
-        change24h={latest?.change_24h ?? null}
-        periods={periods}
-        lastUpdated={candles.length ? candles[candles.length - 1].ts : null}
-      />
+        tradingview={
+          <TradingViewChart
+            slug={slug}
+            symbol={p.symbol ?? p.name}
+            name={p.name}
+            candles={candles}
+            events={chartEvents}
+          />
+        }
+      >
+        <PriceChart
+          candles={candles}
+          events={chartEvents}
+          slug={slug}
+          circulatingSupply={p.circulating_supply}
+          name={p.name}
+          symbol={p.symbol ?? p.name}
+          imageUrl={p.image_url}
+          marketCap={latest?.mcap ?? null}
+          volume24h={latest?.vol24h ?? null}
+          change24h={latest?.change_24h ?? null}
+          periods={periods}
+          lastUpdated={candles.length ? candles[candles.length - 1].ts : null}
+        />
+      </ChartSource>
     </section>
   );
 
