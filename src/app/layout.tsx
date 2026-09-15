@@ -39,6 +39,7 @@ const NAV = [
   { href: "/timeline", label: "Activity" },
   { href: "/observations", label: "Signals" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/list", label: "List a token" },
 ];
 
 export default async function RootLayout({

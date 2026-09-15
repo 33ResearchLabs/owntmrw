@@ -1248,6 +1248,21 @@ export default async function ProjectPage({
 
           <StatusBadge status={p.status} />
 
+          {/* Community listings are self-submitted and reviewed, not
+              discovered through MetaDAO — a reader should be able to tell. */}
+          {p.source === "submitted" && (
+            <span
+              title={
+                p.submitted_by
+                  ? `Submitted by ${p.submitted_by.slice(0, 4)}…${p.submitted_by.slice(-4)}`
+                  : undefined
+              }
+              className="rounded border border-accent/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent"
+            >
+              Community listing
+            </span>
+          )}
+
           {p.category && (
             <span className="text-[11px] text-ink2">{p.category}</span>
           )}
@@ -1864,6 +1879,19 @@ export default async function ProjectPage({
             )}
 
             <StatusBadge status={p.status} />
+
+            {p.source === "submitted" && (
+              <span
+                title={
+                  p.submitted_by
+                    ? `Submitted by ${p.submitted_by.slice(0, 4)}…${p.submitted_by.slice(-4)}`
+                    : undefined
+                }
+                className="rounded border border-accent/40 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent"
+              >
+                Community listing
+              </span>
+            )}
 
             {p.category && (
               <span className="rounded bg-surface2 px-1.5 py-0.5 text-[11px] text-ink2">

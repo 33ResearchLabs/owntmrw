@@ -21,9 +21,11 @@ const SESSION_COOKIE = "owntmrw_session";
  * signals feeds — both are read-only across every tracked project, so there
  * is nothing on either page a session unlocks. Project pages carry the trade
  * terminal and per-wallet data, so they gate the same as the screener and
- * the portfolio.
+ * the portfolio. `/list` writes under the reader's wallet and `/admin` is
+ * the review desk — both need a session before they mean anything (and
+ * `/admin` needs more, which `requireAdmin` decides where the env is).
  */
-const GATED = ["/screener", "/portfolio", "/project"];
+const GATED = ["/screener", "/portfolio", "/project", "/list", "/admin"];
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -39,5 +41,11 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/screener/:path*", "/portfolio/:path*", "/project/:path*"],
+  matcher: [
+    "/screener/:path*",
+    "/portfolio/:path*",
+    "/project/:path*",
+    "/list/:path*",
+    "/admin/:path*",
+  ],
 };

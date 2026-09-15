@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { WalletModal } from "./WalletModal";
+import { ContinueToast } from "./ContinueToast";
 
 /**
  * One sign-in dialog for the whole app.
@@ -25,7 +26,7 @@ interface SignIn {
 const Ctx = createContext<SignIn | null>(null);
 
 /** Kept in step with the matcher in `proxy.ts`. */
-const GATED = ["/screener", "/portfolio", "/project"];
+const GATED = ["/screener", "/portfolio", "/project", "/list", "/admin"];
 
 export function SignInProvider({ children }: { children: React.ReactNode }) {
   const [next, setNext] = useState<string | null>(null);
@@ -45,6 +46,7 @@ export function SignInProvider({ children }: { children: React.ReactNode }) {
     <Ctx.Provider value={value}>
       {children}
       <WalletModal open={open} next={next} onClose={close} />
+      <ContinueToast />
     </Ctx.Provider>
   );
 }

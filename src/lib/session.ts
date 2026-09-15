@@ -21,3 +21,28 @@ export async function requireSession(next: string): Promise<string> {
   if (!address) redirect(`/login?next=${encodeURIComponent(next)}`);
   return address;
 }
+
+/**
+ * Admin wallets, from `ADMIN_WALLETS` (comma-separated). There is no admin
+ * table: the set is tiny, changes with a deploy, and keeping it out of the
+ * database means a compromised write path cannot promote anyone.
+ */
+export function adminWallets(): Set<string> {
+  return new Set(
+    (process.env.ADMIN_WALLETS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+}
+
+export function isAdmin(address: string | null): address is string {
+  return !!address && adminWallets().has(address);
+}
+
+/** Signed in *and* an admin; anyone else is sent to the sign-in page. */
+export async function requireAdmin(next: string): Promise<string> {
+  const address = await requireSession(next);
+  if (!isAdmin(address)) redirect("/");
+  return address;
+}

@@ -276,6 +276,41 @@ function migrate(d: Database.Database) {
     PRIMARY KEY (address, mint)
   );
 
+  /*
+   * Self-serve listings. A creator submits a mint and what they know about
+   * it; the server records what it could verify on-chain and in the market
+   * at that moment; an admin approves or rejects. Nothing reaches the projects table
+   * until approval — the screener, search, live quotes and the timeline all
+   * read that table, so a pending row would leak into every surface at once.
+   *
+   * verification is the server's report frozen at submit time, so the
+   * reviewer sees exactly what was checked rather than a fresh read that may
+   * have moved since. submitted_by is the session wallet, never the body.
+   */
+  CREATE TABLE IF NOT EXISTS listing_requests (
+    id INTEGER PRIMARY KEY,
+    mint TEXT NOT NULL,
+    submitted_by TEXT NOT NULL,
+    status TEXT NOT NULL,            -- pending | approved | rejected
+    name TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    description TEXT,
+    category TEXT,
+    website TEXT, twitter TEXT, discord TEXT, telegram TEXT,
+    github TEXT, docs TEXT, image_url TEXT,
+    proof_url TEXT,                  -- public statement naming the mint, for unverified submitters
+    verification TEXT NOT NULL,      -- JSON: ListingVerification
+    ownership TEXT NOT NULL,         -- mint_authority | update_authority | unverified
+    reviewed_by TEXT, review_note TEXT, reviewed_ts INTEGER,
+    project_id INTEGER REFERENCES projects(id),
+    created_ts INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_listing_req_status ON listing_requests(status, created_ts DESC);
+  CREATE INDEX IF NOT EXISTS idx_listing_req_wallet ON listing_requests(submitted_by, created_ts DESC);
+  -- One open request per mint: a second submitter is told it is under review.
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_listing_req_pending
+    ON listing_requests(mint) WHERE status = 'pending';
+
   CREATE INDEX IF NOT EXISTS idx_snap_proj ON price_snapshots(project_id, ts DESC);
   CREATE INDEX IF NOT EXISTS idx_events_proj ON events(project_id, ts DESC);
   CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_ts);
@@ -300,6 +335,10 @@ function migrate(d: Database.Database) {
     ["team_address", "TEXT"],
     ["amm_vault_address", "TEXT"],
     ["lp_pool_address", "TEXT"],
+    // Community listings: who submitted the token and when it was approved,
+    // so the project page can say so and a reviewer can trace it back.
+    ["submitted_by", "TEXT"],
+    ["listed_ts", "INTEGER"],
   ]);
 
   // The GitHub snapshot began as four headline counters; the development view
@@ -386,6 +425,9 @@ export interface Project {
   raise_fdv_usd: number | null;
   raise_track: string | null;
   source: string | null;
+  /** Set on community listings (`source = "submitted"`); null for discovered projects. */
+  submitted_by: string | null;
+  listed_ts: number | null;
   updated_ts: number | null;
 }
 
@@ -476,6 +518,8 @@ export function upsertProject(
     "raise_fdv_usd",
     "raise_track",
     "source",
+    "submitted_by",
+    "listed_ts",
   ] as const;
   if (existing) {
     // only overwrite with non-null incoming values
