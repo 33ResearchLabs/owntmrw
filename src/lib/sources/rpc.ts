@@ -1,13 +1,29 @@
-import { useWallet } from "@/components/wallet";
 import { postJSON, sleep } from "./http";
 
 /**
  * ============================================================
- * SOLANA DEVNET
+ * TWO ENDPOINTS
  * ============================================================
+ *
+ * The wallet sandbox (ownerBalances, the invest flow) runs on whatever
+ * SOLANA_RPC_URL points at — devnet during testing. The intelligence reads
+ * (supply, holders, treasury balances) describe real tokens and must read
+ * mainnet regardless, or a devnet setting silently empties every holder
+ * panel. SOLANA_MAINNET_RPC_URL names that endpoint; without it, a non-devnet
+ * SOLANA_RPC_URL is reused, else public mainnet-beta (which rate-limits
+ * getTokenLargestAccounts — a keyed endpoint is needed for holders).
  */
 
 const RPC = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+
+const DATA_RPC =
+  process.env.SOLANA_MAINNET_RPC_URL ||
+  (process.env.SOLANA_RPC_URL && !process.env.SOLANA_RPC_URL.includes("devnet")
+    ? process.env.SOLANA_RPC_URL
+    : "https://api.mainnet-beta.solana.com");
+
+/** Which mainnet endpoint the data reads use, for ingest logs. */
+export const DATA_RPC_URL = DATA_RPC;
 
 /**
  * Devnet USDT mint.
@@ -46,24 +62,28 @@ interface RpcResp<T> {
  * ============================================================
  */
 
-async function rpc<T>(method: string, params: unknown[]): Promise<T | null> {
+/**
+ * Sandbox calls keep their verbose request/response logging — that is how
+ * the invest flow is debugged. Data reads run hundreds of calls per ingest
+ * and log only failures.
+ */
+async function rpc<T>(
+  method: string,
+  params: unknown[],
+  endpoint: string = DATA_RPC,
+): Promise<T | null> {
+  const verbose = endpoint === RPC;
   try {
-    console.log("[SOLANA RPC REQUEST]", {
-      method,
-      params,
-    });
+    if (verbose) console.log("[SOLANA RPC REQUEST]", { method, params });
 
-    const response = await postJSON<RpcResp<T>>(RPC, {
+    const response = await postJSON<RpcResp<T>>(endpoint, {
       jsonrpc: "2.0",
       id: 1,
       method,
       params,
     });
 
-    console.log("[SOLANA RPC RESPONSE]", {
-      method,
-      response,
-    });
+    if (verbose) console.log("[SOLANA RPC RESPONSE]", { method, response });
 
     if (!response) {
       console.error("[SOLANA RPC] Empty response");
@@ -89,6 +109,9 @@ async function rpc<T>(method: string, params: unknown[]): Promise<T | null> {
     return null;
   }
 }
+
+const sandboxRpc = <T,>(method: string, params: unknown[]) =>
+  rpc<T>(method, params, RPC);
 
 /**
  * ============================================================
@@ -286,7 +309,7 @@ export async function ownerBalances(owner: string): Promise<OwnerBalances> {
    * ==========================================================
    */
 
-  const lamports = await rpc<{
+  const lamports = await sandboxRpc<{
     value: number;
   }>("getBalance", [owner]);
 
@@ -305,7 +328,7 @@ export async function ownerBalances(owner: string): Promise<OwnerBalances> {
   for (const programId of TOKEN_PROGRAMS) {
     console.log("[OWNER BALANCES] Reading token program:", programId);
 
-    const response = await rpc<AccountsResponse>("getTokenAccountsByOwner", [
+    const response = await sandboxRpc<AccountsResponse>("getTokenAccountsByOwner", [
       owner,
       {
         programId,
