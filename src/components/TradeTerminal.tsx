@@ -50,6 +50,18 @@ export function TradeTerminal({
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [sellClosed, setSellClosed] = useState(false);
 
+  /*
+   * A buy whose USDT landed but whose ledger credit didn't. Kept so the
+   * receipt can say so and offer a retry — /api/swap/confirm is idempotent
+   * on the signature, so re-sending is safe.
+   */
+  const [unrecorded, setUnrecorded] = useState<{
+    signature: string;
+    amountUsdt: number;
+    priceUsd: number | null;
+    reason: string;
+  } | null>(null);
+
   const [error, setError] = useState<string | null>(null);
 
   /*
@@ -379,43 +391,69 @@ export function TradeTerminal({
     priceUsd: number | null,
   ) {
     setTxSignature(signature);
+    setUnrecorded(null);
     setAmount("");
 
     /*
-     * Credit the simulated position now that the USDT transfer is
-     * confirmed on-chain. This is best-effort: the USDT has already
-     * moved, so a failure here shouldn't read as a failed trade — it
-     * means the position didn't get recorded and the user should see
-     * their real transaction rather than a scary error.
+     * Credit the simulated position now that the USDT transfer is on its
+     * way. The server waits for the transfer to confirm, but a 409 (it
+     * still hadn't by the server's deadline) or a dropped connection is
+     * worth a couple more tries before giving up. The USDT has already
+     * moved, so a final failure isn't a failed trade — it's an unrecorded
+     * one, which the receipt says explicitly and lets the user retry.
      */
-    try {
-      const confirmRes = await fetch("/api/swap/confirm", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-        body: JSON.stringify({
-          signature,
-          tokenMint: mint,
-          amountUsdt: amountUsdt,
-          priceUsd: priceUsd,
-        }),
-      });
+    let reason: string | null = null;
 
-      if (confirmRes.ok) {
-        setHeld(await w.ledgerBalance(mint!));
-      } else {
-        console.error(
-          "[TRADE] Position not recorded:",
-          await confirmRes.text(),
-        );
-        // Signed out between building and confirming; let the provider
-        // catch up so the panel offers sign-in rather than a dead button.
-        if (confirmRes.status === 401) void w.refreshSession();
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await new Promise((r) => setTimeout(r, 2_000));
       }
-    } catch (confirmError) {
-      console.error("[TRADE] Position not recorded:", confirmError);
+
+      try {
+        const confirmRes = await fetch("/api/swap/confirm", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          cache: "no-store",
+          body: JSON.stringify({
+            signature,
+            tokenMint: mint,
+            amountUsdt: amountUsdt,
+            priceUsd: priceUsd,
+          }),
+        });
+
+        if (confirmRes.ok) {
+          reason = null;
+          setHeld(await w.ledgerBalance(mint!));
+          break;
+        }
+
+        const body = (await confirmRes.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        reason = body?.error ?? `HTTP ${confirmRes.status}`;
+        console.error("[TRADE] Position not recorded:", reason);
+
+        // Signed out between building and confirming. The receipt and its
+        // Retry stay in state and come back once the user signs in again,
+        // so this keeps the reason and only lets the provider catch up.
+        if (confirmRes.status === 401) void w.refreshSession();
+
+        // Only "not confirmed yet" is worth retrying; anything else is final.
+        if (confirmRes.status !== 409) break;
+      } catch (confirmError) {
+        reason =
+          confirmError instanceof Error
+            ? confirmError.message
+            : "Network error.";
+        console.error("[TRADE] Position not recorded:", confirmError);
+      }
+    }
+
+    if (reason) {
+      setUnrecorded({ signature, amountUsdt, priceUsd, reason });
     }
 
     /*
@@ -924,6 +962,28 @@ export function TradeTerminal({
               >
                 View transaction ↗
               </a>
+
+              {unrecorded && unrecorded.signature === txSignature && (
+                <div className="mt-2 border-t border-good/20 pt-2 text-[11px] leading-relaxed text-bad">
+                  The USDT was sent, but the position wasn&apos;t recorded:{" "}
+                  {unrecorded.reason}{" "}
+                  <button
+                    type="button"
+                    disabled={executing}
+                    onClick={() => {
+                      setExecuting(true);
+                      void recordBuy(
+                        unrecorded.signature,
+                        unrecorded.amountUsdt,
+                        unrecorded.priceUsd,
+                      ).finally(() => setExecuting(false));
+                    }}
+                    className="font-semibold text-brand hover:underline disabled:opacity-50"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

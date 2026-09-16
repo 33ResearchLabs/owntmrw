@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import bs58 from "bs58";
 import { currentAddress } from "@/lib/session";
-import { connection } from "@/lib/solana";
+import { waitForTransaction } from "@/lib/solana";
 import { recordLedgerTrade } from "@/lib/db";
 
 /** A transaction signature is a 64-byte ed25519 signature, base58-encoded. */
@@ -68,10 +68,12 @@ export async function POST(req: Request) {
         ? priceUsd
         : null;
 
-    const tx = await connection.getTransaction(signature, {
-      commitment: "confirmed",
-      maxSupportedTransactionVersion: 0,
-    });
+    /*
+     * The client calls this the moment the wallet hands back a signature,
+     * which is before the transfer is confirmed — wait for it here rather
+     * than bouncing the request and hoping the client retries.
+     */
+    const tx = await waitForTransaction(signature);
 
     if (!tx) {
       return NextResponse.json(
