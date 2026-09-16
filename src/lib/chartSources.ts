@@ -10,6 +10,7 @@
  *
  * To change what is offered, edit this file and nothing else:
  *   - `DEFAULT_CHART_SOURCE` — the tab a page opens on.
+ *   - `NATIVE_CHART_ENABLED` — whether the native ("Underly") tab is offered.
  *   - `TRADINGVIEW_ENABLED`  — whether the TradingView tab is offered.
  *   - `ENABLED_EMBEDS`       — which hosted providers get a tab, in that order.
  *   - `PRELOAD_EMBEDS`       — load them in the background so the tab opens instantly.
@@ -55,20 +56,34 @@ export interface EmbedProvider {
    * the frame, so this is more than the native chart's plot alone.
    */
   height: number;
+  /**
+   * Provider chrome to clip off the bottom edge, in px — a "Tracked by …"
+   * banner, say. The frame is drawn this much taller than its box so the
+   * banner falls outside it. Tune by eye: too little leaves a sliver of the
+   * banner, too much eats the row above it.
+   */
+  clipBottom?: number;
 }
 
 /* ------------------------------------------------------------------------ */
 /* What is offered                                                           */
 /* ------------------------------------------------------------------------ */
 
-export const DEFAULT_CHART_SOURCE: ChartSourceKey = "native";
+export const DEFAULT_CHART_SOURCE: ChartSourceKey = "dexscreener";
+
+/**
+ * The native chart is always the fallback when no other source can show a
+ * token (e.g. DexScreener has no pair for it), so switching this off only
+ * hides its tab — it never removes the chart from a page that needs it.
+ */
+export const NATIVE_CHART_ENABLED = false;
 
 /**
  * The tab is offered even before the library is installed — it then shows
  * the install steps rather than a chart — so switch this off for a deploy
  * that will not ship `public/charting_library/`.
  */
-export const TRADINGVIEW_ENABLED = true;
+export const TRADINGVIEW_ENABLED = false;
 
 export const ENABLED_EMBEDS: EmbedProviderKey[] = ["dexscreener"];
 
@@ -124,6 +139,7 @@ export const EMBED_PROVIDERS: Record<EmbedProviderKey, EmbedProvider> = {
       }),
     site: (id) => `https://dexscreener.com/solana/${id}`,
     height: 560,
+    clipBottom: 40,
   },
 
   /** Free, no key. Keyed on the same pool the native chart's candles come from. */
