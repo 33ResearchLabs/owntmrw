@@ -65,6 +65,18 @@ export function TradeTerminal({
   const ready = w.session != null && !stale;
 
   /*
+   * A 401 means the server no longer knows this cookie — the session
+   * expired, or a deploy rebuilt the database under it. Ask the provider
+   * to check: if it agrees, `session` drops, this panel flips to its
+   * sign-in button, and there is no error to show — the button is the
+   * message. True when the caller should stop quietly.
+   */
+  async function signedOut(res: Response): Promise<boolean> {
+    if (res.status !== 401) return false;
+    return (await w.refreshSession()) === null;
+  }
+
+  /*
    * Read this token's simulated position whenever the
    * wallet or project changes. This is what a sell debits —
    * see the file header for why it isn't the real on-chain balance.
@@ -398,6 +410,9 @@ export function TradeTerminal({
           "[TRADE] Position not recorded:",
           await confirmRes.text(),
         );
+        // Signed out between building and confirming; let the provider
+        // catch up so the panel offers sign-in rather than a dead button.
+        if (confirmRes.status === 401) void w.refreshSession();
       }
     } catch (confirmError) {
       console.error("[TRADE] Position not recorded:", confirmError);
@@ -500,6 +515,7 @@ export function TradeTerminal({
       const data = await response.json();
 
       if (!response.ok) {
+        if (await signedOut(response)) return;
         throw new Error(data?.error || "Unable to create transaction.");
       }
 
@@ -653,6 +669,7 @@ export function TradeTerminal({
       const data = await res.json();
 
       if (!res.ok) {
+        if (await signedOut(res)) return;
         throw new Error(data?.error || "Unable to close the position.");
       }
 

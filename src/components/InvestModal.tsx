@@ -237,6 +237,9 @@ export function InvestModal({
       const data = await response.json();
 
       if (!response.ok) {
+        // Drop the page's stale session so the header and trade panel
+        // stop showing a signed-in wallet the server doesn't recognise.
+        if (response.status === 401) void w.refreshSession();
         throw new Error(
           data?.error || "Unable to create investment transaction.",
         );

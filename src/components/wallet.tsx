@@ -457,6 +457,17 @@ export interface WalletState {
   logout: () => Promise<void>;
 
   /**
+   * Re-read the session from the server: the address it recognises, null
+   * when signed out, undefined when it could not be reached (the session is
+   * then left as it was — an unreachable server is not a sign-out). Call it
+   * when an API answers 401: `session` is a snapshot from page load, and the
+   * server's can lapse under it — the session expires, or a deploy rebuilds
+   * the database — so this is how the UI stops showing a green dot for a
+   * session that no longer exists.
+   */
+  refreshSession: () => Promise<string | null | undefined>;
+
+  /**
    * Get balance for a specific SPL mint.
    */
   tokenBalance: (mint: string) => Promise<number | null>;
@@ -848,22 +859,26 @@ export function WalletProvider({
    * ==========================================================
    */
 
-  useEffect(() => {
-    let cancelled = false;
-
-    fetch("/api/auth/session")
-      .then((res) => res.json())
-      .then((data: { address: string | null }) => {
-        if (!cancelled) {
+  /**
+   * Ask the server who the cookie belongs to. Runs once on mount, and again
+   * on demand when an API call answers 401 (see `WalletState.refreshSession`
+   * for the contract).
+   */
+  const refreshSession = useCallback(
+    () =>
+      fetch("/api/auth/session", { cache: "no-store" })
+        .then((res) => res.json())
+        .then((data: { address: string | null }) => {
           setSession(data.address);
-        }
-      })
-      .catch(() => {});
+          return data.address;
+        })
+        .catch(() => undefined),
+    [],
+  );
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useEffect(() => {
+    void refreshSession();
+  }, [refreshSession]);
 
   /**
    * ==========================================================
@@ -1366,6 +1381,8 @@ export function WalletProvider({
 
       logout,
 
+      refreshSession,
+
       tokenBalance,
 
       allTokenBalances,
@@ -1400,6 +1417,7 @@ export function WalletProvider({
       disconnect,
       login,
       logout,
+      refreshSession,
       tokenBalance,
       allTokenBalances,
       ledgerBalance,

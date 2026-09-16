@@ -2,8 +2,10 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const BUNDLED_DB_PATH = path.join(DATA_DIR, "metaintel.db");
+// The snapshot that ships with the code: `data/metaintel.db` is committed, so
+// a fresh checkout (and a fresh deploy) starts with the ingested projects.
+const BUNDLED_DIR = path.join(process.cwd(), "data");
+const BUNDLED_DB_PATH = path.join(BUNDLED_DIR, "metaintel.db");
 
 // Serverless platforms (Vercel) ship the deployment as a read-only bundle —
 // only /tmp is writable. WAL mode needs to create -shm/-wal sidecar files
@@ -11,20 +13,44 @@ const BUNDLED_DB_PATH = path.join(DATA_DIR, "metaintel.db");
 // into /tmp once per cold start and open it there instead.
 const IS_READONLY_FS =
   !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
-const DB_PATH = IS_READONLY_FS
-  ? path.join("/tmp", "metaintel.db")
-  : BUNDLED_DB_PATH;
+
+// Where the live database lives. Hosts like Railway rebuild the container
+// from the repo on every deploy, which resets the bundled file — and with it
+// every session, listing and ledger trade written since the last push. Set
+// DATA_DIR to a mounted volume (Railway announces its own mount path in
+// RAILWAY_VOLUME_MOUNT_PATH, so attaching one is enough) and the database is
+// opened there instead. It must not be the bundled `data/` directory itself:
+// a volume mounted over it hides the snapshot, leaving nothing to seed from.
+const DATA_DIR = path.resolve(
+  process.env.DATA_DIR?.trim() ||
+    process.env.RAILWAY_VOLUME_MOUNT_PATH?.trim() ||
+    (IS_READONLY_FS ? "/tmp" : BUNDLED_DIR),
+);
+const DB_PATH = path.join(DATA_DIR, "metaintel.db");
+
+if (
+  (process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH) &&
+  DATA_DIR === BUNDLED_DIR
+) {
+  console.warn(
+    `[db] DATA_DIR resolves to the bundled ${BUNDLED_DIR}; a volume mounted there hides the snapshot, so a fresh volume starts with no projects. Mount it elsewhere (e.g. /data).`,
+  );
+}
 
 let _db: Database.Database | null = null;
 
 export function db(): Database.Database {
   if (_db) return _db;
-  if (IS_READONLY_FS) {
-    if (!fs.existsSync(DB_PATH) && fs.existsSync(BUNDLED_DB_PATH)) {
-      fs.copyFileSync(BUNDLED_DB_PATH, DB_PATH);
-    }
-  } else {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  // First boot on a persistent or scratch directory: copy the snapshot in so
+  // the projects arrive with the schema. Never overwrites — after that, the
+  // copy is the live database and the bundled file is just the seed.
+  if (
+    DB_PATH !== BUNDLED_DB_PATH &&
+    !fs.existsSync(DB_PATH) &&
+    fs.existsSync(BUNDLED_DB_PATH)
+  ) {
+    fs.copyFileSync(BUNDLED_DB_PATH, DB_PATH);
   }
   _db = new Database(DB_PATH);
   _db.pragma("journal_mode = WAL");
