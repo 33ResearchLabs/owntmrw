@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/session";
+import { currentAddress } from "@/lib/session";
 import { buildInvestmentTransaction } from "@/lib/swap";
 
 export const dynamic = "force-dynamic";
@@ -7,32 +7,26 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     /**
-     * The authenticated wallet is the source wallet.
-     * We do NOT trust owner from the browser.
-     */
-    const session = await requireSession("/portfolio");
-
-    const body = await req.json();
-
-    const { tokenMint, amountUsdt, slippageBps } = body ?? {};
-
-    /**
      * --------------------------------------------------------
      * WALLET
      * --------------------------------------------------------
      *
-     * The connected/authenticated wallet is always the owner.
+     * The authenticated wallet is the source wallet. We do NOT trust
+     * owner from the browser.
+     *
+     * A JSON 401 rather than `requireSession`'s redirect, because this
+     * is fetched, not navigated to — `redirect()` throws NEXT_REDIRECT,
+     * which the catch below would otherwise hand back as the error text.
      */
-    const owner = session;
+    const owner = await currentAddress();
 
     if (!owner) {
-      return NextResponse.json(
-        {
-          error: "Authenticated wallet is missing.",
-        },
-        { status: 401 },
-      );
+      return NextResponse.json({ error: "Sign in first." }, { status: 401 });
     }
+
+    const body = await req.json();
+
+    const { tokenMint, amountUsdt, slippageBps } = body ?? {};
 
     /**
      * --------------------------------------------------------
