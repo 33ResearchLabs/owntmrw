@@ -257,6 +257,11 @@ export interface OwnerBalances {
   usdt: number | null;
 
   /**
+   * The mint `usdt` counts (SOLANA_USDT_MINT), null when unset.
+   */
+  usdtMint: string | null;
+
+  /**
    * All non-zero SPL tokens.
    *
    * mint -> balance
@@ -418,6 +423,9 @@ export async function ownerBalances(owner: string): Promise<OwnerBalances> {
   const result: OwnerBalances = {
     sol,
     usdt,
+    // Which mint `usdt` counts, so the client can tell "no USDT" from
+    // "USDT mint not configured" without guessing from the largest balance.
+    usdtMint: USDT_MINT || null,
     tokens,
   };
 

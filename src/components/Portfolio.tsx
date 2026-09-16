@@ -109,6 +109,13 @@ export function Portfolio({
   const [scan, setScan] = useState<{
     owner: string;
     holdings: Holding[] | null;
+    /**
+     * The chain read failed but the ledger answered, so `holdings` carries
+     * simulated positions only. Shown with a notice rather than hidden
+     * behind the failure card — a position the app itself recorded should
+     * not vanish because a public RPC endpoint is having a bad minute.
+     */
+    partial?: boolean;
   } | null>(null);
 
   const [trades, setTrades] = useState<LedgerTrade[]>([]);
@@ -153,7 +160,9 @@ export function Portfolio({
 
         if (cancelled) return;
 
-        if (address && !balances) {
+        const chainFailed = !!address && !balances;
+
+        if (chainFailed && ledger.size === 0) {
           setScan({
             owner: address,
             holdings: null,
@@ -212,6 +221,7 @@ export function Portfolio({
           setScan({
             owner: address,
             holdings: found,
+            partial: chainFailed,
           });
         }
       } catch (error) {
@@ -683,9 +693,19 @@ export function Portfolio({
               ? "reading chain…"
               : state === "failed"
                 ? "balance read failed"
-                : `scanned ${tokens.length} mints`}
+                : scan?.partial
+                  ? "chain read failed — simulated positions only"
+                  : `scanned ${tokens.length} mints`}
           </span>
         </div>
+
+        {state === "done" && scan?.partial && (
+          <p className="border-b border-line px-5 py-2.5 text-[11.5px] leading-relaxed text-muted">
+            On-chain balances could not be read just now, so only the
+            positions recorded here are shown. Real token balances will
+            appear once the chain read recovers.
+          </p>
+        )}
 
         {state === "failed" ? (
           <p className="px-5 py-8 text-center text-[12.5px] text-muted">

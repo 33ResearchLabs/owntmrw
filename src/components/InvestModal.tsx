@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "./wallet";
+import { settleBuy } from "@/lib/pendingBuys";
 
 interface InvestModalProps {
   open: boolean;
@@ -255,12 +256,39 @@ export function InvestModal({
        */
       const signature = await w.signAndSendTransaction(data.transaction, {
         tag: "invest",
-        data: { tokenMint: token.mint, amountUsdt: numericAmount },
+        data: {
+          tokenMint: token.mint,
+          amountUsdt: numericAmount,
+          priceUsd: token.priceUsd ?? null,
+        },
       });
 
       setSuccess(signature);
 
       onSuccess?.(signature);
+
+      /*
+       * Credit the simulated position. This path used to stop at the
+       * signature, so the USDT reached the vault and nothing was ever
+       * recorded — /portfolio stayed empty. `settleBuy` queues the buy
+       * before asking the server, so a closed tab or a 409 (cluster not
+       * confirmed yet) is retried on the next page load with a session.
+       */
+      void settleBuy({
+        signature,
+        address: w.session ?? w.address,
+        tokenMint: token.mint,
+        amountUsdt: numericAmount,
+        priceUsd: token.priceUsd ?? null,
+      }).then((outcome) => {
+        if (outcome.ok) {
+          window.dispatchEvent(
+            new CustomEvent("wallet-transaction", {
+              detail: { signature, tokenMint: token.mint },
+            }),
+          );
+        }
+      });
     } catch (err) {
       console.error("Investment failed:", err);
 

@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { flushPendingBuys } from "@/lib/pendingBuys";
 import { useRouter } from "next/navigation";
 import {
   DEEPLINK_BASE,
@@ -880,6 +881,25 @@ export function WalletProvider({
     void refreshSession();
   }, [refreshSession]);
 
+  /*
+   * Buys whose USDT went out but whose ledger credit never landed are
+   * queued in localStorage by the page that made them. The next time a
+   * session exists for that wallet — this page load, or the sign-in that
+   * follows a deploy — re-drive them. Nothing to do when the queue is
+   * empty, which is nearly always; and the confirm route is idempotent,
+   * so a second pass over a buy it already has costs one request.
+   */
+  useEffect(() => {
+    if (!session) return;
+    void flushPendingBuys(session).then((settled) => {
+      if (settled > 0) {
+        window.dispatchEvent(
+          new CustomEvent("wallet-transaction", { detail: { signature: null } }),
+        );
+      }
+    });
+  }, [session]);
+
   /**
    * ==========================================================
    * CONNECT
@@ -1118,22 +1138,13 @@ export function WalletProvider({
      * the same fresh API response.
      */
     setSol(data.sol);
-    if (data.tokens && Object.keys(data.tokens).length > 0) {
-      const tokenEntries = Object.entries(data.tokens);
-
-      const maxToken = tokenEntries.reduce((max, current) => {
-        return current[1] > max[1] ? current : max;
-      }, tokenEntries[0]);
-
-      console.log("[WALLET] MAX TOKEN:", {
-        mint: maxToken[0],
-        balance: maxToken[1],
-      });
-
-      setUsdt(maxToken[1]);
-    } else {
-      setUsdt(0);
-    }
+    /*
+     * `usdt` is the server's balance of the mint it actually debits
+     * (SOLANA_USDT_MINT). This used to take the largest balance in the
+     * wallet instead, which on a devnet wallet full of test mints showed a
+     * number the buy could never spend. A failed read stays 0, as before.
+     */
+    setUsdt(data.tokens ? (data.usdt ?? 0) : 0);
 
     if (!data.tokens) {
       return null;

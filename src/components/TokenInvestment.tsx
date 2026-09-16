@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { InvestModal } from "./InvestModal";
 import { useWallet } from "./wallet";
+import { settleBuy } from "@/lib/pendingBuys";
 
 interface TokenInvestmentProps {
   token: {
@@ -27,10 +28,29 @@ export function TokenInvestment({ token }: TokenInvestmentProps) {
   useEffect(() => {
     const r = w.takeDeeplinkResult("invest");
     if (!r) return;
-    const d = (r.data ?? {}) as { tokenMint?: string };
+    const d = (r.data ?? {}) as {
+      tokenMint?: string;
+      amountUsdt?: number;
+      priceUsd?: number | null;
+    };
     if (d.tokenMint !== token.mint) return;
     setResumed(r.signature);
     setOpen(true);
+
+    /*
+     * The modal that started this buy is gone with the page it was on, so
+     * its ledger credit happens here. Queued first, then confirmed; the
+     * provider re-drives the queue if this attempt doesn't land.
+     */
+    if (typeof d.amountUsdt === "number" && d.amountUsdt > 0) {
+      void settleBuy({
+        signature: r.signature,
+        address: w.session ?? w.address ?? "",
+        tokenMint: token.mint,
+        amountUsdt: d.amountUsdt,
+        priceUsd: typeof d.priceUsd === "number" ? d.priceUsd : null,
+      });
+    }
     // Runs once, for the load that carries the result.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

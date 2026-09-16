@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useWallet } from "./wallet";
+import { addPendingBuy, removePendingBuy } from "@/lib/pendingBuys";
 import { useSignIn } from "./SignInProvider";
 import { fmtUsd, fmtNum, shortAddr } from "@/lib/format";
 import { Transaction } from "@solana/web3.js";
@@ -167,193 +168,42 @@ export function TradeTerminal({
 
   const outCcy = side === "buy" ? symbol : "USDT";
 
-  const [maxUsdtBalance, setMaxUsdtBalance] = useState(0);
+  /*
+   * Spendable USDT is the balance of the mint the server actually debits
+   * (`SOLANA_USDT_MINT`, reported as `usdt` by /api/wallet/balances) — not
+   * the largest balance in the wallet, which is what this used to pick and
+   * which showed a test token's 288M as "available" while the buy drew on
+   * a different mint holding 844k. Null (not read yet, or the read failed)
+   * counts as nothing spendable, the same as before.
+   */
+  const maxUsdtBalance = w.usdtBalance ?? 0;
 
-  console.log("[TRADE] USDT BALANCE:", maxUsdtBalance);
+  /*
+   * Recovery form: a buy whose USDT was sent but whose position never got
+   * recorded — the page was closed before confirm ran, a deploy signed the
+   * user out mid-flow, or the old build gave up before the cluster
+   * confirmed. Re-driving the signature through `recordBuy` is safe: the
+   * server ignores a signature it already has.
+   */
+  const [recoverSig, setRecoverSig] = useState("");
+  const [recoverAmount, setRecoverAmount] = useState("");
 
+  /*
+   * Re-read balances when the wallet changes so the figure above is fresh
+   * for this address; the provider updates `usdtBalance` from the result.
+   */
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadMaxUsdtBalance() {
-      try {
-        if (!w.address) {
-          if (!cancelled) {
-            setMaxUsdtBalance(0);
-          }
-          return;
-        }
-
-        /*
-         * IMPORTANT:
-         *
-         * The wallet provider returns a Map at runtime:
-         *
-         * Map<string, number>
-         *
-         * But the current TypeScript definition of
-         * allTokenBalances is not correctly typed.
-         *
-         * Therefore we intentionally treat the returned
-         * value as unknown and normalize it safely here.
-         */
-        const rawBalances: unknown = await w.allTokenBalances();
-
-        console.log("[TRADE] WALLET:", w.address);
-        console.log("[TRADE] TOKEN BALANCES:", rawBalances);
-
-        let entries: Array<{
-          mint: string;
-          balance: number;
-        }> = [];
-
-        /*
-         * ============================================================
-         * MAP
-         * ============================================================
-         */
-
-        if (rawBalances instanceof Map) {
-          entries = Array.from(rawBalances.entries())
-            .map(([mint, value]: [unknown, unknown]) => ({
-              mint: String(mint),
-              balance: Number(value),
-            }))
-            .filter(
-              ({ mint, balance }) =>
-                mint.length > 0 && Number.isFinite(balance) && balance > 0,
-            );
-        } else if (Array.isArray(rawBalances)) {
-          /*
-           * ============================================================
-           * ARRAY
-           * ============================================================
-           *
-           * Supports:
-           *
-           * [
-           *   { mint: "...", balance: 100 },
-           *   ...
-           * ]
-           */
-          entries = rawBalances
-            .map((item: unknown) => {
-              if (!item || typeof item !== "object") {
-                return null;
-              }
-
-              const record = item as Record<string, unknown>;
-
-              const mint = String(record.mint ?? "");
-
-              const balance = Number(
-                record.balance ?? record.uiAmount ?? record.amount ?? 0,
-              );
-
-              return {
-                mint,
-                balance,
-              };
-            })
-            .filter(
-              (
-                item,
-              ): item is {
-                mint: string;
-                balance: number;
-              } =>
-                item !== null &&
-                item.mint.length > 0 &&
-                Number.isFinite(item.balance) &&
-                item.balance > 0,
-            );
-        } else if (rawBalances !== null && typeof rawBalances === "object") {
-          /*
-           * ============================================================
-           * OBJECT
-           * ============================================================
-           *
-           * Supports:
-           *
-           * {
-           *   "mint1": 100,
-           *   "mint2": 500
-           * }
-           */
-          entries = Object.entries(rawBalances as Record<string, unknown>)
-            .map(([mint, value]) => ({
-              mint,
-              balance: Number(value),
-            }))
-            .filter(
-              ({ mint, balance }) =>
-                mint.length > 0 && Number.isFinite(balance) && balance > 0,
-            );
-        }
-
-        console.log("[TRADE] TOKEN ENTRIES:", entries);
-
-        /*
-         * No tokens
-         */
-
-        if (entries.length === 0) {
-          console.log("[TRADE] No token balances found.");
-
-          if (!cancelled) {
-            setMaxUsdtBalance(0);
-          }
-
-          return;
-        }
-
-        /*
-         * ============================================================
-         * MAX TOKEN
-         * ============================================================
-         *
-         * For your current Devnet setup, the largest token balance
-         * is being treated as the available USDT balance.
-         *
-         * Example:
-         *
-         * 30.95
-         * 1,000,000
-         * 1,797,778  <-- selected
-         * 4
-         *
-         * Result:
-         *
-         * maxUsdtBalance = 1,797,778
-         */
-
-        const maxToken = entries.reduce((largest, current) =>
-          current.balance > largest.balance ? current : largest,
-        );
-
-        console.log("[TRADE] MAX TOKEN:", maxToken);
-
-        if (!cancelled) {
-          setMaxUsdtBalance(maxToken.balance);
-        }
-      } catch (error) {
-        console.error("[TRADE] Failed to load token balances:", error);
-
-        if (!cancelled) {
-          setMaxUsdtBalance(0);
-        }
-      }
-    }
-
-    void loadMaxUsdtBalance();
-
-    return () => {
-      cancelled = true;
-    };
+    if (!w.address) return;
+    void w.allTokenBalances().catch((error: unknown) => {
+      console.error("[TRADE] Failed to load token balances:", error);
+    });
+    // `w` is the memoised provider value; keying on the address alone is
+    // deliberate so a balance update doesn't refetch itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [w.address]);
   /*
    * Validate the buy amount.
    */
-  console.log(maxUsdtBalance);
   const buyAmountValid = side === "buy" && amt > 0 && amt <= maxUsdtBalance;
   console.log(buyAmountValid);
   /*
@@ -395,6 +245,19 @@ export function TradeTerminal({
     setAmount("");
 
     /*
+     * The USDT has moved; from here on the buy must survive anything that
+     * happens to this page. Queued until the server confirms it recorded
+     * the position — see pendingBuys.ts for what re-drives the queue.
+     */
+    addPendingBuy({
+      signature,
+      address: w.session ?? w.address ?? "",
+      tokenMint: mint ?? "",
+      amountUsdt,
+      priceUsd,
+    });
+
+    /*
      * Credit the simulated position now that the USDT transfer is on its
      * way. The server waits for the transfer to confirm, but a 409 (it
      * still hadn't by the server's deadline) or a dropped connection is
@@ -426,6 +289,7 @@ export function TradeTerminal({
 
         if (confirmRes.ok) {
           reason = null;
+          removePendingBuy(signature);
           setHeld(await w.ledgerBalance(mint!));
           break;
         }
@@ -514,7 +378,6 @@ export function TradeTerminal({
     }
 
     if (amt > maxUsdtBalance) {
-      console.log(maxUsdtBalance);
       setError(
         `Insufficient USDT balance. Max available is ${maxUsdtBalance.toFixed(4)} USDT.`,
       );
@@ -1032,6 +895,64 @@ export function TradeTerminal({
                 ? `Buy ${symbol}`
                 : `Sell ${symbol}`}
           </button>
+
+          {/* Recover a buy the ledger missed */}
+          {side === "buy" && (
+            <details className="group rounded-xl border border-line bg-page/40 px-3.5 py-2.5 text-[11.5px]">
+              <summary className="cursor-pointer select-none text-muted hover:text-ink2">
+                Sent USDT but the position isn&rsquo;t showing?
+              </summary>
+              <div className="mt-2.5 space-y-2">
+                <p className="leading-relaxed text-faint">
+                  Paste the transaction signature and the USDT amount you
+                  paid. It is credited at today&rsquo;s price; a buy already
+                  on record is left as it is.
+                </p>
+                <input
+                  value={recoverSig}
+                  onChange={(e) => setRecoverSig(e.target.value.trim())}
+                  placeholder="Transaction signature"
+                  spellCheck={false}
+                  className="num w-full rounded-lg border border-line bg-page px-3 py-2 text-[11.5px] text-ink outline-none focus:border-brand/60"
+                />
+                <div className="flex gap-2">
+                  <input
+                    value={recoverAmount}
+                    onChange={(e) =>
+                      setRecoverAmount(e.target.value.replace(/[^\d.]/g, ""))
+                    }
+                    inputMode="decimal"
+                    placeholder="USDT paid"
+                    className="num w-full rounded-lg border border-line bg-page px-3 py-2 text-[11.5px] text-ink outline-none focus:border-brand/60"
+                  />
+                  <button
+                    type="button"
+                    disabled={
+                      executing ||
+                      !mint ||
+                      recoverSig.length < 80 ||
+                      !(Number(recoverAmount) > 0)
+                    }
+                    onClick={() => {
+                      const sig = recoverSig;
+                      const paid = Number(recoverAmount);
+                      setError(null);
+                      setExecuting(true);
+                      void recordBuy(sig, paid, price)
+                        .then(() => {
+                          setRecoverSig("");
+                          setRecoverAmount("");
+                        })
+                        .finally(() => setExecuting(false));
+                    }}
+                    className="shrink-0 rounded-lg bg-accent px-3 py-2 text-[11.5px] font-bold text-white transition-colors hover:bg-accenthi disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Record
+                  </button>
+                </div>
+              </div>
+            </details>
+          )}
         </>
       ) : (
         <button
