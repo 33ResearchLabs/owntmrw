@@ -18,6 +18,22 @@ const HEADERS: Record<string, string> = KEY ? { "x-cg-demo-api-key": KEY } : {};
 /** Spacing between calls; the free tier throttles hard on bursts. */
 const GAP_MS = KEY ? 2200 : 6000;
 
+/** Further attempts after a throttled or failed call. */
+const RETRIES = 3;
+
+/**
+ * How long to wait before retrying. CoinGecko says so itself in Retry-After
+ * when it does; otherwise back off by whole spacing gaps rather than the
+ * sub-second pauses `getJSON` uses, because the limit is a per-minute window
+ * and a short pause just spends another attempt inside the same window. The
+ * hint is capped so one odd header cannot stall the whole ingest.
+ */
+function backoffMs(res: Response | null, attempt: number): number {
+  const hinted = Number(res?.headers.get("retry-after"));
+  if (hinted > 0) return Math.min(hinted, 60) * 1000;
+  return GAP_MS * (attempt + 1);
+}
+
 export interface Listing {
   exchange: string;
   /** e.g. "META/USDC" — symbols as the venue reports them. */
@@ -37,28 +53,41 @@ export interface Listing {
  * (rate limit, timeout). Callers must not treat the second as the first: doing
  * so once overwrote MetaDAO's Upbit and Coinbase listings with DEX-only pool
  * data, silently deleting the only centralised venues on the page.
+ *
+ * A throttled call is retried rather than reported failed at once. This is the
+ * first CoinGecko call the ingest makes per token, so on an exhausted window
+ * it is the one that fails — and a single-shot version left 14 of 26 lookups
+ * "failed" on one run, which for a newly listed token means no venues at all.
  */
 export async function coinIdByContract(mint: string): Promise<{ id: string | null; failed: boolean }> {
-  let res: Response;
-  try {
-    res = await fetch(`${BASE}/coins/solana/contract/${mint}`, {
-      headers: { accept: "application/json", ...HEADERS },
-      signal: AbortSignal.timeout(12000),
-    });
-  } catch {
+  for (let attempt = 0; attempt <= RETRIES; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}/coins/solana/contract/${mint}`, {
+        headers: { accept: "application/json", ...HEADERS },
+        signal: AbortSignal.timeout(12000),
+      });
+    } catch {
+      // Timeout or network error — transient, so worth another attempt.
+      await sleep(backoffMs(null, attempt));
+      continue;
+    }
+    if (res.status === 429 || res.status >= 500) {
+      await sleep(backoffMs(res, attempt));
+      continue;
+    }
     await sleep(GAP_MS);
-    return { id: null, failed: true };
+    // 404 is the authoritative "not listed"; anything else non-OK is a failure.
+    if (res.status === 404) return { id: null, failed: false };
+    if (!res.ok) return { id: null, failed: true };
+    try {
+      const data = (await res.json()) as { id?: string };
+      return { id: data?.id ?? null, failed: false };
+    } catch {
+      return { id: null, failed: true };
+    }
   }
-  await sleep(GAP_MS);
-  // 404 is the authoritative "not listed"; anything else non-OK is a failure.
-  if (res.status === 404) return { id: null, failed: false };
-  if (!res.ok) return { id: null, failed: true };
-  try {
-    const data = (await res.json()) as { id?: string };
-    return { id: data?.id ?? null, failed: false };
-  } catch {
-    return { id: null, failed: true };
-  }
+  return { id: null, failed: true };
 }
 
 interface Ticker {

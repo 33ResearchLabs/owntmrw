@@ -578,10 +578,22 @@ async function main() {
         continue;
       }
 
+      // Both venue lists answer null when the call itself fails, as distinct
+      // from an empty list for a token traded nowhere. The write below replaces
+      // the stored rows wholesale, so a failure read as "no venues" would wipe
+      // every centralised listing and leave only the other source's pools.
       const cg = cgId
-        ? ((await coinListings(cgId, { mint: p.mint, symbol: p.symbol })) ?? [])
+        ? await coinListings(cgId, { mint: p.mint, symbol: p.symbol })
         : [];
-      const pools = (await poolListings(p.mint)) ?? [];
+      if (cg == null) {
+        console.log(`      ${p.name}: venue list failed, keeping stored venues`);
+        continue;
+      }
+      const pools = await poolListings(p.mint);
+      if (pools == null) {
+        console.log(`      ${p.name}: pool list failed, keeping stored venues`);
+        continue;
+      }
 
       const byKey = new Map<
         string,
@@ -844,6 +856,19 @@ async function main() {
           }
           console.log(
             `      ${p.name}: ★${gs.stars} across ${gs.repos} repos, ${feedCount} feed items`,
+          );
+        } else {
+          // orgStats reads through getJSON, which answers null alike for an
+          // org that does not exist and for a spent rate limit — GitHub signals
+          // that with a 403 getJSON does not retry, or a 429 that outlives its
+          // seconds-long backoff. Unauthenticated the ceiling is 60 requests an
+          // hour and one org costs about two dozen, so this is the usual
+          // reading past the second org in the loop. It used to pass without a
+          // line, leaving a token with no Development panel and nothing in the
+          // log to say why.
+          console.log(
+            `      ${p.name}: GitHub org ${owner} unreadable — keeping stored snapshots` +
+              (process.env.GITHUB_TOKEN ? "" : " (no GITHUB_TOKEN: 60 req/hr)"),
           );
         }
       }
