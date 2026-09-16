@@ -6,7 +6,12 @@ export function fmtUsd(n: number | null | undefined, opts: { compact?: boolean }
     if (abs >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
     if (abs >= 1e4) return `$${(n / 1e3).toFixed(1)}K`;
   }
-  if (Math.abs(n) < 0.01 && n !== 0) return `$${n.toPrecision(3)}`;
+  if (Math.abs(n) < 0.01 && n !== 0) {
+    // toPrecision goes exponential below 1e-6 ("1.82e-12"), which is never
+    // a dollar figure anyone means — it is floating-point residue.
+    if (Math.abs(n) < 1e-6) return "$0";
+    return `$${n.toPrecision(3)}`;
+  }
   return `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
 

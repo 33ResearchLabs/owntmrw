@@ -196,10 +196,19 @@ export function Portfolio({
             const simulated = ledger.get(t.mint) ?? 0;
             const amount = onchain + simulated;
             const cb = simulated > 0 ? (costBasis[t.mint] ?? null) : null;
-            const pnlUsd =
+            /*
+             * tokens × price − cost is not exact in floating point: a
+             * position bought at the current price comes back as −1.8e-12
+             * rather than 0, which then renders as a loss in exponent
+             * notation. P&L is money, so anything under half a cent is
+             * the arithmetic's residue, not a result — call it zero.
+             */
+            const rawPnl =
               cb != null && t.price_usd != null
                 ? cb.tokens * t.price_usd - cb.costBasisUsd
                 : null;
+            const pnlUsd =
+              rawPnl == null ? null : Math.abs(rawPnl) < 0.005 ? 0 : rawPnl;
 
             return {
               ...t,
