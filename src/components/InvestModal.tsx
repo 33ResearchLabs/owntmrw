@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useWallet } from "./wallet";
 import { settleBuy } from "@/lib/pendingBuys";
+import { BuySuccess, type BuyReceipt } from "./BuySuccess";
 
 interface InvestModalProps {
   open: boolean;
@@ -14,20 +15,24 @@ interface InvestModalProps {
     priceUsd?: number | null;
     imageUrl?: string | null;
   };
-  onSuccess?: (signature: string) => void;
   /**
    * Phone path: the page has just come back from the wallet app with this
-   * signature, and the modal is being reopened straight into its receipt.
+   * buy's signature, and the modal is being reopened straight into its
+   * receipt. The amount is what was stashed with the deep link, so the
+   * ledger credit can be finished from here too.
    */
-  resumedSignature?: string | null;
+  resumed?: {
+    signature: string;
+    amountUsdt: number | null;
+    priceUsd: number | null;
+  } | null;
 }
 
 export function InvestModal({
   open,
   onClose,
   token,
-  onSuccess,
-  resumedSignature = null,
+  resumed = null,
 }: InvestModalProps) {
   const w = useWallet();
 
@@ -35,18 +40,105 @@ export function InvestModal({
   const [slippage, setSlippage] = useState("0.5");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+
+  /*
+   * Set the moment the wallet hands back a signature. From then on the
+   * form is gone and the receipt is the whole modal; `status` follows the
+   * ledger credit, which is a second request and can lag or fail.
+   */
+  const [receipt, setReceipt] = useState<BuyReceipt | null>(null);
+  const [retrying, setRetrying] = useState(false);
+
+  /*
+   * Credit the simulated position. This path used to stop at the
+   * signature, so the USDT reached the vault and nothing was ever
+   * recorded — /portfolio stayed empty. `settleBuy` queues the buy
+   * before asking the server, so a closed tab or a 409 (cluster not
+   * confirmed yet) is retried on the next page load with a session.
+   *
+   * The receipt is only touched if it is still for this signature — the
+   * user may have closed the modal and started another buy meanwhile.
+   */
+  function settle(b: {
+    signature: string;
+    amountUsdt: number;
+    priceUsd: number | null;
+  }) {
+    setRetrying(true);
+    return settleBuy({
+      ...b,
+      tokenMint: token.mint,
+      address: w.session ?? w.address ?? "",
+    })
+      .then((outcome) => {
+        setReceipt((r) =>
+          r && r.signature === b.signature
+            ? outcome.ok
+              ? {
+                  ...r,
+                  status: "confirmed",
+                  tokenAmount: outcome.tokenAmount || r.tokenAmount,
+                  reason: null,
+                }
+              : { ...r, status: "unrecorded", reason: outcome.error }
+            : r,
+        );
+        if (outcome.ok) {
+          window.dispatchEvent(
+            new CustomEvent("wallet-transaction", {
+              detail: { signature: b.signature, tokenMint: token.mint },
+            }),
+          );
+        }
+      })
+      .finally(() => setRetrying(false));
+  }
+
+  /*
+   * Guards the resume path against settling the same signature twice —
+   * the effect below re-runs under React's development double-invoke, and
+   * the second outcome would otherwise flip a receipt already confirmed.
+   */
+  const resumedSettled = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       setAmount("");
       setError(null);
-      setSuccess(null);
+      setReceipt(null);
       setLoading(false);
-    } else if (resumedSignature) {
-      setSuccess(resumedSignature);
+      return;
     }
-  }, [open, resumedSignature]);
+    if (!resumed) return;
+
+    const known =
+      typeof resumed.amountUsdt === "number" && resumed.amountUsdt > 0;
+    setReceipt({
+      signature: resumed.signature,
+      amountUsdt: known ? resumed.amountUsdt : null,
+      priceUsd: resumed.priceUsd,
+      tokenAmount:
+        known && resumed.priceUsd && resumed.priceUsd > 0
+          ? (resumed.amountUsdt as number) / resumed.priceUsd
+          : null,
+      status: known ? "confirming" : "unrecorded",
+      reason: known
+        ? null
+        : "The amount paid didn’t come back from the wallet.",
+    });
+
+    if (known && resumedSettled.current !== resumed.signature) {
+      resumedSettled.current = resumed.signature;
+      void settle({
+        signature: resumed.signature,
+        amountUsdt: resumed.amountUsdt as number,
+        priceUsd: resumed.priceUsd,
+      });
+    }
+    // `settle` reads the wallet at call time; re-running on every wallet
+    // render would re-settle a receipt that's already showing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, resumed]);
 
   const numericAmount = Number(amount);
 
@@ -197,7 +289,7 @@ export function InvestModal({
 
   async function invest() {
     setError(null);
-    setSuccess(null);
+    setReceipt(null);
 
     if (!w.address) {
       setError("Connect your wallet first.");
@@ -263,32 +355,18 @@ export function InvestModal({
         },
       });
 
-      setSuccess(signature);
+      const priceUsd = token.priceUsd ?? null;
 
-      onSuccess?.(signature);
-
-      /*
-       * Credit the simulated position. This path used to stop at the
-       * signature, so the USDT reached the vault and nothing was ever
-       * recorded — /portfolio stayed empty. `settleBuy` queues the buy
-       * before asking the server, so a closed tab or a 409 (cluster not
-       * confirmed yet) is retried on the next page load with a session.
-       */
-      void settleBuy({
+      setReceipt({
         signature,
-        address: w.session ?? w.address,
-        tokenMint: token.mint,
         amountUsdt: numericAmount,
-        priceUsd: token.priceUsd ?? null,
-      }).then((outcome) => {
-        if (outcome.ok) {
-          window.dispatchEvent(
-            new CustomEvent("wallet-transaction", {
-              detail: { signature, tokenMint: token.mint },
-            }),
-          );
-        }
+        priceUsd,
+        tokenAmount: estimatedTokens,
+        status: "confirming",
+        reason: null,
       });
+
+      void settle({ signature, amountUsdt: numericAmount, priceUsd });
     } catch (err) {
       console.error("Investment failed:", err);
 
@@ -311,170 +389,185 @@ export function InvestModal({
         <div className="flex items-center justify-between border-b border-grid px-5 py-4">
           <div>
             <h2 className="text-[16px] font-semibold">
-              Invest in {token.name}
+              {receipt ? "Purchase complete" : `Invest in ${token.name}`}
             </h2>
 
-            <p className="mt-0.5 text-[11.5px] text-muted">Devnet investment</p>
+            <p className="mt-0.5 text-[11.5px] text-muted">
+              {receipt ? "Devnet receipt" : "Devnet investment"}
+            </p>
           </div>
 
           <button
             onClick={onClose}
-            disabled={loading}
+            disabled={loading && !receipt}
             className="rounded-lg px-2 py-1 text-muted hover:bg-white/5 hover:text-ink"
           >
             ✕
           </button>
         </div>
 
-        <div className="space-y-5 p-5">
-          {/* Token */}
-          <div className="flex items-center justify-between rounded-xl border border-line bg-surface2 p-3">
-            <div className="flex items-center gap-3">
-              {token.imageUrl ? (
-                <img
-                  src={token.imageUrl}
-                  alt={token.name}
-                  className="h-9 w-9 rounded-full"
-                />
-              ) : (
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/20 text-xs font-bold">
-                  {token.symbol.slice(0, 3)}
+        {receipt ? (
+          <div className="p-5">
+            <BuySuccess
+              token={token}
+              receipt={receipt}
+              onDone={onClose}
+              retrying={retrying}
+              onRetry={
+                receipt.amountUsdt != null
+                  ? () => {
+                      const amountUsdt = receipt.amountUsdt as number;
+                      setReceipt({
+                        ...receipt,
+                        status: "confirming",
+                        reason: null,
+                      });
+                      void settle({
+                        signature: receipt.signature,
+                        amountUsdt,
+                        priceUsd: receipt.priceUsd,
+                      });
+                    }
+                  : undefined
+              }
+            />
+          </div>
+        ) : (
+          <div className="space-y-5 p-5">
+            {/* Token */}
+            <div className="flex items-center justify-between rounded-xl border border-line bg-surface2 p-3">
+              <div className="flex items-center gap-3">
+                {token.imageUrl ? (
+                  <img
+                    src={token.imageUrl}
+                    alt={token.name}
+                    className="h-9 w-9 rounded-full"
+                  />
+                ) : (
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/20 text-xs font-bold">
+                    {token.symbol.slice(0, 3)}
+                  </div>
+                )}
+
+                <div>
+                  <div className="text-[13px] font-semibold">{token.name}</div>
+
+                  <div className="text-[11px] text-muted">{token.symbol}</div>
+                </div>
+              </div>
+
+              {token.priceUsd != null && (
+                <div className="text-right">
+                  <div className="num text-[12.5px] font-semibold">
+                    ${token.priceUsd.toFixed(6)}
+                  </div>
+
+                  <div className="text-[10px] text-muted">price</div>
                 </div>
               )}
+            </div>
 
-              <div>
-                <div className="text-[13px] font-semibold">{token.name}</div>
+            {/* Balance */}
+            <div className="flex items-center justify-between text-[12px]">
+              <span className="text-muted">Available USDT</span>
 
-                <div className="text-[11px] text-muted">{token.symbol}</div>
+              <span className="num font-semibold">
+                {usdtBalance.toFixed(4)} USDT
+              </span>
+            </div>
+
+            {/* Amount */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="text-[12px] font-medium">
+                  Investment amount
+                </label>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setAmount(Math.max(usdtBalance - 0.01, 0).toFixed(2))
+                  }
+                  className="text-[11px] text-brand hover:underline"
+                >
+                  MAX
+                </button>
+              </div>
+
+              <div className="flex items-center rounded-xl border border-line2 bg-surface2 px-3">
+                <input
+                  value={amount}
+                  onChange={(e) =>
+                    setAmount(e.target.value.replace(/[^0-9.]/g, ""))
+                  }
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="num w-full bg-transparent py-3 text-[18px] font-semibold outline-none"
+                />
+
+                <span className="text-[12px] font-semibold text-muted">
+                  USDT
+                </span>
               </div>
             </div>
 
-            {token.priceUsd != null && (
-              <div className="text-right">
-                <div className="num text-[12.5px] font-semibold">
-                  ${token.priceUsd.toFixed(6)}
-                </div>
+            {/* Estimated output */}
+            <div className="rounded-xl border border-line bg-surface2 p-4">
+              <div className="flex justify-between text-[12px]">
+                <span className="text-muted">You invest</span>
 
-                <div className="text-[10px] text-muted">price</div>
+                <span className="num font-semibold">
+                  {validAmount ? `${numericAmount.toFixed(2)} USDT` : "—"}
+                </span>
+              </div>
+
+              <div className="mt-3 flex justify-between text-[12px]">
+                <span className="text-muted">Estimated {token.symbol}</span>
+
+                <span className="num font-semibold">
+                  {estimatedTokens != null ? estimatedTokens.toFixed(6) : "—"}
+                </span>
+              </div>
+
+              <div className="mt-3 flex justify-between text-[12px]">
+                <span className="text-muted">Slippage</span>
+
+                <select
+                  value={slippage}
+                  onChange={(e) => setSlippage(e.target.value)}
+                  className="rounded-md border border-line2 bg-surface px-2 py-1 text-[11px] outline-none"
+                >
+                  <option value="0.1">0.1%</option>
+                  <option value="0.5">0.5%</option>
+                  <option value="1">1%</option>
+                  <option value="2">2%</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Warning */}
+            <div className="rounded-xl border border-warn/30 bg-warn/5 p-3 text-[11px] leading-relaxed text-muted">
+              This transaction uses Solana Devnet. Devnet assets have no real
+              monetary value.
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="rounded-xl border border-bad/30 bg-bad/5 p-3 text-[12px] text-bad">
+                {error}
               </div>
             )}
+
+            {/* Button */}
+            <button
+              onClick={() => void invest()}
+              disabled={loading || !validAmount}
+              className="w-full rounded-xl bg-accent px-4 py-3 text-[13px] font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Waiting for Phantom…" : "Invest"}
+            </button>
           </div>
-
-          {/* Balance */}
-          <div className="flex items-center justify-between text-[12px]">
-            <span className="text-muted">Available USDT</span>
-
-            <span className="num font-semibold">
-              {usdtBalance.toFixed(4)} USDT
-            </span>
-          </div>
-
-          {/* Amount */}
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <label className="text-[12px] font-medium">
-                Investment amount
-              </label>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setAmount(Math.max(usdtBalance - 0.01, 0).toFixed(2))
-                }
-                className="text-[11px] text-brand hover:underline"
-              >
-                MAX
-              </button>
-            </div>
-
-            <div className="flex items-center rounded-xl border border-line2 bg-surface2 px-3">
-              <input
-                value={amount}
-                onChange={(e) =>
-                  setAmount(e.target.value.replace(/[^0-9.]/g, ""))
-                }
-                inputMode="decimal"
-                placeholder="0.00"
-                className="num w-full bg-transparent py-3 text-[18px] font-semibold outline-none"
-              />
-
-              <span className="text-[12px] font-semibold text-muted">USDT</span>
-            </div>
-          </div>
-
-          {/* Estimated output */}
-          <div className="rounded-xl border border-line bg-surface2 p-4">
-            <div className="flex justify-between text-[12px]">
-              <span className="text-muted">You invest</span>
-
-              <span className="num font-semibold">
-                {validAmount ? `${numericAmount.toFixed(2)} USDT` : "—"}
-              </span>
-            </div>
-
-            <div className="mt-3 flex justify-between text-[12px]">
-              <span className="text-muted">Estimated {token.symbol}</span>
-
-              <span className="num font-semibold">
-                {estimatedTokens != null ? estimatedTokens.toFixed(6) : "—"}
-              </span>
-            </div>
-
-            <div className="mt-3 flex justify-between text-[12px]">
-              <span className="text-muted">Slippage</span>
-
-              <select
-                value={slippage}
-                onChange={(e) => setSlippage(e.target.value)}
-                className="rounded-md border border-line2 bg-surface px-2 py-1 text-[11px] outline-none"
-              >
-                <option value="0.1">0.1%</option>
-                <option value="0.5">0.5%</option>
-                <option value="1">1%</option>
-                <option value="2">2%</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Warning */}
-          <div className="rounded-xl border border-warn/30 bg-warn/5 p-3 text-[11px] leading-relaxed text-muted">
-            This transaction uses Solana Devnet. Devnet assets have no real
-            monetary value.
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div className="rounded-xl border border-bad/30 bg-bad/5 p-3 text-[12px] text-bad">
-              {error}
-            </div>
-          )}
-
-          {/* Success */}
-          {success && (
-            <div className="rounded-xl border border-good/30 bg-good/5 p-3">
-              <div className="text-[12px] font-semibold text-good">
-                Investment transaction submitted.
-              </div>
-
-              <div className="mt-1 break-all text-[10px] text-muted">
-                {success}
-              </div>
-            </div>
-          )}
-
-          {/* Button */}
-          <button
-            onClick={() => void invest()}
-            disabled={loading || !validAmount || !!success}
-            className="w-full rounded-xl bg-accent px-4 py-3 text-[13px] font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading
-              ? "Waiting for Phantom…"
-              : success
-                ? "Investment submitted"
-                : "Invest"}
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );

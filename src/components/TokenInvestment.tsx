@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { InvestModal } from "./InvestModal";
 import { useWallet } from "./wallet";
-import { settleBuy } from "@/lib/pendingBuys";
 
 interface TokenInvestmentProps {
   token: {
@@ -18,12 +17,18 @@ interface TokenInvestmentProps {
 export function TokenInvestment({ token }: TokenInvestmentProps) {
   const w = useWallet();
   const [open, setOpen] = useState(false);
-  const [resumed, setResumed] = useState<string | null>(null);
+  const [resumed, setResumed] = useState<{
+    signature: string;
+    amountUsdt: number | null;
+    priceUsd: number | null;
+  } | null>(null);
 
   /*
    * Phone path: the page came back from the wallet app carrying this
    * token's investment signature. The modal that asked for it is long
-   * gone, so reopen it straight into the receipt.
+   * gone, so reopen it straight into the receipt. The modal finishes the
+   * ledger credit itself, from the amount stashed with the deep link, so
+   * the receipt can show whether the position landed.
    */
   useEffect(() => {
     const r = w.takeDeeplinkResult("invest");
@@ -34,23 +39,12 @@ export function TokenInvestment({ token }: TokenInvestmentProps) {
       priceUsd?: number | null;
     };
     if (d.tokenMint !== token.mint) return;
-    setResumed(r.signature);
+    setResumed({
+      signature: r.signature,
+      amountUsdt: typeof d.amountUsdt === "number" ? d.amountUsdt : null,
+      priceUsd: typeof d.priceUsd === "number" ? d.priceUsd : null,
+    });
     setOpen(true);
-
-    /*
-     * The modal that started this buy is gone with the page it was on, so
-     * its ledger credit happens here. Queued first, then confirmed; the
-     * provider re-drives the queue if this attempt doesn't land.
-     */
-    if (typeof d.amountUsdt === "number" && d.amountUsdt > 0) {
-      void settleBuy({
-        signature: r.signature,
-        address: w.session ?? w.address ?? "",
-        tokenMint: token.mint,
-        amountUsdt: d.amountUsdt,
-        priceUsd: typeof d.priceUsd === "number" ? d.priceUsd : null,
-      });
-    }
     // Runs once, for the load that carries the result.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -68,10 +62,7 @@ export function TokenInvestment({ token }: TokenInvestmentProps) {
         open={open}
         onClose={() => { setOpen(false); setResumed(null); }}
         token={token}
-        resumedSignature={resumed}
-        onSuccess={() => {
-          setOpen(false);
-        }}
+        resumed={resumed}
       />
     </>
   );

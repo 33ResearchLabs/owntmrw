@@ -514,3 +514,38 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .wallet-modal[open], .wallet-modal[open]::backdrop { animation: none; }
 }
+
+/* ---------- buy receipt ---------- */
+
+/*
+ * The success screen that replaces a buy form. It reuses the wallet modal's
+ * small entrance; the check mark gets its own spring so the moment of
+ * confirmation reads as an event rather than a re-render.
+ */
+.buy-success { animation: modalIn 180ms ease-out; }
+
+@keyframes checkPop {
+  from { opacity: 0; transform: scale(0.6); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.buy-success-mark {
+  animation: checkPop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* The tick draws in after the circle has landed. 24 covers the path's
+   ~20 units of length; the offset starts fully hidden. */
+@keyframes checkDraw {
+  from { stroke-dashoffset: 24; }
+  to   { stroke-dashoffset: 0; }
+}
+.buy-success-tick {
+  stroke-dasharray: 24;
+  animation: checkDraw 320ms ease-out 200ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .buy-success,
+  .buy-success-mark,
+  .buy-success-tick { animation: none; }
+}

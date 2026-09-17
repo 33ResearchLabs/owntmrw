@@ -6,6 +6,7 @@ import { addPendingBuy, removePendingBuy } from "@/lib/pendingBuys";
 import { useSignIn } from "./SignInProvider";
 import { fmtUsd, fmtNum, shortAddr } from "@/lib/format";
 import { Transaction } from "@solana/web3.js";
+import { BuySuccess, type BuyReceipt } from "./BuySuccess";
 
 /**
  * Trading terminal.
@@ -48,20 +49,16 @@ export function TradeTerminal({
 
   const [executing, setExecuting] = useState(false);
 
-  const [txSignature, setTxSignature] = useState<string | null>(null);
-  const [sellClosed, setSellClosed] = useState(false);
-
   /*
-   * A buy whose USDT landed but whose ledger credit didn't. Kept so the
-   * receipt can say so and offer a retry — /api/swap/confirm is idempotent
-   * on the signature, so re-sending is safe.
+   * Set the moment a buy has a signature; while it's set the receipt
+   * replaces the whole form. Its `status` follows the ledger credit — a
+   * buy whose USDT landed but whose credit didn't stays here as
+   * "unrecorded" so the receipt can say so and offer a retry
+   * (/api/swap/confirm is idempotent on the signature, so re-sending is
+   * safe).
    */
-  const [unrecorded, setUnrecorded] = useState<{
-    signature: string;
-    amountUsdt: number;
-    priceUsd: number | null;
-    reason: string;
-  } | null>(null);
+  const [receipt, setReceipt] = useState<BuyReceipt | null>(null);
+  const [sellClosed, setSellClosed] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -240,8 +237,14 @@ export function TradeTerminal({
     amountUsdt: number,
     priceUsd: number | null,
   ) {
-    setTxSignature(signature);
-    setUnrecorded(null);
+    setReceipt({
+      signature,
+      amountUsdt,
+      priceUsd,
+      tokenAmount: priceUsd && priceUsd > 0 ? amountUsdt / priceUsd : null,
+      status: "confirming",
+      reason: null,
+    });
     setAmount("");
 
     /*
@@ -290,6 +293,19 @@ export function TradeTerminal({
         if (confirmRes.ok) {
           reason = null;
           removePendingBuy(signature);
+          const body = (await confirmRes.json().catch(() => null)) as {
+            tokenAmount?: number;
+          } | null;
+          setReceipt((r) =>
+            r && r.signature === signature
+              ? {
+                  ...r,
+                  status: "confirmed",
+                  tokenAmount: body?.tokenAmount || r.tokenAmount,
+                  reason: null,
+                }
+              : r,
+          );
           setHeld(await w.ledgerBalance(mint!));
           break;
         }
@@ -317,7 +333,12 @@ export function TradeTerminal({
     }
 
     if (reason) {
-      setUnrecorded({ signature, amountUsdt, priceUsd, reason });
+      const why = reason;
+      setReceipt((r) =>
+        r && r.signature === signature
+          ? { ...r, status: "unrecorded", reason: why }
+          : r,
+      );
     }
 
     /*
@@ -354,7 +375,7 @@ export function TradeTerminal({
    */
   async function executeBuy() {
     setError(null);
-    setTxSignature(null);
+    setReceipt(null);
     setSellClosed(false);
 
     if (!ready) {
@@ -597,6 +618,29 @@ export function TradeTerminal({
     }
   }
 
+  if (receipt) {
+    return (
+      <BuySuccess
+        token={{ name: symbol, symbol }}
+        receipt={receipt}
+        onDone={() => setReceipt(null)}
+        doneLabel="Buy more"
+        retrying={executing}
+        onRetry={
+          receipt.amountUsdt != null
+            ? () => {
+                const { signature, amountUsdt, priceUsd } = receipt;
+                setExecuting(true);
+                void recordBuy(signature, amountUsdt as number, priceUsd).finally(
+                  () => setExecuting(false),
+                );
+              }
+            : undefined
+        }
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Side selector */}
@@ -610,7 +654,7 @@ export function TradeTerminal({
               onClick={() => {
                 setSide(s);
                 setError(null);
-                setTxSignature(null);
+                setReceipt(null);
                 setSellClosed(false);
               }}
               className={`flex-1 rounded-lg py-2 text-[13px] font-bold capitalize transition-colors ${
@@ -644,7 +688,7 @@ export function TradeTerminal({
               setAmount(e.target.value.replace(/[^\d.]/g, ""));
 
               setError(null);
-              setTxSignature(null);
+              setReceipt(null);
               setSellClosed(false);
             }}
             placeholder="0.00"
@@ -807,46 +851,6 @@ export function TradeTerminal({
           {error && (
             <div className="rounded-lg border border-bad/30 bg-bad/5 px-3 py-2.5 text-[11.5px] leading-relaxed text-bad">
               {error}
-            </div>
-          )}
-
-          {/* Success */}
-          {txSignature && (
-            <div className="rounded-lg border border-good/30 bg-good/5 px-3 py-2.5">
-              <div className="text-[11.5px] font-semibold text-good">
-                Transaction submitted successfully.
-              </div>
-
-              <a
-                href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-1 block truncate text-[10.5px] text-brand hover:underline"
-              >
-                View transaction ↗
-              </a>
-
-              {unrecorded && unrecorded.signature === txSignature && (
-                <div className="mt-2 border-t border-good/20 pt-2 text-[11px] leading-relaxed text-bad">
-                  The USDT was sent, but the position wasn&apos;t recorded:{" "}
-                  {unrecorded.reason}{" "}
-                  <button
-                    type="button"
-                    disabled={executing}
-                    onClick={() => {
-                      setExecuting(true);
-                      void recordBuy(
-                        unrecorded.signature,
-                        unrecorded.amountUsdt,
-                        unrecorded.priceUsd,
-                      ).finally(() => setExecuting(false));
-                    }}
-                    className="font-semibold text-brand hover:underline disabled:opacity-50"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
