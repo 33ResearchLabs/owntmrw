@@ -11,6 +11,30 @@ export interface NavItem {
 }
 
 /**
+ * Which of the nav items this reader may follow.
+ *
+ * Signed out, the gated routes are dropped: they were invitations to a
+ * dialog. `gated()` is the same predicate the click interception used, and it
+ * is kept in step with `proxy.ts` — so the bar cannot come to disagree with
+ * what is actually protected, and an ungated route added later appears here
+ * without a change.
+ *
+ * This hides links; it does not protect routes. `proxy.ts` still redirects a
+ * typed URL and the pages still call `requireSession`. Shared with the phone
+ * drawer so the two navigations offer the same set.
+ */
+export function useVisibleNav(items: NavItem[]): NavItem[] {
+  const { session } = useWallet();
+  const signIn = useSignIn();
+  return session ? items : items.filter((n) => !signIn.gated(n.href));
+}
+
+/** The active-route rule, the same for every navigation on the site. */
+export function isCurrentNav(href: string, path: string): boolean {
+  return href === "/" ? path === "/" : path.startsWith(href);
+}
+
+/**
  * Top navigation links with an active-route mark.
  *
  * Split out of `layout.tsx` because that file is a server component and the
@@ -20,25 +44,12 @@ export interface NavItem {
  */
 export function TopNav({ items }: { items: NavItem[] }) {
   const path = usePathname();
-  const { session } = useWallet();
-  const signIn = useSignIn();
-
-  /*
-   * Signed out, the bar carries Home and nothing else: every other route is
-   * gated, so the links were four invitations to a dialog. `gated()` is the
-   * same predicate the click interception used, and it is kept in step with
-   * `proxy.ts` — so the bar cannot come to disagree with what is actually
-   * protected, and an ungated route added later appears here without a change.
-   *
-   * This hides links; it does not protect routes. `proxy.ts` still redirects a
-   * typed URL and the pages still call `requireSession`.
-   */
-  const visible = session ? items : items.filter((n) => !signIn.gated(n.href));
+  const visible = useVisibleNav(items);
 
   return (
     <nav className="hidden items-center gap-0.5 sm:flex lg:gap-1.5">
       {visible.map((n) => {
-        const on = n.href === "/" ? path === "/" : path.startsWith(n.href);
+        const on = isCurrentNav(n.href, path);
         return (
           <Link
             key={n.href}

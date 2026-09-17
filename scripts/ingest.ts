@@ -1,5 +1,5 @@
 /**
- * OwnTmrw ingestion engine.
+ * tekno.works ingestion engine.
  *
  * Pulls everything from public sources:
  *   1. Discover projects (MetaDAO launchpad / on-chain / curated registry)
@@ -62,6 +62,7 @@ import { KNOWN_WALLETS } from "../src/lib/sources/wallets";
 import { capFromSupply, marketCap } from "../src/lib/quote";
 
 import { detectGovernance } from "../src/lib/governance/detector";
+import { setMeta } from "../src/lib/ingest/meta";
 
 const FAST = process.argv.includes("--fast");
 
@@ -82,8 +83,9 @@ const fmtM = (n: number | null) =>
       : Math.round(n).toLocaleString();
 
 async function main() {
+  const startedAt = now();
   const d = db();
-  console.log("── OwnTmrw ingest ──");
+  console.log("── tekno.works ingest ──");
   console.log(`   data RPC: ${DATA_RPC_URL}`);
 
   // 1. discovery
@@ -964,6 +966,16 @@ async function main() {
 
   const pruned = pruneDeadLinks();
   if (pruned) console.log(`      ${pruned} dead link(s) cleared`);
+
+  // The run's own receipt, read by the scheduler (to decide what is next
+  // due) and by the site's footer stamp. Written here rather than by whoever
+  // launched the script, so a run from the shell counts the same as a
+  // scheduled one.
+  setMeta("last_ingest_ts", now());
+  if (!FAST) setMeta("last_full_ingest_ts", now());
+  setMeta("last_ingest_mode", FAST ? "fast" : "full");
+  setMeta("last_ingest_duration_s", now() - startedAt);
+  setMeta("last_ingest_status", "ok");
 
   console.log("done.");
 }

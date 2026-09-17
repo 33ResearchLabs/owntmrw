@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { fmtPct } from "@/lib/format";
 
@@ -133,26 +134,27 @@ export function StatusBadge({ status }: { status: string | null }) {
 }
 
 /**
- * The Underly mark: a navy disc over a gold bar, on the brand's cream ground.
+ * The tekno.works mark: the chrome T from `public/logo.jpg`, cropped toward
+ * the glyph so it is not a sliver in a black square at nav size.
  *
- * Geometry is identical to `app/icon.svg` — same viewBox, same coordinates — so
- * the favicon, the nav and the sign-in crests are one object at three sizes
- * rather than three drawings that drift. Drawn rather than rasterised because
- * it renders at 16px in a browser tab.
+ * `mark.png` and the icons under `app/` (`favicon.ico`, `icon.png`,
+ * `apple-icon.png`) are all cut from the same source with the same crop, so
+ * the tab, the nav and the sign-in crests are one object at several sizes
+ * rather than drawings that drift.
  *
- * The colours are literals, not tokens: they are the brand's own and do not
- * follow the surface, and `icon.svg` is a standalone file that cannot read a
- * CSS variable — hard-coding both keeps the two provably identical.
+ * The square's ground is the logo's own black, not a token: it sits on
+ * `--page` (#0d0d0d), close enough that the edge disappears, and the file
+ * cannot read a CSS variable anyway. 256px source, so it stays sharp on a 2x
+ * display at every size this is rendered at (28–48px).
  */
 export function Mark({ size = 36, className }: { size?: number; className?: string }) {
   return (
-    <svg
-      width={size} height={size} viewBox="0 0 64 64"
-      className={className} role="img" aria-label="Underly"
-    >
-      <rect width="64" height="64" rx="12" fill="#F3EFE9" />
-      <circle cx="32" cy="24" r="12" fill="#0B1320" />
-      <rect x="13" y="42" width="38" height="8" rx="4" fill="#A98A55" />
-    </svg>
+    <Image
+      src="/mark.png"
+      width={size}
+      height={size}
+      alt="tekno.works"
+      className={className}
+    />
   );
 }

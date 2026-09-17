@@ -11,7 +11,12 @@ import { WalletProvider } from "@/components/wallet";
 import { ConnectButton } from "@/components/ConnectButton";
 import { SignInProvider } from "@/components/SignInProvider";
 import { TopNav } from "@/components/TopNav";
+import { MobileNav } from "@/components/MobileNav";
 import { AnnouncementBar } from "@/components/AnnouncementBar";
+import { WatchlistProvider } from "@/components/WatchlistProvider";
+import { watchlistSlugs } from "@/lib/watchlist";
+import { ingestStatus } from "@/lib/ingest/scheduler";
+import { timeAgo } from "@/lib/format";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -28,7 +33,7 @@ const SITE_URL = process.env.SITE_URL || "https://owntmrw-production.up.railway.
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "Underly — Own Tomorrow | MetaDAO Intelligence Terminal",
+  title: "tekno.works — MetaDAO Intelligence Terminal",
   description:
     "Institutional-grade intelligence for every project launched on MetaDAO and Futard: raises, markets, holders, treasuries, governance, development and community — in one place.",
 };
@@ -50,12 +55,19 @@ export default async function RootLayout({
   // the app is already `force-dynamic`, so reading the cookie costs no static
   // rendering.
   const session = sessionAddress((await cookies()).get(SESSION_COOKIE)?.value);
+  // Same reasoning: the stars on the first paint have to be right, and the
+  // list is one indexed read on a wallet that is already known here.
+  const watching = session ? watchlistSlugs(session) : [];
+  // How fresh the archive is, for the footer. One row read; every page is
+  // force-dynamic so it is current on each request.
+  const ingest = ingestStatus();
 
   return (
     <html lang="en" className={`${inter.className} h-full antialiased`}>
       <body className="min-h-full flex flex-col">
         <WalletProvider initialSession={session}>
         <SignInProvider>
+        <WatchlistProvider initialSlugs={watching}>
         <AnnouncementBar />
         {/* Opaque, not just the bar: the padding around the bar is a gap the
             page scrolls through, so a transparent wrapper leaks content above
@@ -95,17 +107,10 @@ export default async function RootLayout({
             own — measured clean at 1920/1600/1024/768/767/640/600/390. */}
         <header className="sticky top-0 z-50 bg-page pb-3">
           <div className="nav-glass mx-auto flex h-16 max-w-[1660px] items-center gap-3 px-6 md:px-12 lg:gap-5">
-            <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="Underly — Own Tomorrow">
+            <Link href="/" className="flex shrink-0 items-center gap-3" aria-label="tekno.works">
               <Mark size={36} className="shrink-0" />
-              {/* The wordmark carries the rule under it that the logo does —
-                  left-aligned and about a third of the word's width, as drawn.
-                  `aria-hidden` because it is the mark's shape, not a divider,
-                  and the link already names itself. */}
-              <span className="flex flex-col items-start">
-                <span className="text-[15px] font-extrabold leading-none tracking-[-0.01em]">
-                  Underly
-                </span>
-                <span className="mt-[5px] h-[3px] w-5 rounded-full bg-brand" aria-hidden />
+              <span className="text-[15px] font-extrabold leading-none tracking-[-0.01em]">
+                tekno.works
               </span>
             </Link>
 
@@ -119,6 +124,9 @@ export default async function RootLayout({
 
             <div className="flex shrink-0 items-center gap-2">
               <ConnectButton />
+              {/* Phone only. `TopNav` above is hidden below `sm`, and this is
+                  the way to every other page there. */}
+              <MobileNav items={NAV} />
             </div>
           </div>
         </header>
@@ -147,7 +155,16 @@ export default async function RootLayout({
               sideways on a narrow tablet. */}
           <div className="mx-auto flex max-w-[1660px] flex-col flex-wrap items-center justify-between gap-3 px-6 text-center text-[11.5px] leading-relaxed text-faint sm:flex-row sm:items-start sm:gap-10 sm:text-left md:px-12">
             <div className="min-w-0">
-              © 2026 Underly. All rights reserved.
+              © 2026 tekno.works. All rights reserved.
+              {/* The archive's own timestamp: prices are live, but holders,
+                  treasury, development and news are only as fresh as this. */}
+              <span className="block sm:inline sm:before:mx-2 sm:before:content-['·']">
+                {ingest.running
+                  ? "Archive updating now"
+                  : ingest.lastRunTs
+                    ? `Archive updated ${timeAgo(ingest.lastRunTs)}`
+                    : "Archive not yet ingested"}
+              </span>
             </div>
 
             {/* Social. Sits between the two existing blocks, so `justify-between`
@@ -159,7 +176,7 @@ export default async function RootLayout({
                 href="https://x.com/underlyxyz"
                 target="_blank"
                 rel="noreferrer noopener"
-                aria-label="Underly on X"
+                aria-label="tekno.works on X"
                 className="transition-colors duration-150 hover:text-ink2"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-4 w-4">
@@ -171,7 +188,7 @@ export default async function RootLayout({
                 href="https://t.me/+fkQU_C4N4OliOGQ1"
                 target="_blank"
                 rel="noreferrer noopener"
-                aria-label="Underly on Telegram"
+                aria-label="tekno.works on Telegram"
                 className="transition-colors duration-150 hover:text-ink2"
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="h-4 w-4">
@@ -181,6 +198,13 @@ export default async function RootLayout({
             </nav>
 
             <nav aria-label="Legal" className="flex shrink-0 items-center gap-4">
+              <Link
+                href="/faq"
+                className="transition-colors duration-150 hover:text-ink2"
+              >
+                FAQ
+              </Link>
+
               <Link
                 href="/terms"
                 className="transition-colors duration-150 hover:text-ink2"
@@ -197,6 +221,7 @@ export default async function RootLayout({
             </nav>
           </div>
         </footer>
+        </WatchlistProvider>
         </SignInProvider>
         </WalletProvider>
       </body>

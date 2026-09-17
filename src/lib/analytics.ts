@@ -30,7 +30,27 @@ function band(v: number, floor: number, ceil: number): number {
   return clamp(((v - floor) / (ceil - floor)) * 100);
 }
 
-export function healthScore(d: ProjectDetail): HealthScore {
+/**
+ * What `healthScore` actually reads. `ProjectDetail` satisfies this, so the
+ * project page passes it straight through; the screener builds one per row
+ * from three bulk queries instead of paying a full `projectDetail` per project
+ * (see `lib/health.ts`). Kept structural so neither caller has to convert.
+ */
+export interface HealthInputs {
+  project: { raise_amount_usd: number | null };
+  latest: {
+    liquidity_usd: number | null;
+    mcap: number | null;
+    vol24h: number | null;
+  } | null;
+  candles: { c: number }[];
+  holderHistory: { holder_count: number | null; top10_pct: number | null }[];
+  github: { last_push_ts: number | null } | null | undefined;
+  treasuryValue: number | null;
+  proposals: { length: number };
+}
+
+export function healthScore(d: HealthInputs): HealthScore {
   const {
     project: p,
     latest,

@@ -9,6 +9,7 @@ import { scoreboard } from "@/lib/scoreboard";
 import { PerformanceSection, TreasurySection, DevelopmentSection } from "@/components/HomeSections";
 import { homeAggregates } from "@/lib/aggregates";
 import { PortfolioCard } from "@/components/PortfolioCard";
+import { WatchingCard } from "@/components/WatchingCard";
 import { MatchHeight } from "@/components/MatchHeight";
 import { FaqSection } from "@/components/FaqSection";
 import { ClosingBanner } from "@/components/ClosingBanner";
@@ -304,6 +305,17 @@ export default async function Home() {
          */}
         <aside className="grid w-full shrink-0 grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:absolute xl:inset-y-0 xl:right-0 xl:flex xl:w-[340px] xl:flex-col xl:items-stretch">
           <PortfolioCard hideWhenDisconnected />
+
+          {/* Signed-in only; renders nothing otherwise. Every row is shipped
+              and the client keeps the watched ones, so the server render
+              stays the same for every reader. */}
+          <WatchingCard
+            limit={5}
+            rows={rows.map((r) => ({
+              slug: r.slug, name: r.name, symbol: r.symbol, image_url: r.image_url,
+              price_usd: r.price_usd, change_24h: r.change_24h,
+            }))}
+          />
 
           {trending.length > 0 && (
             /* Level with the hero across the gutter. `MatchHeight` measures the

@@ -13,7 +13,7 @@ import { LegalContents, type ContentsItem } from "./LegalContents";
  * This component formats; it does not author. It adds no numbering, no
  * punctuation and no wording of its own to the copy it is handed. The section
  * numbers that appear above each heading are *taken from* the supplied title
- * rather than generated: `splitNumber` cuts "1. About Underly" into its own
+ * rather than generated: `splitNumber` cuts "1. About tekno.works" into its own
  * two parts, and the pair recombines to the original string character for
  * character. Nothing is zero-padded, renumbered or restyled into a form the
  * document does not already use — a document that numbers itself "1." is

@@ -1,15 +1,18 @@
 import { projectDetail, parseRisks, type ScreenerRow } from "./queries";
-import { healthScore, insights } from "./analytics";
+import { insights } from "./analytics";
+import { screenerExtras } from "./health";
 
 /**
  * Health scores for every project at once, for the home page's research
  * section.
  *
  * Every project's score is recomputed here rather than read from a cache: the
- * inputs are already in SQLite and `liveQuotes`/`liveTreasury` are shared
- * across the render, so the whole set costs about a tenth of a second. A
- * stored ranking would be a second source of truth for a number the project
- * pages already derive, and the two would eventually disagree.
+ * inputs are already in SQLite, so the whole set costs three bulk reads
+ * (`screenerExtras`) rather than a full `projectDetail` per project, which is
+ * what this used to do. A stored ranking would be a second source of truth
+ * for a number the project pages already derive, and the two would
+ * eventually disagree. Only the featured project still pays for a detail
+ * read — its risk flags and insights need the rest of the record.
  */
 
 /**
@@ -76,11 +79,12 @@ export async function scoreboard(
   let featured: FeaturedScore | null = null;
   const seen = new Set<string>();
 
+  const extras = screenerExtras(rows, Math.floor(Date.now() / 1000));
+  const featuredDetail = featuredSlug ? await projectDetail(featuredSlug) : null;
+
   for (const r of rows) {
-    const d = await projectDetail(r.slug);
-    if (!d) continue;
-    const hs = healthScore(d);
-    if (hs.overall == null || !hs.measured) continue;
+    const hs = extras.get(r.slug)?.health;
+    if (!hs || hs.overall == null || !hs.measured) continue;
 
     const parts = hs.components
       .filter((c): c is typeof c & { score: number } => c.score != null)
@@ -93,15 +97,15 @@ export async function scoreboard(
     };
     scored.push(project);
 
-    if (r.slug === featuredSlug) {
+    if (r.slug === featuredSlug && featuredDetail) {
       featured = {
         ...project,
         rank: 0, ranked: 0,
         // Worst first, so two chips show the two that matter.
-        risks: parseRisks(d.risk)
+        risks: parseRisks(featuredDetail.risk)
           .sort((a, b) => b.score - a.score)
           .map((f) => f.name),
-        insights: insights(d).map((i) => i.text),
+        insights: insights(featuredDetail).map((i) => i.text),
       };
     }
   }

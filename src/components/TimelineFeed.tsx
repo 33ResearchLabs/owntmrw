@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Icon, type IconName } from "./viz";
 import { Logo } from "./ui";
+import { useWatchlist } from "./WatchlistProvider";
 
 /**
  * One event, with its date and time already formatted.
@@ -71,6 +72,11 @@ function TypeBadge({ type }: { type: string }) {
 
 export function TimelineFeed({ events }: { events: TimelineEventDTO[] }) {
   const [filter, setFilter] = useState<string>("all");
+  // "My watchlist" cuts the feed to followed projects, client-side: the feed
+  // is public and shipped whole, and the provider already knows the set.
+  const [mine, setMine] = useState(false);
+  const wl = useWatchlist();
+  const onlyMine = mine && wl.signedIn;
 
   /** Only families actually present get a chip — an empty filter is a dead end. */
   const presentTypes = useMemo(
@@ -81,7 +87,9 @@ export function TimelineFeed({ events }: { events: TimelineEventDTO[] }) {
   // Filter first, then group: grouping the filtered list keeps the newest-first
   // order the query returned, and a date with nothing left simply disappears.
   const groups = useMemo(() => {
-    const shown = filter === "all" ? events : events.filter((e) => e.type === filter);
+    const shown = events.filter(
+      (e) => (filter === "all" || e.type === filter) && (!onlyMine || wl.slugs.has(e.slug)),
+    );
     const byDate = new Map<string, TimelineEventDTO[]>();
     for (const e of shown) {
       const bucket = byDate.get(e.dateLabel);
@@ -89,7 +97,7 @@ export function TimelineFeed({ events }: { events: TimelineEventDTO[] }) {
       else byDate.set(e.dateLabel, [e]);
     }
     return Array.from(byDate, ([date, items]) => ({ date, items }));
-  }, [events, filter]);
+  }, [events, filter, onlyMine, wl.slugs]);
 
   return (
     <div className="space-y-5">
@@ -105,13 +113,27 @@ export function TimelineFeed({ events }: { events: TimelineEventDTO[] }) {
               {styleOf(t).label}
             </FilterChip>
           ))}
+          {wl.signedIn && (
+            <>
+              <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-line2" />
+              <FilterChip active={onlyMine} onClick={() => setMine((m) => !m)}>
+                <span aria-hidden className={onlyMine ? "text-brand" : ""}>★</span> My watchlist
+              </FilterChip>
+            </>
+          )}
         </div>
       </div>
 
       {groups.length === 0 ? (
         <div className="card px-4 py-8 text-center text-[13px] text-muted">
-          Nothing indexed yet — run{" "}
-          <code className="rounded bg-surface2 px-1.5 py-0.5">npm run ingest</code>.
+          {onlyMine ? (
+            <>No recent activity for the projects you watch.</>
+          ) : (
+            <>
+              Nothing indexed yet — run{" "}
+              <code className="rounded bg-surface2 px-1.5 py-0.5">npm run ingest</code>.
+            </>
+          )}
         </div>
       ) : (
         <div className="relative">

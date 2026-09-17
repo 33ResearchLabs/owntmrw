@@ -337,7 +337,7 @@ export function IntelligenceShowcase({ projects }: { projects: IntelProject[] })
               <path d="M12 9v4" /><path d="M12 16h.01" />
             </svg>
           </span>
-          Underly is a data intelligence platform, not an investment advisor.
+          tekno.works is a data intelligence platform, not an investment advisor.
         </p>
         <Link
           href={`/project/${p.slug}#overview`}

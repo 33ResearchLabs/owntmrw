@@ -94,7 +94,7 @@ export function ChartSource({
           <SegGroup label="Chart source">
             {hasNative && (
               <SegButton active={source === "native"} onClick={() => show("native")}>
-                Underly
+                tekno.works
               </SegButton>
             )}
             {hasTradingView && (

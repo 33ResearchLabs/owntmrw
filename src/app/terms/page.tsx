@@ -9,9 +9,9 @@ import { LegalDoc, type LegalSection, type LegalBlock } from "@/components/Legal
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Terms of Use — Underly",
+  title: "Terms of Use — tekno.works",
   description:
-    "The terms governing access to and use of the Underly platform, including eligibility, wallet connection, trading, risks, disclaimers and liability.",
+    "The terms governing access to and use of the tekno.works platform, including eligibility, wallet connection, trading, risks, disclaimers and liability.",
 };
 
 /*
@@ -33,43 +33,43 @@ export const metadata: Metadata = {
  */
 
 const INTRO: LegalBlock[] = [
-  "Welcome to Underly (“Underly,” “we,” “us,” or “our”).",
-  "These Terms of Use (“Terms”) govern your access to and use of the Underly website, platform, applications, interfaces, research, market information, token listings, trading functionality, and related services (collectively, the “Platform”).",
-  "By accessing or using Underly, connecting a wallet, viewing token information, or initiating a transaction through the Platform, you acknowledge that you have read, understood, and agreed to these Terms.",
-  "If you do not agree with these Terms, you must not use Underly.",
+  "Welcome to tekno.works (“tekno.works,” “we,” “us,” or “our”).",
+  "These Terms of Use (“Terms”) govern your access to and use of the tekno.works website, platform, applications, interfaces, research, market information, token listings, trading functionality, and related services (collectively, the “Platform”).",
+  "By accessing or using tekno.works, connecting a wallet, viewing token information, or initiating a transaction through the Platform, you acknowledge that you have read, understood, and agreed to these Terms.",
+  "If you do not agree with these Terms, you must not use tekno.works.",
 ];
 
 const SECTIONS: LegalSection[] = [
   {
-    id: "about-underly",
-    title: "1. About Underly",
+    id: "about-tekno-works",
+    title: "1. About tekno.works",
     body: [
-      "Underly is a technology-focused digital asset platform designed to provide users with information, research, analytics, market data, and access to trading of selected digital assets.",
-      "Underly may provide information regarding technology-focused tokens and digital assets, including information about their underlying technology, protocols, ecosystems, market activity, tokenomics, risks, and other relevant characteristics.",
-      "Underly does not guarantee that any token listed on the Platform will increase in value or remain available for trading.",
+      "tekno.works is a technology-focused digital asset platform designed to provide users with information, research, analytics, market data, and access to trading of selected digital assets.",
+      "tekno.works may provide information regarding technology-focused tokens and digital assets, including information about their underlying technology, protocols, ecosystems, market activity, tokenomics, risks, and other relevant characteristics.",
+      "tekno.works does not guarantee that any token listed on the Platform will increase in value or remain available for trading.",
     ],
   },
   {
     id: "eligibility",
     title: "2. Eligibility",
     body: [
-      "You may use Underly only if:",
+      "You may use tekno.works only if:",
       [
         "You are legally permitted to access digital asset services in your jurisdiction;",
         "You are legally capable of entering into a binding agreement;",
         "Your use of the Platform does not violate any law or regulation applicable to you; and",
         "You are not using the Platform on behalf of a sanctioned person or entity or for an unlawful purpose.",
       ],
-      "You are responsible for determining whether your use of Underly is permitted under the laws applicable to you.",
-      "Underly may restrict or prohibit access from certain jurisdictions, users, wallets, or addresses at any time.",
+      "You are responsible for determining whether your use of tekno.works is permitted under the laws applicable to you.",
+      "tekno.works may restrict or prohibit access from certain jurisdictions, users, wallets, or addresses at any time.",
     ],
   },
   {
     id: "wallet-connection",
     title: "3. Wallet Connection",
     body: [
-      "Underly may allow you to connect a compatible blockchain wallet to access certain Platform functionality.",
-      "Underly does not require you to create a traditional account unless a particular feature requires otherwise.",
+      "tekno.works may allow you to connect a compatible blockchain wallet to access certain Platform functionality.",
+      "tekno.works does not require you to create a traditional account unless a particular feature requires otherwise.",
       "You are solely responsible for:",
       [
         "Your wallet;",
@@ -80,15 +80,15 @@ const SECTIONS: LegalSection[] = [
         "Transactions initiated from your wallet; and",
         "Reviewing and approving blockchain transactions.",
       ],
-      "Underly will never ask you for your private key, seed phrase, or recovery phrase.",
-      "Underly does not assume responsibility for the loss, theft, compromise, or unauthorized use of your wallet.",
+      "tekno.works will never ask you for your private key, seed phrase, or recovery phrase.",
+      "tekno.works does not assume responsibility for the loss, theft, compromise, or unauthorized use of your wallet.",
     ],
   },
   {
     id: "trading-digital-assets",
     title: "4. Trading Digital Assets",
     body: [
-      "Underly may provide functionality that allows users to buy, sell, swap, or otherwise transact in supported digital assets.",
+      "tekno.works may provide functionality that allows users to buy, sell, swap, or otherwise transact in supported digital assets.",
       "Transactions may be executed through blockchain networks, decentralized protocols, smart contracts, liquidity providers, exchanges, aggregators, or other third-party infrastructure.",
       "Once a blockchain transaction has been submitted and confirmed, it may be irreversible.",
       "You are responsible for reviewing transaction details before approving a transaction, including:",
@@ -103,14 +103,14 @@ const SECTIONS: LegalSection[] = [
         "Smart-contract permissions; and",
         "Any other transaction parameters displayed to you.",
       ],
-      "Underly does not guarantee that a transaction will execute successfully, at a particular price, within a particular time, or without loss.",
+      "tekno.works does not guarantee that a transaction will execute successfully, at a particular price, within a particular time, or without loss.",
     ],
   },
   {
     id: "no-investment-advice",
     title: "5. No Investment Advice",
     body: [
-      "All information provided through Underly is provided for informational and research purposes only.",
+      "All information provided through tekno.works is provided for informational and research purposes only.",
       "Nothing available on the Platform constitutes:",
       [
         "Investment advice;",
@@ -122,7 +122,7 @@ const SECTIONS: LegalSection[] = [
         "A recommendation to buy or sell any digital asset; or",
         "A guarantee of future performance.",
       ],
-      "Research, ratings, scores, signals, analytics, token descriptions, market data, or other information presented by Underly should not be interpreted as a recommendation or solicitation to enter into a transaction.",
+      "Research, ratings, scores, signals, analytics, token descriptions, market data, or other information presented by tekno.works should not be interpreted as a recommendation or solicitation to enter into a transaction.",
       "You are solely responsible for conducting your own research and making your own investment decisions.",
     ],
   },
@@ -131,7 +131,7 @@ const SECTIONS: LegalSection[] = [
     title: "6. Digital Asset Risks",
     body: [
       "Digital assets are highly speculative and may involve substantial or complete loss of capital.",
-      "By using Underly, you acknowledge that digital assets may be subject to:",
+      "By using tekno.works, you acknowledge that digital assets may be subject to:",
       [
         "Extreme price volatility;",
         "Low liquidity;",
@@ -159,9 +159,9 @@ const SECTIONS: LegalSection[] = [
     id: "token-listings",
     title: "7. Token Listings",
     body: [
-      "Underly may select and display certain digital assets based on criteria determined by Underly.",
-      "A token being listed on Underly does not mean that Underly endorses, guarantees, verifies, or recommends that token.",
-      "Underly may consider factors such as:",
+      "tekno.works may select and display certain digital assets based on criteria determined by tekno.works.",
+      "A token being listed on tekno.works does not mean that tekno.works endorses, guarantees, verifies, or recommends that token.",
+      "tekno.works may consider factors such as:",
       [
         "Technology;",
         "Protocol activity;",
@@ -173,7 +173,7 @@ const SECTIONS: LegalSection[] = [
         "Availability of reliable information; and",
         "Other internal criteria.",
       ],
-      "Underly may add, remove, suspend, or restrict any token at any time.",
+      "tekno.works may add, remove, suspend, or restrict any token at any time.",
       "A token may become unavailable without prior notice.",
     ],
   },
@@ -181,7 +181,7 @@ const SECTIONS: LegalSection[] = [
     id: "accuracy-of-information",
     title: "8. Accuracy of Information",
     body: [
-      "Underly seeks to provide useful and reliable information but does not guarantee that information displayed on the Platform is:",
+      "tekno.works seeks to provide useful and reliable information but does not guarantee that information displayed on the Platform is:",
       [
         "Accurate;",
         "Complete;",
@@ -198,7 +198,7 @@ const SECTIONS: LegalSection[] = [
     id: "third-party-services",
     title: "9. Third-Party Services",
     body: [
-      "Underly may integrate with or rely upon third-party services, including:",
+      "tekno.works may integrate with or rely upon third-party services, including:",
       [
         "Blockchain networks;",
         "Wallet providers;",
@@ -211,7 +211,7 @@ const SECTIONS: LegalSection[] = [
         "RPC providers; and",
         "Other infrastructure providers.",
       ],
-      "Underly does not control third-party services and cannot guarantee their availability, security, accuracy, or performance.",
+      "tekno.works does not control third-party services and cannot guarantee their availability, security, accuracy, or performance.",
       "Your use of third-party services may be subject to separate terms and privacy policies.",
     ],
   },
@@ -219,8 +219,8 @@ const SECTIONS: LegalSection[] = [
     id: "blockchain-transactions",
     title: "10. Blockchain Transactions",
     body: [
-      "Blockchain networks operate independently of Underly.",
-      "Underly cannot:",
+      "Blockchain networks operate independently of tekno.works.",
+      "tekno.works cannot:",
       [
         "Reverse a confirmed blockchain transaction;",
         "Recover funds sent to an incorrect address;",
@@ -240,7 +240,7 @@ const SECTIONS: LegalSection[] = [
       "Certain transactions or Platform features may involve fees.",
       "These may include:",
       [
-        "Underly fees;",
+        "tekno.works fees;",
         "Blockchain network fees (“gas”);",
         "Protocol fees;",
         "Liquidity-provider fees;",
@@ -248,14 +248,14 @@ const SECTIONS: LegalSection[] = [
         "Other third-party charges.",
       ],
       "Applicable fees should be displayed where reasonably practicable before a transaction is submitted.",
-      "Blockchain network fees are determined by the relevant network and are outside Underly's control.",
+      "Blockchain network fees are determined by the relevant network and are outside tekno.works' control.",
     ],
   },
   {
     id: "no-guarantee-of-availability",
     title: "12. No Guarantee of Availability",
     body: [
-      "Underly does not guarantee that the Platform will always be available.",
+      "tekno.works does not guarantee that the Platform will always be available.",
       "The Platform may become temporarily unavailable because of:",
       [
         "Maintenance;",
@@ -275,7 +275,7 @@ const SECTIONS: LegalSection[] = [
     id: "prohibited-activities",
     title: "13. Prohibited Activities",
     body: [
-      "You may not use Underly to:",
+      "You may not use tekno.works to:",
       [
         "Violate any applicable law or regulation;",
         "Commit fraud;",
@@ -289,19 +289,19 @@ const SECTIONS: LegalSection[] = [
         "Introduce malicious software;",
         "Interfere with Platform operations;",
         "Scrape or systematically extract Platform data without authorization;",
-        "Impersonate Underly or another person;",
+        "Impersonate tekno.works or another person;",
         "Use another person's wallet without authorization; or",
-        "Conduct any activity that could reasonably harm Underly, its users, or third-party infrastructure.",
+        "Conduct any activity that could reasonably harm tekno.works, its users, or third-party infrastructure.",
       ],
-      "Underly may restrict or terminate access where we reasonably believe that prohibited activity has occurred.",
+      "tekno.works may restrict or terminate access where we reasonably believe that prohibited activity has occurred.",
     ],
   },
   {
     id: "taxes",
     title: "14. Taxes",
     body: [
-      "You are solely responsible for determining and paying any taxes that may apply to your use of Underly or transactions involving digital assets.",
-      "Underly does not provide tax advice.",
+      "You are solely responsible for determining and paying any taxes that may apply to your use of tekno.works or transactions involving digital assets.",
+      "tekno.works does not provide tax advice.",
       "You should consult an appropriately qualified tax professional regarding your circumstances.",
     ],
   },
@@ -309,15 +309,15 @@ const SECTIONS: LegalSection[] = [
     id: "intellectual-property",
     title: "15. Intellectual Property",
     body: [
-      "The Platform, including its software, design, branding, logos, text, graphics, interfaces, research presentation, and other original materials, is owned by or licensed to Underly and is protected by applicable intellectual-property laws.",
-      "You may not copy, reproduce, distribute, modify, reverse engineer, publish, sell, or commercially exploit Underly's proprietary materials without prior written permission, except where permitted by applicable law.",
+      "The Platform, including its software, design, branding, logos, text, graphics, interfaces, research presentation, and other original materials, is owned by or licensed to tekno.works and is protected by applicable intellectual-property laws.",
+      "You may not copy, reproduce, distribute, modify, reverse engineer, publish, sell, or commercially exploit tekno.works' proprietary materials without prior written permission, except where permitted by applicable law.",
     ],
   },
   {
     id: "user-feedback",
     title: "16. User Feedback",
     body: [
-      "If you provide suggestions, ideas, comments, or other feedback regarding Underly, you grant Underly the right to use that feedback for improving or developing the Platform without compensation or obligation to you, unless otherwise agreed in writing.",
+      "If you provide suggestions, ideas, comments, or other feedback regarding tekno.works, you grant tekno.works the right to use that feedback for improving or developing the Platform without compensation or obligation to you, unless otherwise agreed in writing.",
     ],
   },
   {
@@ -325,15 +325,15 @@ const SECTIONS: LegalSection[] = [
     title: "17. Disclaimers",
     body: [
       "TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE PLATFORM AND ALL INFORMATION, CONTENT, DATA, SOFTWARE, AND SERVICES PROVIDED THROUGH THE PLATFORM ARE PROVIDED ON AN “AS IS” AND “AS AVAILABLE” BASIS.",
-      "UNDERLY DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, ACCURACY, AVAILABILITY, AND RELIABILITY.",
-      "UNDERLY DOES NOT GUARANTEE THAT THE PLATFORM WILL BE SECURE, UNINTERRUPTED, ERROR-FREE, OR FREE FROM VIRUSES OR OTHER HARMFUL COMPONENTS.",
+      "TEKNO.WORKS DISCLAIMS ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, NON-INFRINGEMENT, ACCURACY, AVAILABILITY, AND RELIABILITY.",
+      "TEKNO.WORKS DOES NOT GUARANTEE THAT THE PLATFORM WILL BE SECURE, UNINTERRUPTED, ERROR-FREE, OR FREE FROM VIRUSES OR OTHER HARMFUL COMPONENTS.",
     ],
   },
   {
     id: "limitation-of-liability",
     title: "18. Limitation of Liability",
     body: [
-      "TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, UNDERLY AND ITS AFFILIATES, OFFICERS, DIRECTORS, EMPLOYEES, CONTRACTORS, AND SERVICE PROVIDERS WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF:",
+      "TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, TEKNO.WORKS AND ITS AFFILIATES, OFFICERS, DIRECTORS, EMPLOYEES, CONTRACTORS, AND SERVICE PROVIDERS WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF:",
       [
         "DIGITAL ASSETS;",
         "FUNDS;",
@@ -365,7 +365,7 @@ const SECTIONS: LegalSection[] = [
     id: "indemnification",
     title: "19. Indemnification",
     body: [
-      "To the maximum extent permitted by applicable law, you agree to indemnify and hold harmless Underly and its affiliates, officers, directors, employees, contractors, and service providers from claims, losses, liabilities, damages, costs, and expenses arising from:",
+      "To the maximum extent permitted by applicable law, you agree to indemnify and hold harmless tekno.works and its affiliates, officers, directors, employees, contractors, and service providers from claims, losses, liabilities, damages, costs, and expenses arising from:",
       [
         "Your use of the Platform;",
         "Your violation of these Terms;",
@@ -380,7 +380,7 @@ const SECTIONS: LegalSection[] = [
     id: "suspension-and-termination",
     title: "20. Suspension and Termination",
     body: [
-      "Underly may suspend, restrict, or terminate your access to the Platform at any time where reasonably necessary, including for:",
+      "tekno.works may suspend, restrict, or terminate your access to the Platform at any time where reasonably necessary, including for:",
       [
         "Security reasons;",
         "Suspected unlawful activity;",
@@ -388,7 +388,7 @@ const SECTIONS: LegalSection[] = [
         "Regulatory requirements;",
         "Technical reasons;",
         "Abuse of the Platform; or",
-        "Protection of Underly or its users.",
+        "Protection of tekno.works or its users.",
       ],
       "Termination of access does not reverse or cancel blockchain transactions that have already been executed.",
     ],
@@ -397,9 +397,9 @@ const SECTIONS: LegalSection[] = [
     id: "regulatory-compliance",
     title: "21. Regulatory Compliance",
     body: [
-      "Underly may implement additional controls, restrictions, verification procedures, transaction monitoring, or other measures where required by applicable law or regulation.",
-      "The fact that Underly may currently allow access without a traditional account or identity-verification process does not mean that such access will always remain available.",
-      "Where legally required, Underly may request additional information or restrict access to certain users, assets, transactions, or jurisdictions.",
+      "tekno.works may implement additional controls, restrictions, verification procedures, transaction monitoring, or other measures where required by applicable law or regulation.",
+      "The fact that tekno.works may currently allow access without a traditional account or identity-verification process does not mean that such access will always remain available.",
+      "Where legally required, tekno.works may request additional information or restrict access to certain users, assets, transactions, or jurisdictions.",
     ],
   },
   {
@@ -408,16 +408,16 @@ const SECTIONS: LegalSection[] = [
     body: [
       "We may modify these Terms from time to time.",
       "Updated Terms will be posted on the Platform with a revised “Last Updated” date.",
-      "Your continued use of Underly after updated Terms become effective constitutes acceptance of the revised Terms to the extent permitted by applicable law.",
+      "Your continued use of tekno.works after updated Terms become effective constitutes acceptance of the revised Terms to the extent permitted by applicable law.",
     ],
   },
   {
     id: "governing-law-and-dispute-resolution",
     title: "23. Governing Law and Dispute Resolution",
     body: [
-      "These Terms and your use of Underly will be governed by the laws of [Jurisdiction], without regard to conflict-of-law principles.",
+      "These Terms and your use of tekno.works will be governed by the laws of [Jurisdiction], without regard to conflict-of-law principles.",
       "Any dispute arising from or relating to these Terms or the Platform will be resolved through [courts/arbitration and location], subject to applicable law.",
-      "[This section should be completed by Underly's legal counsel based on the entity's incorporation and operating jurisdiction.]",
+      "[This section should be completed by tekno.works' legal counsel based on the entity's incorporation and operating jurisdiction.]",
     ],
   },
   {
@@ -431,7 +431,7 @@ const SECTIONS: LegalSection[] = [
     id: "entire-agreement",
     title: "25. Entire Agreement",
     body: [
-      "These Terms, together with the Underly Privacy Policy and any additional terms applicable to specific Platform features, constitute the entire agreement between you and Underly regarding your use of the Platform.",
+      "These Terms, together with the tekno.works Privacy Policy and any additional terms applicable to specific Platform features, constitute the entire agreement between you and tekno.works regarding your use of the Platform.",
     ],
   },
   {
@@ -441,7 +441,7 @@ const SECTIONS: LegalSection[] = [
       "For questions regarding these Terms, please contact:",
       // A tight stack rather than three paragraphs: the lines are one address
       // block, and paragraph spacing would read as three separate statements.
-      { lines: ["Underly", "Email: [legal@underly.com]", "Website: [underly.com]"] },
+      { lines: ["tekno.works", "Email: [legal@tekno.works]", "Website: [tekno.works]"] },
     ],
   },
   {
@@ -449,7 +449,7 @@ const SECTIONS: LegalSection[] = [
     title: "IMPORTANT RISK NOTICE",
     tone: "warn",
     body: [
-      "Digital assets are highly volatile and can lose some or all of their value. Trading digital assets involves substantial risk. Do your own research before making any transaction. Underly does not provide investment, financial, legal, or tax advice and does not guarantee the performance or value of any digital asset listed on the Platform.",
+      "Digital assets are highly volatile and can lose some or all of their value. Trading digital assets involves substantial risk. Do your own research before making any transaction. tekno.works does not provide investment, financial, legal, or tax advice and does not guarantee the performance or value of any digital asset listed on the Platform.",
     ],
   },
 ];

@@ -1,4 +1,4 @@
-const UA = "OwnTmrw/0.1 (public-data intelligence aggregator)";
+const UA = "tekno.works/0.1 (public-data intelligence aggregator)";
 
 export async function getJSON<T = unknown>(
   url: string,

@@ -10,7 +10,7 @@
  *
  * To change what is offered, edit this file and nothing else:
  *   - `DEFAULT_CHART_SOURCE` — the tab a page opens on.
- *   - `NATIVE_CHART_ENABLED` — whether the native ("Underly") tab is offered.
+ *   - `NATIVE_CHART_ENABLED` — whether the native ("tekno.works") tab is offered.
  *   - `TRADINGVIEW_ENABLED`  — whether the TradingView tab is offered.
  *   - `ENABLED_EMBEDS`       — which hosted providers get a tab, in that order.
  *   - `PRELOAD_EMBEDS`       — load them in the background so the tab opens instantly.

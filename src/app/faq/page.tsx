@@ -9,8 +9,8 @@ import { FaqAccordion, type FaqItem } from "@/components/FaqAccordion";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "FAQ — Underly",
-  description: "Answers to common questions about Underly.",
+  title: "FAQ — tekno.works",
+  description: "Answers to common questions about tekno.works.",
 };
 
 /*
@@ -35,15 +35,15 @@ const SUBTITLE = "Frequently Asked Questions";
 
 const ITEMS: FaqItem[] = [
   {
-    q: "What is Underly?",
+    q: "What is tekno.works?",
     a: [
-      "Underly is an intelligence terminal for projects launched through MetaDAO and Futard. Instead of another price explorer, it maintains one permanent research profile per project — covering the raise, market, holders, treasury, governance, development, community and news — assembled automatically from public sources. The goal is simple: understand what a project actually is, not just what its token did today.",
+      "tekno.works is an intelligence terminal for projects launched through MetaDAO and Futard. Instead of another price explorer, it maintains one permanent research profile per project — covering the raise, market, holders, treasury, governance, development, community and news — assembled automatically from public sources. The goal is simple: understand what a project actually is, not just what its token did today.",
     ],
   },
   {
-    q: "What does Underly provide?",
+    q: "What does tekno.works provide?",
     a: [
-      "Underly brings institutional-grade research into a single workspace. For each tracked project you get:",
+      "tekno.works brings institutional-grade research into a single workspace. For each tracked project you get:",
       [
         "A full intelligence profile with Overview, Holders, Smart Money, Treasury, Development, Governance, Timeline, News and Research tabs",
         "A composite Project Health Score across seven measurable dimensions",
@@ -149,7 +149,7 @@ const ITEMS: FaqItem[] = [
   {
     q: "How does development activity tracking work?",
     a: [
-      "Where a project has a public GitHub organisation, Underly reads it directly and reports commits over the last 90 days, unique contributors, tagged releases, stars, forks, open and closed issues, pull requests, active repositories, last commit time, language breakdown and week-by-week code frequency. These roll up into a Developer Score covering recency, commit volume, contributors, active repositories and issue hygiene. Where no public repository is linked, the platform says so plainly rather than showing an empty or invented figure.",
+      "Where a project has a public GitHub organisation, tekno.works reads it directly and reports commits over the last 90 days, unique contributors, tagged releases, stars, forks, open and closed issues, pull requests, active repositories, last commit time, language breakdown and week-by-week code frequency. These roll up into a Developer Score covering recency, commit volume, contributors, active repositories and issue hygiene. Where no public repository is linked, the platform says so plainly rather than showing an empty or invented figure.",
     ],
   },
   {
@@ -167,23 +167,23 @@ const ITEMS: FaqItem[] = [
   {
     q: "Is a wallet required?",
     a: [
-      "Not for research. Project profiles, the timeline, the signals feed and global search are open to everyone with no account and no wallet. A wallet is needed for the signed-in areas — the screener and your portfolio. Sign-in works by signing a short message that proves you control the wallet; it approves no transaction and cannot move funds. Underly never asks for a private key, seed phrase or recovery phrase, and portfolio balances are read live from the chain each time you open the page rather than stored on a server.",
+      "Not for research. Project profiles, the timeline, the signals feed and global search are open to everyone with no account and no wallet. A wallet is needed for the signed-in areas — the screener and your portfolio. Sign-in works by signing a short message that proves you control the wallet; it approves no transaction and cannot move funds. tekno.works never asks for a private key, seed phrase or recovery phrase, and portfolio balances are read live from the chain each time you open the page rather than stored on a server.",
     ],
   },
   {
-    q: "Can users trade through Underly?",
+    q: "Can users trade through tekno.works?",
     a: [
-      "Underly is research-first and fully non-custodial. The trade panel lets you size an order against live market data and shows the quantities, slippage setting and the share of pool depth an order of that size would consume — real risk context before you act. Where trading functionality is available, it is wallet-based: your assets stay under your own wallet's control and Underly never takes custody of funds or holds tokens on your behalf.",
+      "tekno.works is research-first and fully non-custodial. The trade panel lets you size an order against live market data and shows the quantities, slippage setting and the share of pool depth an order of that size would consume — real risk context before you act. Where trading functionality is available, it is wallet-based: your assets stay under your own wallet's control and tekno.works never takes custody of funds or holds tokens on your behalf.",
     ],
   },
   {
-    q: "Is Underly an investment advisor?",
+    q: "Is tekno.works an investment advisor?",
     a: [
-      "No. Underly provides research, analytics and market data. Nothing on the platform is financial, investment, legal or tax advice, and no score, signal or memo is a recommendation to buy or sell. Digital assets are volatile and can lose value. All decisions, and their outcomes, are your own.",
+      "No. tekno.works provides research, analytics and market data. Nothing on the platform is financial, investment, legal or tax advice, and no score, signal or memo is a recommendation to buy or sell. Digital assets are volatile and can lose value. All decisions, and their outcomes, are your own.",
     ],
   },
   {
-    q: "How does Underly handle data transparency?",
+    q: "How does tekno.works handle data transparency?",
     a: [
       "Transparency is enforced in the product, not just promised:",
       [
@@ -196,9 +196,9 @@ const ITEMS: FaqItem[] = [
     ],
   },
   {
-    q: "Who is Underly designed for?",
+    q: "Who is tekno.works designed for?",
     a: [
-      "Underly is built for anyone who needs to understand a project rather than just watch its price: researchers and analysts, allocators evaluating launches, founders and teams benchmarking themselves against the ecosystem, and participants tracking MetaDAO and Futard projects from raise through to today. If you want verifiable, source-linked intelligence in one place instead of a dozen tabs, the terminal is built for you.",
+      "tekno.works is built for anyone who needs to understand a project rather than just watch its price: researchers and analysts, allocators evaluating launches, founders and teams benchmarking themselves against the ecosystem, and participants tracking MetaDAO and Futard projects from raise through to today. If you want verifiable, source-linked intelligence in one place instead of a dozen tabs, the terminal is built for you.",
     ],
   },
 ];

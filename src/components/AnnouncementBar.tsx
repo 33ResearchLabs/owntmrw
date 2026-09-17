@@ -44,7 +44,7 @@ export function AnnouncementBar() {
           {/* Ellipsises on a phone, wraps rather than overflows once there is
               room for a second line, and sits on one line on a desktop. */}
           <span className="min-w-0 truncate text-ink md:whitespace-normal">
-            Underly delivers institutional-grade intelligence. Analyze every
+            tekno.works delivers institutional-grade intelligence. Analyze every
             project through holders, treasury, development and performance—all
             from a single workspace.
           </span>

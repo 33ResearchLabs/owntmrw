@@ -265,7 +265,7 @@ export function TradingViewChart({
 
       {/* The chart is TradingView's; every number in it is ours. */}
       <p className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
-        <span>Candles from GeckoTerminal via Underly — the same feed as the native chart.</span>
+        <span>Candles from GeckoTerminal via tekno.works — the same feed as the native chart.</span>
         <a
           href="https://www.tradingview.com/"
           target="_blank" rel="noopener noreferrer"

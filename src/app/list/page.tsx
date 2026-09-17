@@ -8,8 +8,8 @@ import { fmtDate } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "List a token — Underly",
-  description: "Submit a Solana token for a permanent intelligence profile on Underly.",
+  title: "List a token — tekno.works",
+  description: "Submit a Solana token for a permanent intelligence profile on tekno.works.",
 };
 
 const STATUS_TONE: Record<string, string> = {

@@ -22,7 +22,7 @@ const FEEDS: { url: string; source: string }[] = [
   { url: "https://cryptoslate.com/feed/", source: "CryptoSlate" },
 ];
 
-const UA = "OwnTmrw/0.1 (+public-source intelligence aggregator)";
+const UA = "tekno.works/0.1 (+public-source intelligence aggregator)";
 
 export interface WireItem extends FeedItem { source: string }
 

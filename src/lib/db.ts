@@ -303,6 +303,21 @@ function migrate(d: Database.Database) {
   );
 
   /*
+   * Per-wallet watchlist. Keyed by the session address like the ledger, and
+   * a row is the whole fact — "this wallet follows this project" — so there
+   * is nothing to keep in step. Read by the home rail, the portfolio and the
+   * feeds' "My watchlist" chips; written only through /api/watchlist under
+   * the session, never from a body-supplied address.
+   */
+  CREATE TABLE IF NOT EXISTS watchlist (
+    address TEXT NOT NULL,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    created_ts INTEGER NOT NULL,
+    PRIMARY KEY (address, project_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_watchlist_addr ON watchlist(address, created_ts DESC);
+
+  /*
    * Self-serve listings. A creator submits a mint and what they know about
    * it; the server records what it could verify on-chain and in the market
    * at that moment; an admin approves or rejects. Nothing reaches the projects table

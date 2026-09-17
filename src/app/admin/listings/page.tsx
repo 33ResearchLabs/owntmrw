@@ -3,12 +3,13 @@ import { requireAdmin } from "@/lib/session";
 import { listingQueue, type ListingRequest } from "@/lib/listings";
 import { ListingQueue } from "@/components/ListingQueue";
 import { AdminLock, AdminUnlock } from "@/components/AdminUnlock";
+import { IngestButtons } from "@/components/IngestButton";
 import { adminPasswordConfigured, adminUnlocked } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Listing queue — Underly",
+  title: "Listing queue — tekno.works",
   robots: { index: false, follow: false },
 };
 
@@ -55,6 +56,12 @@ export default async function AdminListingsPage({
           </p>
         </div>
         <AdminLock />
+      </div>
+
+      {/* The ingest clock. Lives on this desk because it is the only signed-in
+          admin surface; the schedule runs on its own, these are for "now". */}
+      <div className="card px-4 py-3">
+        <IngestButtons />
       </div>
 
       <div className="flex gap-1.5">

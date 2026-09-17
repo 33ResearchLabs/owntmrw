@@ -4,7 +4,7 @@
  * so timelines are deliberately not attempted rather than scraped unreliably.
  */
 
-const UA = "OwnTmrw/0.1 (+public-source intelligence aggregator)";
+const UA = "tekno.works/0.1 (+public-source intelligence aggregator)";
 
 export interface FeedItem { ts: number; title: string; url: string | null }
 

@@ -23,8 +23,11 @@
   --grid: #2c2c2a;
 
   /*
-   * Underly's gold, taken from the bar under the mark. This is the brand
-   * colour for *text* — links, highlights, the accent word in a heading. The
+   * The accent gold, inherited from the previous mark (which had a gold bar
+   * under a navy disc); the tekno.works T is chrome and carries no colour of
+   * its own, so this token now stands alone as the palette's warm accent
+   * rather than quoting the logo. It is the brand colour for *text* — links,
+   * highlights, the accent word in a heading. The
    * blue accent below still drives fills: buttons, the nav's active mark, the
    * chart's first series. They are separate tokens because they are separate
    * jobs, and a gold button on this surface would not carry the contrast a
@@ -35,7 +38,7 @@
   /*
    * Ink for text sitting *on* the brand fill. Near-black rather than white:
    * white on this gold is 3.2:1, which a 13.5px button label does not clear,
-   * and the navy from the mark reaches 5.8:1 on the same ground.
+   * and this navy reaches 5.8:1 on the same ground.
    */
   --brand-ink: #0b1320;
 

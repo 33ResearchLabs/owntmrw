@@ -321,7 +321,7 @@ export function approveListing(id: number, admin: string, note: string | null): 
     });
     d.prepare(
       `INSERT OR IGNORE INTO events (project_id, ts, type, title, detail, url)
-       VALUES (?, ?, 'listing', 'Listed on Underly', ?, NULL)`,
+       VALUES (?, ?, 'listing', 'Listed on tekno.works', ?, NULL)`,
     ).run(projectId, ts, `Community listing submitted by ${r.submitted_by.slice(0, 4)}…${r.submitted_by.slice(-4)}`);
     d.prepare(
       `UPDATE listing_requests

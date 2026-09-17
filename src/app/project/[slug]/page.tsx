@@ -45,6 +45,7 @@ import { TradeTerminal } from "@/components/TradeTerminal";
 import { TokenInvestment } from "@/components/TokenInvestment";
 import { PortfolioCard } from "@/components/PortfolioCard";
 import { ProjectBrief } from "@/components/ProjectBrief";
+import { WatchButton } from "@/components/WatchButton";
 import { MarketDepthPanel } from "@/components/MarketDepth";
 import { Delta, Logo, StatTile, StatusBadge } from "@/components/ui";
 import { Icon, IconBadge, type IconName } from "@/components/viz";
@@ -1906,6 +1907,8 @@ export default async function ProjectPage({
                 /100
               </span>
             )}
+
+            <WatchButton slug={p.slug} />
           </div>
 
           {p.description && (

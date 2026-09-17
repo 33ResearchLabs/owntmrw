@@ -13,13 +13,14 @@ import {
   type PortfolioSignal,
   type PortfolioToken,
 } from "@/components/Portfolio";
+import { WatchingCard } from "@/components/WatchingCard";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Portfolio — Underly",
+  title: "Portfolio — tekno.works",
   description:
-    "What your wallet holds across every project tracked on Underly.",
+    "What your wallet holds across every project tracked on tekno.works.",
 };
 
 /** Days of daily closes shipped per token — the longest range the chart offers. */
@@ -121,6 +122,13 @@ export default async function PortfolioPage() {
         solPrice={solPrice}
         events={[...byStory.values()]}
         signals={signals}
+      />
+      <WatchingCard
+        title="Watching"
+        rows={tokens.map((t) => ({
+          slug: t.slug, name: t.name, symbol: t.symbol, image_url: t.image_url,
+          price_usd: t.price_usd, change_24h: t.change_24h,
+        }))}
       />
     </div>
   );

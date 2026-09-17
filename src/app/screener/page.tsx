@@ -1,12 +1,14 @@
+import { Suspense } from "react";
 import { requireSession } from "@/lib/session";
 import { screenerRows } from "@/lib/queries";
+import { screenerExtras } from "@/lib/health";
 import { ScreenerTable } from "@/components/ScreenerTable";
-import { fmtUsd, fmtNum } from "@/lib/format";
+import { fmtUsd } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Screener — Underly",
+  title: "Screener — tekno.works",
   description: "Every MetaDAO and Futard project ranked by market cap, ROI since raise, liquidity, treasury, holders and development activity.",
 };
 
@@ -17,6 +19,11 @@ export default async function ScreenerPage() {
 
   const rows = await screenerRows();
   const totalRaised = rows.reduce((s, r) => s + (r.raise_amount_usd ?? 0), 0);
+  // One clock for the whole table, so every row's returns are measured from
+  // the same "now". This page is force-dynamic and renders once per request.
+  // eslint-disable-next-line react-hooks/purity
+  const nowSec = Math.floor(Date.now() / 1000);
+  const extras = screenerExtras(rows, nowSec);
 
   return (
     <div className="space-y-5">
@@ -24,9 +31,9 @@ export default async function ScreenerPage() {
         <div>
           <h1 className="text-[30px] font-extrabold leading-tight tracking-tight">Screener</h1>
           <p className="mt-2 max-w-xl text-[12.5px] leading-relaxed text-muted">
-            Every project launched through MetaDAO and Futard. Click any column to sort, or any
-            row to open its trading terminal. Market caps use MetaDAO&apos;s circulating supply,
-            not FDV.
+            Every project launched through MetaDAO and Futard. Click any column to sort, filter
+            by name, category or size, and share the address bar — it carries the view. Market
+            caps use MetaDAO&apos;s circulating supply, not FDV.
           </p>
         </div>
       </div>
@@ -38,21 +45,33 @@ export default async function ScreenerPage() {
           to pull everything from public sources.
         </div>
       ) : (
-        <ScreenerTable
-          rows={rows.map((r) => ({
-            slug: r.slug, name: r.name, symbol: r.symbol, status: r.status,
-            image_url: r.image_url, category: r.category,
-            price_usd: r.price_usd, mcap: r.mcap, fdv: r.fdv,
-            liquidity_usd: r.liquidity_usd, vol24h: r.vol24h, change_24h: r.change_24h,
-            raise_amount_usd: r.raise_amount_usd, raise_price: r.raise_price,
-            raise_price_derived: r.raise_price_derived,
-            roi_since_raise: r.roi_since_raise, returns_thin: r.returns_thin,
-            raise_absence: r.raise_absence,
-            ath_return: r.ath_return, from_ath: r.from_ath, treasury_usd: r.treasury_usd,
-            holder_count: r.holder_count,
-            gh_stars: r.gh_stars, gh_last_push: r.gh_last_push,
-          }))}
-        />
+        // The table reads its view from the URL, which `useSearchParams` serves
+        // synchronously on this force-dynamic page; the boundary is insurance
+        // for the day the route is made static, per the Next docs.
+        <Suspense fallback={null}>
+          <ScreenerTable
+            rows={rows.map((r) => {
+              const x = extras.get(r.slug);
+              return {
+                slug: r.slug, name: r.name, symbol: r.symbol, status: r.status,
+                image_url: r.image_url, category: r.category,
+                price_usd: r.price_usd, mcap: r.mcap, fdv: r.fdv,
+                liquidity_usd: r.liquidity_usd, vol24h: r.vol24h, change_24h: r.change_24h,
+                raise_amount_usd: r.raise_amount_usd, raise_price: r.raise_price,
+                raise_price_derived: r.raise_price_derived,
+                roi_since_raise: r.roi_since_raise, returns_thin: r.returns_thin,
+                raise_absence: r.raise_absence,
+                ath_return: r.ath_return, from_ath: r.from_ath, treasury_usd: r.treasury_usd,
+                holder_count: r.holder_count,
+                gh_stars: r.gh_stars, gh_last_push: r.gh_last_push,
+                health: x?.health.overall ?? null,
+                health_measured: x?.health.measured ?? 0,
+                ret_7d: x?.d7 ?? null,
+                ret_30d: x?.d30 ?? null,
+              };
+            })}
+          />
+        </Suspense>
       )}
 
       <p className="text-[11.5px] text-faint">

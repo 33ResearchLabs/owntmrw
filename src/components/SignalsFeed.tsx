@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Icon, type IconName } from "./viz";
 import { Logo } from "./ui";
+import { useWatchlist } from "./WatchlistProvider";
 
 /**
  * One signal, with its stamps already formatted.
@@ -107,6 +108,12 @@ export function SignalsFeed({
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [newestFirst, setNewestFirst] = useState(true);
+  // "My watchlist" narrows the feed to the projects the reader follows. The
+  // feed ships whole (it is public and capped), so the cut is made here
+  // against the provider's set rather than by asking the server who you are.
+  const [mine, setMine] = useState(false);
+  const wl = useWatchlist();
+  const onlyMine = mine && wl.signedIn;
 
   /** Only families actually present get a chip — an empty filter is a dead end. */
   const presentKinds = useMemo(() => {
@@ -127,6 +134,7 @@ export function SignalsFeed({
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = signals.filter((s) => {
+      if (onlyMine && !(s.slug && wl.slugs.has(s.slug))) return false;
       if (kindFilter !== "all" && (s.kind ?? "note") !== kindFilter) return false;
       if (projectFilter !== "all" && s.name !== projectFilter) return false;
       if (q && !s.text.toLowerCase().includes(q) && !(s.name ?? "").toLowerCase().includes(q)) return false;
@@ -134,7 +142,7 @@ export function SignalsFeed({
     });
     // The query already returns newest first; oldest is that list reversed.
     return newestFirst ? list : [...list].reverse();
-  }, [signals, kindFilter, projectFilter, query, newestFirst]);
+  }, [signals, kindFilter, projectFilter, query, newestFirst, onlyMine, wl.slugs]);
 
   // Group after filtering, so a date with nothing left simply disappears and the
   // order the list arrived in is preserved within every group.
@@ -203,15 +211,21 @@ export function SignalsFeed({
               <option value="all">All Projects</option>
               {projects.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
-            <button
-              type="button"
-              disabled
-              title="Advanced filters — not available yet"
-              className="flex h-8 cursor-not-allowed items-center gap-1.5 rounded-lg border border-line px-2.5
-                         text-[12px] text-faint opacity-50"
-            >
-              Filters
-            </button>
+            {wl.signedIn && (
+              <button
+                type="button"
+                onClick={() => setMine((m) => !m)}
+                aria-pressed={onlyMine}
+                title={onlyMine ? "Showing signals for projects you watch" : "Only signals for projects you watch"}
+                className={`flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] transition-colors ${
+                  onlyMine
+                    ? "border-brand/50 bg-brand/10 text-brand"
+                    : "border-line text-ink2 hover:border-line2 hover:text-ink"
+                }`}
+              >
+                <span aria-hidden>★</span> My watchlist
+              </button>
+            )}
           </div>
         </div>
 

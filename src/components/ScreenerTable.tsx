@@ -2,29 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Delta, Logo, StatusBadge } from "./ui";
 import { Icon, type IconName } from "./viz";
 import { fmtUsd, fmtPrice, fmtNum, fmtPct, timeAgo } from "@/lib/format";
 import { MIN_LIQUIDITY_USD } from "@/lib/quote";
+import { scoreColor } from "@/lib/analytics";
+import { WatchButton } from "./WatchButton";
+import {
+  applyScreenerQuery,
+  DEFAULT_QUERY,
+  formatAmount,
+  isDefaultQuery,
+  parseAmount,
+  parseScreenerQuery,
+  serializeScreenerQuery,
+  type ScreenerQuery,
+  type ScreenerRowDTO,
+  type SortKey,
+} from "@/lib/screener";
 
-export interface ScreenerRowDTO {
-  slug: string; name: string; symbol: string | null; status: string | null;
-  image_url: string | null; category: string | null;
-  price_usd: number | null; mcap: number | null; fdv: number | null;
-  liquidity_usd: number | null; vol24h: number | null; change_24h: number | null;
-  raise_amount_usd: number | null; raise_price: number | null; raise_price_derived: boolean;
-  roi_since_raise: number | null; ath_return: number | null;
-  from_ath: number | null;
-  /** Returns computed off a pool too thin to defend the price — mark them. */
-  returns_thin: boolean;
-  /** Why the raise figures are absent, when absence is a fact not a gap. */
-  raise_absence: "no_ico" | "private_round" | "unpublished" | null;
-  treasury_usd: number | null;
-  holder_count: number | null;
-  gh_stars: number | null; gh_last_push: number | null;
-}
-
-type SortKey = keyof ScreenerRowDTO;
+export type { ScreenerRowDTO } from "@/lib/screener";
 
 /** The subset `/api/live` refreshes; everything else is archival. */
 type LivePatch = Pick<
@@ -146,11 +144,21 @@ function Absent({ kind }: { kind: string }) {
   return <span className="text-faint italic" title={a.why}>{a.short}</span>;
 }
 
-const COLS: { key: SortKey; label: string; align?: "right" }[] = [
+const COLS: { key: SortKey; label: string; align?: "right"; title?: string }[] = [
   { key: "name", label: "Project" },
   { key: "status", label: "Status" },
+  // The same composite the project page's header chip shows, computed by the
+  // same function — so ranking the column ranks what the profiles say.
+  {
+    key: "health", label: "Health", align: "right",
+    title: "Composite 0–100 across treasury, holder growth, distribution, liquidity, developer activity, governance and momentum. Dimensions with no data are left out, not scored as zero.",
+  },
   { key: "price_usd", label: "Price", align: "right" },
   { key: "change_24h", label: "24h", align: "right" },
+  // Archival close-to-close returns against the live price. Not re-quoted by
+  // the 30s poll, which only carries what the venues report.
+  { key: "ret_7d", label: "7d", align: "right", title: "Close-to-close return over 7 days, against the live price" },
+  { key: "ret_30d", label: "30d", align: "right", title: "Close-to-close return over 30 days, against the live price" },
   { key: "mcap", label: "Mkt Cap", align: "right" },
   { key: "liquidity_usd", label: "Liquidity", align: "right" },
   { key: "vol24h", label: "Vol 24h", align: "right" },
@@ -167,40 +175,127 @@ const COLS: { key: SortKey; label: string; align?: "right" }[] = [
   { key: "gh_last_push", label: "Last Commit", align: "right" },
 ];
 
+/**
+ * The view, kept in the address bar.
+ *
+ * State is seeded from the URL once, on mount, and every change is written
+ * back with `history.replaceState` — which the App Router integrates with, so
+ * `useSearchParams` stays in step without a server round trip. `router.replace`
+ * would re-render this force-dynamic page (a fresh `screenerRows()` and quote
+ * merge) on every keystroke; the rows are already here, only the view changes.
+ * Writes are debounced so typing "meta" is one history entry, not four.
+ *
+ * The URL is not read back on every change on purpose: a re-derive racing a
+ * debounced write would revert a character typed in between. The one time the
+ * URL changes underneath us — back/forward — `popstate` re-seeds the view.
+ */
+function useScreenerQuery(): [ScreenerQuery, (patch: Partial<ScreenerQuery>) => void, () => void] {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  // Seeded once; the effect below owns the URL from then on.
+  const [query, setQuery] = useState<ScreenerQuery>(() => parseScreenerQuery(searchParams));
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const qs = serializeScreenerQuery(query);
+      const next = qs ? `${pathname}?${qs}` : pathname;
+      if (`${window.location.pathname}${window.location.search}` !== next) {
+        window.history.replaceState(null, "", next);
+      }
+    }, 150);
+    return () => clearTimeout(id);
+  }, [query, pathname]);
+
+  useEffect(() => {
+    const onPop = () => setQuery(parseScreenerQuery(new URLSearchParams(window.location.search)));
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const patch = (p: Partial<ScreenerQuery>) => setQuery((q) => ({ ...q, ...p }));
+  const reset = () => setQuery(DEFAULT_QUERY);
+  return [query, patch, reset];
+}
+
+/**
+ * A USD floor as a text field. Local text so "5" on the way to "50k" is not
+ * parsed as a $5 floor mid-keystroke; the view only takes the value once it
+ * parses, and clearing the field clears the floor.
+ */
+function AmountInput({
+  value, onChange, placeholder, label,
+}: {
+  value: number | null; onChange: (v: number | null) => void; placeholder: string; label: string;
+}) {
+  const [text, setText] = useState(() => formatAmount(value));
+  // A change from outside (the Reset button, back/forward) is mirrored into
+  // the text during render, the way React's docs adjust state on a prop change
+  // — an effect would paint the stale field first and then repaint.
+  const [seen, setSeen] = useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    if (value == null) setText("");
+    else if (parseAmount(text) !== value) setText(formatAmount(value));
+  }
+  return (
+    <input
+      value={text}
+      onChange={(e) => {
+        const t = e.target.value;
+        setText(t);
+        const parsed = parseAmount(t);
+        if (t.trim() === "" || parsed != null) onChange(parsed);
+      }}
+      placeholder={placeholder}
+      aria-label={label}
+      inputMode="text"
+      className="h-8 w-[104px] rounded-lg border border-line bg-surface2/60 px-2.5 text-[12px] text-ink
+                 placeholder:text-faint transition-colors hover:border-line2 focus:border-line2 focus:outline-none"
+    />
+  );
+}
+
+/** The health figure, coloured by the same bands the project page dial uses. */
+function HealthCell({ score, measured }: { score: number | null; measured: number }) {
+  if (score == null) return <span className="text-muted" title="No dimension had enough data to score">—</span>;
+  return (
+    <span
+      className="num font-semibold"
+      style={{ color: scoreColor(score) }}
+      title={`${measured} of 7 dimensions measurable`}
+    >
+      {score}
+    </span>
+  );
+}
+
 export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] }) {
   const { rows, stale } = useLiveRows(initialRows);
-  const [sort, setSort] = useState<SortKey>("mcap");
-  const [dir, setDir] = useState<1 | -1>(-1);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [query, patch, reset] = useScreenerQuery();
 
   const statuses = useMemo(
     () => ["all", ...Array.from(new Set(rows.map((r) => r.status ?? "unknown")))],
     [rows]
   );
+  const categories = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.category).filter((c): c is string => !!c))).sort(),
+    [rows]
+  );
 
-  const sorted = useMemo(() => {
-    const filtered = statusFilter === "all" ? rows : rows.filter((r) => (r.status ?? "unknown") === statusFilter);
-    return [...filtered].sort((a, b) => {
-      const av = a[sort], bv = b[sort];
-      if (av == null && bv == null) return 0;
-      if (av == null) return 1;
-      if (bv == null) return -1;
-      if (typeof av === "string") return dir * av.localeCompare(String(bv));
-      return dir * ((av as number) - (bv as number));
-    });
-  }, [rows, sort, dir, statusFilter]);
+  const sorted = useMemo(() => applyScreenerQuery(rows, query), [rows, query]);
 
   const th = (c: (typeof COLS)[number]) => (
     <th
       key={c.key}
       onClick={() => {
-        if (sort === c.key) setDir((d) => (d === 1 ? -1 : 1));
-        else { setSort(c.key); setDir(c.key === "name" ? 1 : -1); }
+        if (query.sort === c.key) patch({ dir: query.dir === "desc" ? "asc" : "desc" });
+        else patch({ sort: c.key, dir: c.key === "name" ? "asc" : "desc" });
       }}
+      title={c.title}
       className={`cursor-pointer select-none hover:text-ink2 ${c.align === "right" ? "!text-right" : ""}`}
     >
       {c.label}
-      {sort === c.key && <span className="ml-1 text-brand">{dir === -1 ? "↓" : "↑"}</span>}
+      {query.sort === c.key && <span className="ml-1 text-brand">{query.dir === "desc" ? "↓" : "↑"}</span>}
     </th>
   );
 
@@ -226,7 +321,7 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
             status value the filter compares against, so the label reads as a
             title without the data behind it changing shape. */}
         {statuses.map((s) => (
-          <button key={s} onClick={() => setStatusFilter(s)} className="chip capitalize" data-on={statusFilter === s}>
+          <button key={s} onClick={() => patch({ status: s })} className="chip capitalize" data-on={query.status === s}>
             {s === "all" ? "All projects" : s}
           </button>
         ))}
@@ -239,22 +334,92 @@ export function ScreenerTable({ rows: initialRows }: { rows: ScreenerRowDTO[] })
         </span>
         <span className="num text-[12px] text-faint">{sorted.length} listed</span>
       </div>
+
+      {/* The view. Every control writes to the same query the URL carries, so
+          the address bar is always a link to exactly this table. */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-grid px-4 py-2.5">
+        <label className="relative flex min-w-0 flex-1 items-center sm:max-w-[240px]">
+          <span className="pointer-events-none absolute left-2.5 text-muted">
+            <Icon name="target" size={13} />
+          </span>
+          <input
+            value={query.q}
+            onChange={(e) => patch({ q: e.target.value.slice(0, 60) })}
+            placeholder="Search name or symbol"
+            aria-label="Search projects"
+            className="h-8 w-full rounded-lg border border-line bg-surface2/60 pl-8 pr-2.5 text-[12px] text-ink
+                       placeholder:text-faint transition-colors hover:border-line2
+                       focus:border-line2 focus:outline-none"
+          />
+        </label>
+        <select
+          value={query.cat}
+          onChange={(e) => patch({ cat: e.target.value })}
+          aria-label="Filter by category"
+          className="h-8 max-w-[180px] rounded-lg border border-line bg-surface2/60 px-2 text-[12px] text-ink2
+                     transition-colors hover:border-line2 focus:outline-none"
+        >
+          <option value="">All categories</option>
+          {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <AmountInput
+          value={query.minLiq}
+          onChange={(v) => patch({ minLiq: v })}
+          placeholder="Min liquidity"
+          label="Minimum liquidity in USD"
+        />
+        <AmountInput
+          value={query.minMcap}
+          onChange={(v) => patch({ minMcap: v })}
+          placeholder="Min mkt cap"
+          label="Minimum market cap in USD"
+        />
+        {!isDefaultQuery(query) && (
+          <button
+            type="button"
+            onClick={reset}
+            className="h-8 rounded-lg border border-line px-2.5 text-[12px] text-ink2 transition-colors hover:border-line2 hover:text-ink"
+          >
+            Reset
+          </button>
+        )}
+      </div>
       <div className="scroll-x">
         <table className="itable text-[13px]">
           <thead><tr>{COLS.map(th)}</tr></thead>
           <tbody>
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={COLS.length} className="py-8 text-center text-[13px] text-muted">
+                  No project matches this view.{" "}
+                  <button type="button" onClick={reset} className="text-brand hover:underline">Reset filters</button>
+                </td>
+              </tr>
+            )}
             {sorted.map((r) => (
               <tr key={r.slug}>
                 <td>
-                  <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-brand">
-                    <Logo src={r.image_url} name={r.name} size={24} />
-                    <span className="font-medium">{r.name}</span>
-                    {r.symbol && <span className="text-[11px] text-muted">{r.symbol}</span>}
-                  </Link>
+                  <span className="flex items-center gap-1.5">
+                    <WatchButton slug={r.slug} size="sm" className="-ml-1.5" />
+                    <Link href={`/project/${r.slug}`} className="flex items-center gap-2.5 hover:text-brand">
+                      <Logo src={r.image_url} name={r.name} size={24} />
+                      <span className="font-medium">{r.name}</span>
+                      {r.symbol && <span className="text-[11px] text-muted">{r.symbol}</span>}
+                    </Link>
+                  </span>
                 </td>
                 <td><StatusBadge status={r.status} /></td>
+                <td className="text-right"><HealthCell score={r.health} measured={r.health_measured} /></td>
                 <td className="num text-right">{fmtPrice(r.price_usd)}</td>
                 <td className="text-right"><Delta v={r.change_24h} /></td>
+                <td className="text-right" title={thinTitle(r)}>
+                  {r.returns_thin && r.ret_7d != null && <span className="text-faint">~</span>}
+                  <Delta v={r.ret_7d} />
+                </td>
+                <td className="text-right" title={thinTitle(r)}>
+                  {r.returns_thin && r.ret_30d != null && <span className="text-faint">~</span>}
+                  <Delta v={r.ret_30d} />
+                </td>
                 <td className="num text-right">{fmtUsd(r.mcap)}</td>
                 <td className="num text-right">{fmtUsd(r.liquidity_usd)}</td>
                 <td className="num text-right">{fmtUsd(r.vol24h)}</td>
